@@ -16,6 +16,12 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Panel local
+
+Definí `ADMIN_PASSWORD` en `.env.local` con una contraseña elegida por vos y ejecutá `npm run dev`. El panel está disponible en `/admin`.
+
+La configuración se guarda temporalmente en `localStorage`. Las imágenes seleccionadas desde el panel se guardan como archivos en IndexedDB y la configuración conserva únicamente una referencia `idb:`, nunca Base64.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
