@@ -1,34 +1,20 @@
 "use client";
 
-import { useEffect, useState, type ImgHTMLAttributes } from "react";
-
-import { resolveImageReference } from "@/lib/image-store";
+import type { ImgHTMLAttributes } from "react";
 
 type ManagedImageProps = ImgHTMLAttributes<HTMLImageElement> & {
   source: string;
 };
 
+// Las imágenes siempre provienen de URLs públicas permanentes (Supabase Storage o Unsplash).
+// Nunca se resuelven referencias locales (IndexedDB/localStorage/blob), ya que no son accesibles
+// desde otros navegadores o dispositivos.
 export function ManagedImage({ source, alt, ...props }: ManagedImageProps) {
-  const [resolvedSource, setResolvedSource] = useState(source);
+  const isPublicUrl = Boolean(source) && !/^(idb:|blob:|data:)/.test(source);
 
-  useEffect(() => {
-    let objectUrl = "";
-    let cancelled = false;
+  if (!isPublicUrl) {
+    return <img {...props} alt={alt} />;
+  }
 
-    resolveImageReference(source).then((nextSource) => {
-      if (!cancelled) {
-        objectUrl = nextSource.startsWith("blob:") ? nextSource : "";
-        setResolvedSource(nextSource);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [source]);
-
-  return <img {...props} src={resolvedSource} alt={alt} />;
+  return <img {...props} src={source} alt={alt} />;
 }

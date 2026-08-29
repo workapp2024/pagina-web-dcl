@@ -1,6 +1,7 @@
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
 import { isSupabaseConfigured } from "./test-connection";
+import { sanitizeStoredImageUrl } from "./storage";
 import type { Promotion } from "@/lib/site-data";
 import type { Database } from "./database.types";
 
@@ -36,7 +37,7 @@ export async function getSupabasePromotions(): Promise<Promotion[] | null> {
       id: row.id,
       title: row.title,
       description: row.description,
-      image: row.image_url,
+      image: sanitizeStoredImageUrl(row.image_url),
       price: row.price ?? undefined,
       ctaText: row.cta_text || "APROVECHAR PROMO",
       ctaHref: row.cta_href || "#contacto",

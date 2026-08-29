@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { defaultSiteContent, type SiteContent } from "@/lib/site-data";
+import { defaultSiteContent, type Product, type SiteContent } from "@/lib/site-data";
 import { getStoredSiteContent, saveSiteContent } from "@/lib/content-store";
 import { getSupabaseProducts } from "@/lib/supabase/products";
 import { getSupabasePromotions } from "@/lib/supabase/promotions";
@@ -26,18 +26,38 @@ type SiteContentContextValue = {
 
 const SiteContentContext = createContext<SiteContentContextValue | undefined>(undefined);
 
-export function SiteContentProvider({ children }: { children: ReactNode }) {
-  const [content, setContent] = useState<SiteContent>(defaultSiteContent);
+type SiteContentProviderProps = {
+  children: ReactNode;
+  /** Productos ya consultados en el servidor (Supabase) para evitar el flash de contenido de ejemplo. */
+  initialProducts?: Product[];
+};
+
+export function SiteContentProvider({ children, initialProducts }: SiteContentProviderProps) {
+  const [content, setContent] = useState<SiteContent>(() =>
+    initialProducts && initialProducts.length > 0
+      ? { ...defaultSiteContent, products: initialProducts }
+      : defaultSiteContent,
+  );
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     const initialContent = getStoredSiteContent();
-    setContent(initialContent);
+    // Fusión única post-hidratación con el cache local; evita el mismatch de SSR vs. localStorage.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setContent((previous) => ({
+      ...initialContent,
+      products: initialProducts && initialProducts.length > 0 ? previous.products : initialContent.products,
+    }));
     setIsHydrated(true);
 
     let isMounted = true;
 
-    getSupabaseProducts().then((remoteProducts) => {
+    // Si ya llegaron productos frescos desde el servidor, evitamos la segunda consulta cliente.
+    const productsPromise = initialProducts && initialProducts.length > 0
+      ? Promise.resolve(null)
+      : getSupabaseProducts();
+
+    productsPromise.then((remoteProducts) => {
       if (isMounted && remoteProducts && remoteProducts.length > 0) {
         setContent((previous) => ({
           ...previous,
@@ -91,7 +111,7 @@ export function SiteContentProvider({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialProducts]);
 
   useEffect(() => {
     if (isHydrated) saveSiteContent(content);

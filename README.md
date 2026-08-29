@@ -20,7 +20,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 Definí `ADMIN_PASSWORD` en `.env.local` con una contraseña elegida por vos y ejecutá `npm run dev`. El panel está disponible en `/admin`.
 
-La configuración se guarda temporalmente en `localStorage`. Las imágenes seleccionadas desde el panel se guardan como archivos en IndexedDB y la configuración conserva únicamente una referencia `idb:`, nunca Base64.
+La configuración de textos se guarda como caché de lectura en `localStorage`, pero la fuente de verdad es siempre Supabase. Las imágenes elegidas desde el panel se suben al bucket público `dcl-media` de Supabase Storage mediante `/api/admin/upload` y se guarda la URL pública HTTPS resultante en la base de datos; nunca se almacenan en IndexedDB, localStorage ni Base64.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

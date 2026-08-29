@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import type {
@@ -9,14 +9,8 @@ import type {
   SiteSettings,
   VehicleCategory,
 } from "@/lib/site-data";
-import { deleteImageFile, saveImageFile } from "@/lib/image-store";
 import { ManagedImage } from "@/components/ui/ManagedImage";
-import {
-  validateImageFile,
-  uploadImageToStorage,
-  isSupabaseConfigured,
-  type StorageCategory,
-} from "@/lib/supabase/storage";
+import { validateImageFile, type StorageCategory } from "@/lib/supabase/storage";
 import { upsertSupabaseProduct } from "@/lib/supabase/products";
 import { upsertSupabasePromotion } from "@/lib/supabase/promotions";
 import { upsertSupabaseVehicleCategory } from "@/lib/supabase/vehicle-categories";
@@ -63,6 +57,7 @@ function ImagePicker({
     }
 
     setIsSaving(true);
+    setUploadStatus("Subiendo a Supabase Storage...");
 
     const category: StorageCategory = storageKey.startsWith("product")
       ? "products"
@@ -74,34 +69,29 @@ function ImagePicker({
       ? "hero"
       : "site";
 
-    let nextSource = "";
-    let isUploadedToCloud = false;
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("category", category);
+      body.append("idHint", storageKey);
 
-    if (isSupabaseConfigured()) {
-      setUploadStatus("Subiendo a la nube (Supabase Storage)...");
-      const result = await uploadImageToStorage(category, file, storageKey);
-      if (result.success && result.publicUrl) {
-        nextSource = result.publicUrl;
-        isUploadedToCloud = true;
-      } else {
-        console.warn("Fallo subida a Supabase Storage, utilizando fallback local (IndexedDB):", result.error);
-        setUploadStatus("Error en la nube. Guardando copia local...");
+      const response = await fetch("/api/admin/upload", { method: "POST", body });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.ok || !data.publicUrl) {
+        throw new Error(data.error || data.message || "No se pudo subir la imagen a Supabase Storage.");
       }
-    }
 
-    if (!nextSource) {
-      setUploadStatus("Guardando en almacenamiento local...");
-      nextSource = await saveImageFile(storageKey, file);
+      onChange(data.publicUrl);
+      setUploadStatus("✓ Subida a Supabase Storage exitosa");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al subir la imagen.";
+      setUploadStatus(message);
+      window.alert(message);
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setUploadStatus(null), 4000);
     }
-
-    if (source.startsWith("idb:") && source !== nextSource) {
-      await deleteImageFile(source);
-    }
-
-    onChange(nextSource);
-    setIsSaving(false);
-    setUploadStatus(isUploadedToCloud ? "✓ Subida a la nube exitosa" : "✓ Guardado local exitoso");
-    setTimeout(() => setUploadStatus(null), 4000);
   }
 
   return (
@@ -121,7 +111,7 @@ function ImagePicker({
         <p className="mt-2 text-xs font-semibold text-red-300">{uploadStatus}</p>
       ) : (
         <p className="mt-2 text-xs text-zinc-500">
-          Las imágenes nuevas se almacenan en Supabase Storage (con copia de respaldo local si es necesario).
+          Las imágenes se suben directamente al bucket de Supabase Storage.
         </p>
       )}
     </div>

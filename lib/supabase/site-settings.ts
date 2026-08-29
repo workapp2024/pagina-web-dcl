@@ -1,6 +1,7 @@
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
 import { isSupabaseConfigured } from "./test-connection";
+import { sanitizeStoredImageUrl } from "./storage";
 import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "./database.types";
 
@@ -34,7 +35,8 @@ export async function getSupabaseSiteSettings(): Promise<Partial<SiteSettings> |
     const row = data as unknown as SiteSettingsRow;
 
     const settings: Partial<SiteSettings> = {};
-    if (row.logo_url) settings.logo = row.logo_url;
+    const sanitizedLogo = sanitizeStoredImageUrl(row.logo_url);
+    if (sanitizedLogo) settings.logo = sanitizedLogo;
     if (row.whatsapp) settings.whatsapp = row.whatsapp;
     if (row.instagram) settings.instagram = row.instagram;
     if (row.facebook) settings.facebook = row.facebook;

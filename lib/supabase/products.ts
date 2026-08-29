@@ -1,6 +1,7 @@
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
 import { isSupabaseConfigured } from "./test-connection";
+import { sanitizeStoredImageUrl } from "./storage";
 import type { Product } from "@/lib/site-data";
 import type { Database } from "./database.types";
 
@@ -41,7 +42,7 @@ export async function getSupabaseProducts(): Promise<Product[] | null> {
       description: row.description,
       price: Number(row.price),
       previousPrice: row.previous_price !== null ? Number(row.previous_price) : undefined,
-      image: row.image_url,
+      image: sanitizeStoredImageUrl(row.image_url),
       category: row.category,
       featured: row.featured,
       active: row.active,

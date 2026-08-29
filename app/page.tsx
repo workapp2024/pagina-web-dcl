@@ -11,10 +11,16 @@ import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
+import { getSupabaseProducts } from "@/lib/supabase/products";
 
-export default function Home() {
+// Se revalida periódicamente para reflejar altas/bajas de productos hechas desde el panel sin necesidad de un nuevo deploy.
+export const revalidate = 60;
+
+export default async function Home() {
+  const products = await getSupabaseProducts();
+
   return (
-    <SiteContentProvider>
+    <SiteContentProvider initialProducts={products ?? undefined}>
       <div className="min-h-screen bg-black text-white">
         <Header />
 

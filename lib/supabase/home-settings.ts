@@ -1,6 +1,7 @@
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
 import { isSupabaseConfigured } from "./test-connection";
+import { sanitizeStoredImageUrl } from "./storage";
 import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "./database.types";
 
@@ -38,7 +39,10 @@ export async function getSupabaseHomeSettings(): Promise<Partial<SiteSettings> |
     if (row.hero_subtitle) settings.heroSubtitle = row.hero_subtitle;
     if (row.hero_primary_cta) settings.heroPrimaryCta = row.hero_primary_cta;
     if (row.hero_secondary_cta) settings.heroSecondaryCta = row.hero_secondary_cta;
-    if (row.hero_image_url) settings.heroImage = row.hero_image_url;
+    if (row.hero_image_url) {
+      const sanitizedHeroImage = sanitizeStoredImageUrl(row.hero_image_url);
+      if (sanitizedHeroImage) settings.heroImage = sanitizedHeroImage;
+    }
 
     return settings;
   } catch (err) {

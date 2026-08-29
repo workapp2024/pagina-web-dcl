@@ -80,6 +80,17 @@ export function isSupabaseStorageUrl(url: string): boolean {
 }
 
 /**
+ * Descarta referencias locales no válidas en producción (idb:/blob:/data:), que solo existían
+ * en el navegador donde se generaron y nunca fueron URLs públicas reales. Cualquier valor con
+ * este prefijo es un remanente del antiguo almacenamiento local y debe tratarse como imagen ausente.
+ */
+export function sanitizeStoredImageUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  if (/^(idb:|blob:|data:)/.test(url)) return "";
+  return url;
+}
+
+/**
  * Sube una imagen al bucket 'dcl-media' en Supabase Storage.
  * Retorna la ruta interna y la URL pública HTTPS.
  */
