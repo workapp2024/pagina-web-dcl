@@ -772,6 +772,19 @@ export function AdminHomeEditor() {
         />
       </SectionCard>
 
+      <SectionCard title="Logo de la marca" description="Logo de DCL Cree LED utilizado en el Header y en el panel del Hero. Al reemplazarlo se actualiza en todas sus apariciones.">
+        <ImagePicker
+          source={content.siteSettings.logo}
+          label="Seleccionar logo"
+          storageKey="site-logo"
+          fit="contain"
+          onChange={(logo) => {
+            updateSettings({ logo });
+            saveHomeToSupabase({ ...content.siteSettings, logo });
+          }}
+        />
+      </SectionCard>
+
       <SectionCard title="Contenido principal" description="Texto visible en el hero y en la parte comercial principal.">
         <div className="space-y-4">
           <label className="block text-sm text-zinc-300">
