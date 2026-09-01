@@ -6,8 +6,13 @@ import { usePathname, useRouter } from "next/navigation";
 const items = [
   { href: "/admin", label: "Resumen" },
   { href: "/admin/productos", label: "Productos" },
+  { href: "/admin/inventario", label: "Inventario" },
+  { href: "/admin/ventas", label: "Ventas" },
+  { href: "/admin/instalaciones", label: "Instalaciones" },
+  { href: "/admin/garantias", label: "Garantías y reclamos" },
+  { href: "/admin/vehiculos", label: "Vehículos (Home)" },
+  { href: "/admin/compatibilidades", label: "Compatibilidades" },
   { href: "/admin/promociones", label: "Promociones" },
-  { href: "/admin/vehiculos", label: "Vehículos" },
   { href: "/admin/home", label: "Home" },
   { href: "/admin/configuracion", label: "Configuración" },
 ];

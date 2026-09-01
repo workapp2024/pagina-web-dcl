@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import type {
@@ -11,11 +11,27 @@ import type {
 } from "@/lib/site-data";
 import { ManagedImage } from "@/components/ui/ManagedImage";
 import { validateImageFile, type StorageCategory } from "@/lib/supabase/storage";
-import { upsertSupabaseProduct } from "@/lib/supabase/products";
+import { getAdminSupabaseProducts, upsertSupabaseProduct } from "@/lib/supabase/products";
 import { upsertSupabasePromotion } from "@/lib/supabase/promotions";
 import { upsertSupabaseVehicleCategory } from "@/lib/supabase/vehicle-categories";
 import { upsertSupabaseSiteSettings } from "@/lib/supabase/site-settings";
 import { upsertSupabaseHomeSettings } from "@/lib/supabase/home-settings";
+import {
+  calculateMarginPercentage,
+  calculateSalePrice,
+  parsePricingInput,
+} from "@/lib/product-pricing";
+
+function slugifyProductName(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+type PricingDraft = Partial<Record<"cost" | "margin" | "price", string>>;
 
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
@@ -119,12 +135,33 @@ function ImagePicker({
 }
 
 export function AdminProductsManager() {
-  const { content, setContent } = useSiteContent();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [pricingDrafts, setPricingDrafts] = useState<Record<string, PricingDraft>>({});
   const [productStatuses, setProductStatuses] = useState<
     Record<string, { status: "saving" | "success" | "error"; message?: string }>
   >({});
 
-  const saveProductToSupabase = async (productToSave: Product) => {
+  useEffect(() => {
+    let isMounted = true;
+
+    getAdminSupabaseProducts().then((result) => {
+      if (!isMounted) return;
+      if (result.success) {
+        setProducts(result.products ?? []);
+      } else {
+        setLoadError(result.error || "No se pudieron cargar los productos administrativos.");
+      }
+      setIsLoadingProducts(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const saveProductToSupabase = async (productToSave: Product): Promise<boolean> => {
     setProductStatuses((prev) => ({
       ...prev,
       [productToSave.id]: { status: "saving", message: "Guardando en Supabase..." },
@@ -144,27 +181,82 @@ export function AdminProductsManager() {
           return next;
         });
       }, 4000);
+      return true;
     } else {
       setProductStatuses((prev) => ({
         ...prev,
         [productToSave.id]: { status: "error", message: result.error || "Error al guardar en Supabase" },
       }));
+      return false;
     }
   };
 
   const updateProduct = (productId: string, changes: Partial<Product>) => {
-    setContent((previous) => {
-      const nextProducts = previous.products.map((product) =>
+    setProducts((previous) =>
+      previous.map((product) =>
         product.id === productId ? { ...product, ...changes } : product,
-      );
-      return { ...previous, products: nextProducts };
+      ),
+    );
+  };
+
+  const updatePricingDraft = (productId: string, field: keyof PricingDraft, value: string) => {
+    setPricingDrafts((previous) => ({
+      ...previous,
+      [productId]: { ...previous[productId], [field]: value },
+    }));
+  };
+
+  const updateCost = (product: Product, rawValue: string) => {
+    updatePricingDraft(product.id, "cost", rawValue);
+    const cost = parsePricingInput(rawValue);
+    if (cost === undefined || cost <= 0) {
+      updateProduct(product.id, { costPrice: cost, marginPercentage: undefined });
+      updatePricingDraft(product.id, "margin", "");
+      return;
+    }
+
+    const margin = calculateMarginPercentage(cost, product.price);
+    updateProduct(product.id, { costPrice: cost, marginPercentage: margin });
+    updatePricingDraft(product.id, "margin", margin === undefined ? "" : String(margin));
+  };
+
+  const updateSalePrice = (product: Product, rawValue: string) => {
+    updatePricingDraft(product.id, "price", rawValue);
+    const salePrice = parsePricingInput(rawValue);
+    if (salePrice === undefined) {
+      if (!rawValue.trim()) updateProduct(product.id, { price: 0 });
+      return;
+    }
+
+    const margin = calculateMarginPercentage(product.costPrice, salePrice);
+    updateProduct(product.id, { price: salePrice, marginPercentage: margin });
+    if (margin !== undefined) updatePricingDraft(product.id, "margin", String(margin));
+  };
+
+  const updateMargin = (product: Product, rawValue: string) => {
+    updatePricingDraft(product.id, "margin", rawValue);
+    const margin = parsePricingInput(rawValue);
+    if (margin === undefined) {
+      if (!rawValue.trim()) updateProduct(product.id, { marginPercentage: undefined });
+      return;
+    }
+
+    const salePrice = calculateSalePrice(product.costPrice, margin);
+    updateProduct(product.id, {
+      marginPercentage: margin,
+      ...(salePrice === undefined ? {} : { price: salePrice }),
     });
+    if (salePrice !== undefined) updatePricingDraft(product.id, "price", String(salePrice));
   };
 
   const addProduct = async () => {
+    const timestamp = Date.now();
+    const productName = "Nuevo producto";
+    const slug = `${slugifyProductName(productName) || "producto"}-${timestamp}`;
+
     const nextProduct: Product = {
-      id: `producto-${Date.now()}`,
-      name: "Nuevo producto",
+      id: `producto-${timestamp}`,
+      name: productName,
       description: "Descripción del producto.",
       price: 0,
       previousPrice: undefined,
@@ -173,28 +265,23 @@ export function AdminProductsManager() {
       category: "General",
       featured: false,
       active: true,
-      order: content.products.length + 1,
-      href: "/productos",
+      order: products.length + 1,
+      href: `/productos/${slug}`,
       ctaText: "VER PRODUCTO",
     };
 
-    setContent((previous) => ({
-      ...previous,
-      products: [...previous.products, nextProduct],
-    }));
+    setProducts((previous) => [...previous, nextProduct]);
 
     await saveProductToSupabase(nextProduct);
   };
 
   const removeProduct = async (product: Product) => {
     // Desactivación segura en Supabase (sin DELETE físico)
-    await saveProductToSupabase({ ...product, active: false });
+    const saved = await saveProductToSupabase({ ...product, active: false });
+    if (!saved) return;
 
     // Remover del estado local para la vista
-    setContent((previous) => ({
-      ...previous,
-      products: previous.products.filter((item) => item.id !== product.id),
-    }));
+    setProducts((previous) => previous.filter((item) => item.id !== product.id));
   };
 
   return (
@@ -207,13 +294,20 @@ export function AdminProductsManager() {
         <button
           type="button"
           onClick={addProduct}
-          className="rounded-full bg-red-600 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-red-500"
+          disabled={isLoadingProducts}
+          className="rounded-full bg-red-600 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           + Agregar producto
         </button>
       </div>
 
-      {content.products.map((product) => {
+      {loadError ? (
+        <p className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{loadError}</p>
+      ) : null}
+
+      {isLoadingProducts ? <p className="text-sm text-zinc-400">Cargando productos administrativos...</p> : null}
+
+      {products.map((product) => {
         const statusInfo = productStatuses[product.id];
 
         return (
@@ -270,13 +364,15 @@ export function AdminProductsManager() {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm text-zinc-300">
-                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Precio</span>
+                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Precio de venta</span>
                     <input
-                      type="number"
-                      value={product.price}
-                      onChange={(event) => updateProduct(product.id, { price: Number(event.target.value) || 0 })}
+                      type="text"
+                      inputMode="decimal"
+                      value={pricingDrafts[product.id]?.price ?? String(product.price)}
+                      onChange={(event) => updateSalePrice(product, event.target.value)}
                       className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
                     />
+                    <span className="mt-1 block text-[11px] text-zinc-500">Podés modificar el precio de venta o el margen. El otro valor se calcula automáticamente según el costo.</span>
                   </label>
 
                   <label className="block text-sm text-zinc-300">
@@ -311,6 +407,149 @@ export function AdminProductsManager() {
                     />
                     Activo
                   </label>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">
+                    Especificaciones técnicas (ficha del producto y buscador de LED)
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Conector</span>
+                      <input
+                        placeholder="H4, H7, H11..."
+                        value={product.connectorType ?? ""}
+                        onChange={(event) => updateProduct(product.id, { connectorType: event.target.value })}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                      <span className="mt-1 block text-[11px] text-zinc-500">Usá el mismo código que en Compatibilidades.</span>
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Potencia (W)</span>
+                      <input
+                        type="number"
+                        value={product.watts ?? ""}
+                        onChange={(event) => updateProduct(product.id, { watts: event.target.value === "" ? undefined : Number(event.target.value) })}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Lúmenes</span>
+                      <input
+                        type="number"
+                        value={product.lumens ?? ""}
+                        onChange={(event) => updateProduct(product.id, { lumens: event.target.value === "" ? undefined : Number(event.target.value) })}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Voltaje</span>
+                      <input
+                        placeholder="12V-24V"
+                        value={product.voltage ?? ""}
+                        onChange={(event) => updateProduct(product.id, { voltage: event.target.value })}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Temperatura de color</span>
+                      <input
+                        placeholder="6000K"
+                        value={product.colorTemperature ?? ""}
+                        onChange={(event) => updateProduct(product.id, { colorTemperature: event.target.value })}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Chip</span>
+                      <input
+                        placeholder="CREE XHP50"
+                        value={product.chipType ?? ""}
+                        onChange={(event) => updateProduct(product.id, { chipType: event.target.value })}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Garantía</span>
+                      <input
+                        placeholder="12 meses"
+                        value={product.warranty ?? ""}
+                        onChange={(event) => updateProduct(product.id, { warranty: event.target.value })}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                    </label>
+
+                    <label className="inline-flex items-center gap-2 self-end pb-2.5 text-sm text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={product.canbus ?? true}
+                        onChange={(event) => updateProduct(product.id, { canbus: event.target.checked })}
+                      />
+                      Canbus
+                    </label>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">
+                    Gestión privada
+                  </p>
+                  <p className="mb-3 text-xs text-zinc-400">
+                    Estos datos sólo se cargan desde el panel administrativo y no forman parte del catálogo público. El stock se modifica desde Inventario para conservar su historial.
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Costo</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={pricingDrafts[product.id]?.cost ?? (product.costPrice === undefined ? "" : String(product.costPrice))}
+                        onChange={(event) => updateCost(product, event.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Margen (%)</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={pricingDrafts[product.id]?.margin ?? (product.marginPercentage === undefined ? "" : String(product.marginPercentage))}
+                        onChange={(event) => updateMargin(product, event.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                      <span className="mt-1 block text-[11px] text-zinc-500">Acepta decimales con coma, por ejemplo 74,76.</span>
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Stock actual</span>
+                      <input
+                        type="number"
+                        value={product.stock ?? 0}
+                        readOnly
+                        aria-label="Stock actual, administrado desde Inventario"
+                        className="w-full cursor-not-allowed rounded-xl border border-white/10 bg-zinc-950 px-3 py-2.5 text-zinc-400"
+                      />
+                    </label>
+
+                    <label className="block text-sm text-zinc-300">
+                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Stock mínimo</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={product.stockMin ?? 0}
+                        onChange={(event) => updateProduct(product.id, { stockMin: event.target.value === "" ? 0 : Number(event.target.value) })}
+                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-4 pt-2">

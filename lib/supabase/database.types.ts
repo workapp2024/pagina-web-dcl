@@ -31,6 +31,10 @@ export interface Database {
           canbus: boolean;
           chip_type: string | null;
           warranty: string | null;
+          cost_price: number | null;
+          margin_percentage: number | null;
+          stock: number;
+          stock_min: number;
           created_at: string;
           updated_at: string;
         };
@@ -55,6 +59,10 @@ export interface Database {
           canbus?: boolean;
           chip_type?: string | null;
           warranty?: string | null;
+          cost_price?: number | null;
+          margin_percentage?: number | null;
+          stock?: number;
+          stock_min?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -79,9 +87,80 @@ export interface Database {
           canbus?: boolean;
           chip_type?: string | null;
           warranty?: string | null;
+          cost_price?: number | null;
+          margin_percentage?: number | null;
+          stock?: number;
+          stock_min?: number;
           created_at?: string;
           updated_at?: string;
         };
+      };
+      inventory_movements: {
+        Row: {
+          id: string;
+          product_id: string;
+          movement_type: "entrada" | "salida" | "ajuste" | "venta";
+          quantity_delta: number;
+          reason: string;
+          reference_type: string | null;
+          reference_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          movement_type: "entrada" | "salida" | "ajuste" | "venta";
+          quantity_delta: number;
+          reason?: string;
+          reference_type?: string | null;
+          reference_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          movement_type?: "entrada" | "salida" | "ajuste" | "venta";
+          quantity_delta?: number;
+          reason?: string;
+          reference_type?: string | null;
+          reference_id?: string | null;
+          created_at?: string;
+        };
+      };
+      customers: {
+        Row: { id: string; full_name: string; phone: string | null; email: string | null; notes: string; created_at: string; updated_at: string };
+        Insert: { id?: string; full_name: string; phone?: string | null; email?: string | null; notes?: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; full_name?: string; phone?: string | null; email?: string | null; notes?: string; created_at?: string; updated_at?: string };
+      };
+      customer_vehicles: {
+        Row: { id: string; customer_id: string; vehicle_model_id: string | null; brand_name: string; model_name: string; year: number | null; plate: string | null; notes: string; created_at: string; updated_at: string };
+        Insert: { id?: string; customer_id: string; vehicle_model_id?: string | null; brand_name: string; model_name: string; year?: number | null; plate?: string | null; notes?: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; customer_id?: string; vehicle_model_id?: string | null; brand_name?: string; model_name?: string; year?: number | null; plate?: string | null; notes?: string; created_at?: string; updated_at?: string };
+      };
+      sales: {
+        Row: { id: string; customer_id: string; customer_vehicle_id: string | null; status: "completed" | "cancelled"; notes: string; subtotal: number; total: number; payment_method: "cash" | "transfer" | "mercadopago" | "debit" | "credit" | "other"; idempotency_key: string | null; created_at: string };
+        Insert: { id?: string; customer_id: string; customer_vehicle_id?: string | null; status?: "completed" | "cancelled"; notes?: string; subtotal?: number; total?: number; payment_method?: "cash" | "transfer" | "mercadopago" | "debit" | "credit" | "other"; idempotency_key?: string | null; created_at?: string };
+        Update: { id?: string; customer_id?: string; customer_vehicle_id?: string | null; status?: "completed" | "cancelled"; notes?: string; subtotal?: number; total?: number; payment_method?: "cash" | "transfer" | "mercadopago" | "debit" | "credit" | "other"; idempotency_key?: string | null; created_at?: string };
+      };
+      sale_items: {
+        Row: { id: string; sale_id: string; product_id: string; product_name: string; quantity: number; unit_price: number; unit_cost: number | null; line_total: number; created_at: string };
+        Insert: { id?: string; sale_id: string; product_id: string; product_name: string; quantity: number; unit_price: number; unit_cost?: number | null; line_total: number; created_at?: string };
+        Update: { id?: string; sale_id?: string; product_id?: string; product_name?: string; quantity?: number; unit_price?: number; unit_cost?: number | null; line_total?: number; created_at?: string };
+      };
+      installations: {
+        Row: { id: string; sale_id: string; customer_vehicle_id: string | null; status: "pending" | "completed" | "cancelled"; scheduled_at: string | null; completed_at: string | null; notes: string; created_at: string; updated_at: string };
+        Insert: { id?: string; sale_id: string; customer_vehicle_id?: string | null; status?: "pending" | "completed" | "cancelled"; scheduled_at?: string | null; completed_at?: string | null; notes?: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; sale_id?: string; customer_vehicle_id?: string | null; status?: "pending" | "completed" | "cancelled"; scheduled_at?: string | null; completed_at?: string | null; notes?: string; created_at?: string; updated_at?: string };
+      };
+      warranties: {
+        Row: { id: string; sale_item_id: string; customer_id: string; customer_vehicle_id: string | null; status: "active" | "expired" | "void"; starts_at: string; expires_at: string | null; notes: string; created_at: string };
+        Insert: { id?: string; sale_item_id: string; customer_id: string; customer_vehicle_id?: string | null; status?: "active" | "expired" | "void"; starts_at?: string; expires_at?: string | null; notes?: string; created_at?: string };
+        Update: { id?: string; sale_item_id?: string; customer_id?: string; customer_vehicle_id?: string | null; status?: "active" | "expired" | "void"; starts_at?: string; expires_at?: string | null; notes?: string; created_at?: string };
+      };
+      warranty_claims: {
+        Row: { id: string; warranty_id: string; status: "open" | "resolved" | "rejected"; description: string; resolution: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; warranty_id: string; status?: "open" | "resolved" | "rejected"; description: string; resolution?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; warranty_id?: string; status?: "open" | "resolved" | "rejected"; description?: string; resolution?: string | null; created_at?: string; updated_at?: string };
       };
       promotions: {
         Row: {
@@ -244,9 +323,113 @@ export interface Database {
           updated_at?: string;
         };
       };
+      vehicle_brands: {
+        Row: {
+          id: string;
+          name: string;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          name: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      vehicle_models: {
+        Row: {
+          id: string;
+          brand_id: string;
+          name: string;
+          vehicle_type: string;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          brand_id: string;
+          name: string;
+          vehicle_type?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          brand_id?: string;
+          name?: string;
+          vehicle_type?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      vehicle_compatibilities: {
+        Row: {
+          id: string;
+          model_id: string;
+          year_from: number;
+          year_to: number | null;
+          version: string | null;
+          connector_low: string | null;
+          connector_high: string | null;
+          connector_fog: string | null;
+          connector_aux: string | null;
+          notes: string;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          model_id: string;
+          year_from: number;
+          year_to?: number | null;
+          version?: string | null;
+          connector_low?: string | null;
+          connector_high?: string | null;
+          connector_fog?: string | null;
+          connector_aux?: string | null;
+          notes?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          model_id?: string;
+          year_from?: number;
+          year_to?: number | null;
+          version?: string | null;
+          connector_low?: string | null;
+          connector_high?: string | null;
+          connector_fog?: string | null;
+          connector_aux?: string | null;
+          notes?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      create_sale_with_inventory: {
+        Args: { p_customer_id: string; p_customer_vehicle_id: string | null; p_notes: string; p_items: Json; p_create_installation?: boolean; p_payment_method?: string; p_idempotency_key?: string | null };
+        Returns: string;
+      };
+    };
     Enums: Record<string, never>;
   };
 }

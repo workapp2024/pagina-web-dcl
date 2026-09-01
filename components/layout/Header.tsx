@@ -2,6 +2,7 @@
 
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
+import { CartLink } from "@/components/store/CartLink";
 
 const navItems = [
   { label: "Inicio", href: "#inicio" },
@@ -37,7 +38,8 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-3 md:flex">
+          <CartLink />
           <WhatsAppButton label="WhatsApp" />
         </div>
 

@@ -1,4 +1,5 @@
 import { ManagedImage } from "@/components/ui/ManagedImage";
+import { AddToCartButton } from "@/components/store/AddToCartButton";
 
 type ProductCardProps = {
   id: string;
@@ -39,6 +40,7 @@ export function ProductCard({ id, name, description, image, href, ctaText, price
           >
             {ctaText}
           </a>
+          <AddToCartButton product={{ id, name, price, image, href }} />
           <a
             href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Hola DCL Cree LED, quiero consultar por ${name}.`)}`}
             target="_blank"

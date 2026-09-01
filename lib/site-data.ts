@@ -12,6 +12,20 @@ export type Product = {
   href: string;
   ctaText: string;
   order: number;
+  // Especificaciones técnicas (compatibilidad y ficha de producto)
+  watts?: number;
+  lumens?: number;
+  voltage?: string;
+  colorTemperature?: string;
+  connectorType?: string;
+  canbus?: boolean;
+  chipType?: string;
+  warranty?: string;
+  /** Campos privados: sólo se cargan a través de la API administrativa. */
+  costPrice?: number;
+  marginPercentage?: number;
+  stock?: number;
+  stockMin?: number;
 };
 
 export type VehicleCategory = {

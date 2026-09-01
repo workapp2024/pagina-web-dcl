@@ -32,9 +32,20 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
+
+# Supabase CLI local state
+/supabase/.temp/
+
+# Local duplicate with an invalid Supabase migration timestamp; the equivalent
+# service-role grant is already in 20260830000000_vehicle_compatibility.sql.
+/supabase/migrations/20260830b_vehicle_compatibility_service_role_grant.sql
+
+# Local reference archive (116 MB; not application source)
+/Referencia/
 
 # typescript
 *.tsbuildinfo

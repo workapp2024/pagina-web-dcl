@@ -3,12 +3,25 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import type { Product } from "@/lib/site-data";
 import type { Database } from "@/lib/supabase/database.types";
+import { mapAdminProductRow } from "@/lib/supabase/products";
 
 export type ProductInsert = Database["public"]["Tables"]["products"]["Insert"];
+type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 
-export async function POST(request: Request) {
-  const authenticated = await isAdminAuthenticated();
-  if (!authenticated) {
+function optionalNumber(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function nonNegativeInteger(value: unknown, fallback = 0): number {
+  const numberValue = optionalNumber(value);
+  if (numberValue === null) return fallback;
+  return Math.max(0, Math.trunc(numberValue));
+}
+
+async function requireAdminWriteAccess() {
+  if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ ok: false, message: "No autorizado." }, { status: 401 });
   }
 
@@ -17,11 +30,41 @@ export async function POST(request: Request) {
       {
         ok: false,
         error:
-          "Falta configurar la variable de entorno privada SUPABASE_SERVICE_ROLE_KEY en .env.local para realizar escrituras administrativas en Supabase.",
+          "Falta configurar la variable de entorno privada SUPABASE_SERVICE_ROLE_KEY en .env.local para administrar productos en Supabase.",
       },
       { status: 500 }
     );
   }
+
+  return null;
+}
+
+export async function GET() {
+  const accessError = await requireAdminWriteAccess();
+  if (accessError) return accessError;
+
+  try {
+    const supabase = createAdminServerClient();
+    const { data, error } = await supabase.from("products").select("*").order("sort_order", { ascending: true });
+
+    if (error) {
+      console.warn("Error al leer productos administrativos en Supabase:", error.message);
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, data: (data as ProductRow[]).map(mapAdminProductRow) });
+  } catch (err) {
+    console.error("Excepción al leer productos administrativos:", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : "Error interno del servidor." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  const accessError = await requireAdminWriteAccess();
+  if (accessError) return accessError;
 
   try {
     const body = await request.json();
@@ -51,12 +94,25 @@ export async function POST(request: Request) {
       featured: Boolean(product.featured),
       active: Boolean(product.active),
       sort_order: Number(product.order) || 0,
+      watts: product.watts !== undefined && product.watts !== null ? Number(product.watts) : null,
+      lumens: product.lumens !== undefined && product.lumens !== null ? Number(product.lumens) : null,
+      voltage: product.voltage || null,
+      color_temperature: product.colorTemperature || null,
+      connector_type: product.connectorType || null,
+      canbus: product.canbus === undefined ? true : Boolean(product.canbus),
+      chip_type: product.chipType || null,
+      warranty: product.warranty || null,
+      cost_price: optionalNumber(product.costPrice),
+      margin_percentage: optionalNumber(product.marginPercentage),
+      stock_min: nonNegativeInteger(product.stockMin),
     };
 
     const supabase = createAdminServerClient();
     const { data, error } = await supabase
       .from("products")
-      .upsert(productRow as any, { onConflict: "id" })
+      // El tipo manual de Supabase aún no declara Relationships; la librería
+      // infiere `never` para escrituras aunque el payload sí coincide con Insert.
+      .upsert(productRow as never, { onConflict: "id" })
       .select("*")
       .single();
 
