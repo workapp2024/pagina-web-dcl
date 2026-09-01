@@ -1,92 +1,103 @@
-import { createHmac, timingSafeEqual } from "crypto";
-import { NextResponse } from "next/server";
+import { InvalidWebhookSignatureError, WebhookSignatureValidator } from "mercadopago";
+import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminServerClient } from "@/lib/supabase/server";
 
-type SignatureValidation = { ok: true } | { ok: false; reason: string };
+type MercadoPagoOrder = {
+  id?: string;
+  external_reference?: string;
+  currency?: string;
+  total_amount?: string | number;
+  status?: string;
+  transactions?: { payments?: Array<{ id?: string | number }> };
+};
 
-function validateSignature(request: Request, dataId: string): SignatureValidation {
-  const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET ?? "";
-  const signature = request.headers.get("x-signature") ?? "";
-  const requestId = request.headers.get("x-request-id") ?? "";
-  const parts = new Map<string, string>();
-  for (const part of signature.split(",")) {
-    const separator = part.indexOf("=");
-    if (separator > 0) parts.set(part.slice(0, separator).trim(), part.slice(separator + 1).trim());
-  }
-  const timestamp = parts.get("ts");
-  const received = parts.get("v1");
-  if (!secret) return { ok: false, reason: "missing_webhook_secret" };
-  if (!dataId || !requestId || !timestamp || !received) return { ok: false, reason: "missing_signature_fields" };
-  if (!/^\d+$/.test(timestamp) || !/^[a-fA-F0-9]+$/.test(received)) return { ok: false, reason: "invalid_signature_format" };
-  const expected = createHmac("sha256", secret)
-    .update(`id:${dataId};request-id:${requestId};ts:${timestamp};`)
-    .digest("hex");
-  if (expected.length !== received.length) return { ok: false, reason: "signature_length_mismatch" };
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(received))
-    ? { ok: true }
-    : { ok: false, reason: "signature_mismatch" };
-}
-
-function isOrderNotification(value: unknown, externalOrderId: string): boolean {
+function isMercadoPagoOrder(value: unknown, externalOrderId: string): value is MercadoPagoOrder {
   if (!value || typeof value !== "object") return false;
-  const notification = value as { type?: unknown; data?: { id?: unknown } };
-  return notification.type === "order" && String(notification.data?.id ?? "") === externalOrderId;
+  const order = value as MercadoPagoOrder;
+  return order.id === externalOrderId && Boolean(order.external_reference) && Boolean(order.currency);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   let stage = "request_received";
-  let externalOrderId = "";
+  const type = request.nextUrl.searchParams.get("type");
+  const externalOrderId = request.nextUrl.searchParams.get("data.id");
+  const xSignature = request.headers.get("x-signature");
+  const xRequestId = request.headers.get("x-request-id");
+  const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+
+  if (!type || !externalOrderId || !xSignature || !xRequestId || !secret) {
+    console.warn("Mercado Pago webhook rejected", {
+      stage: "required_parameters",
+      hasExternalOrderId: Boolean(externalOrderId),
+      hasSignature: Boolean(xSignature),
+      hasRequestId: Boolean(xRequestId),
+      hasSecret: Boolean(secret),
+      type,
+    });
+    return NextResponse.json({ ok: false, error: "Missing webhook parameters." }, { status: 400 });
+  }
+  if (type !== "order") {
+    console.warn("Mercado Pago webhook rejected", { stage: "query_validation", reason: "unsupported_type", type });
+    return NextResponse.json({ ok: false, error: "Unsupported notification type." }, { status: 400 });
+  }
+
   try {
-    const url = new URL(request.url);
-    externalOrderId = url.searchParams.get("data.id") ?? "";
-    const type = url.searchParams.get("type");
     stage = "signature_validation";
-    const signature = validateSignature(request, externalOrderId);
-    if (!signature.ok) {
-      console.warn("Mercado Pago webhook rejected", { stage, reason: signature.reason, hasExternalOrderId: Boolean(externalOrderId), type });
-      return NextResponse.json({ ok: false }, { status: 401 });
+    WebhookSignatureValidator.validate({ xSignature, xRequestId, dataId: externalOrderId, secret });
+  } catch (error) {
+    if (error instanceof InvalidWebhookSignatureError) {
+      console.warn("Mercado Pago webhook rejected", { stage, reason: error.reason, requestId: error.requestId });
+      return NextResponse.json({ ok: false, error: "Invalid webhook signature." }, { status: 401 });
     }
+    console.error("Mercado Pago webhook validator failed", { stage, error: error instanceof Error ? error.name : "unknown_error" });
+    return NextResponse.json({ ok: false, error: "Webhook validation failed." }, { status: 500 });
+  }
 
-    stage = "body_parsing";
+  // The body is not part of signature validation or order processing.
+  // It is parsed only as best-effort diagnostics; malformed JSON is ignored.
+  try {
+    stage = "optional_body_parsing";
     const rawBody = await request.text();
-    let notification: unknown;
-    try {
-      notification = rawBody ? JSON.parse(rawBody) : null;
-    } catch {
-      console.warn("Mercado Pago webhook rejected", { stage, reason: "invalid_json", hasExternalOrderId: Boolean(externalOrderId), type });
-      return NextResponse.json({ ok: false, error: "Invalid JSON notification." }, { status: 400 });
-    }
-    if (
-      type !== "order" ||
-      !externalOrderId ||
-      !isOrderNotification(notification, externalOrderId)
-    ) {
-      console.warn("Mercado Pago webhook rejected", { stage: "notification_validation", reason: "invalid_order_notification", hasExternalOrderId: Boolean(externalOrderId), type });
-      return NextResponse.json({ ok: false, error: "Invalid order notification." }, { status: 400 });
-    }
+    if (rawBody) JSON.parse(rawBody);
+  } catch {
+    console.warn("Mercado Pago webhook body ignored", { stage, reason: "invalid_or_unavailable_json", hasExternalOrderId: true });
+  }
 
+  try {
     stage = "mercadopago_order_fetch";
     const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
-    if (!accessToken) throw new Error("Mercado Pago no configurado.");
+    if (!accessToken) {
+      console.error("Mercado Pago webhook unavailable", { stage, reason: "missing_access_token" });
+      return NextResponse.json({ ok: false, error: "Payment provider is not configured." }, { status: 503 });
+    }
     const response = await fetch(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(externalOrderId)}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    const order = await response.json();
-    // El simulador de Webhooks permite usar un Data ID arbitrario. Después de
-    // validar su firma, un 404 de Orders API no representa un pago ni un error
-    // interno: se confirma la recepción y se omite sin llamar a la RPC.
     if (response.status === 404) {
-      console.warn("Mercado Pago webhook ignored: external order not found", { externalOrderId });
+      console.warn("Mercado Pago webhook ignored", { stage, reason: "external_order_not_found", externalOrderId });
       return NextResponse.json({ ok: true, ignored: "external_order_not_found" });
     }
-    if (!response.ok || order.id !== externalOrderId || !order.external_reference || !order.currency) {
-      throw new Error("No se pudo verificar la order de Mercado Pago.");
+    if (!response.ok) {
+      console.error("Mercado Pago webhook provider error", { stage, status: response.status });
+      return NextResponse.json({ ok: false, error: "Could not verify payment order." }, { status: 502 });
     }
 
-    const payment = order.transactions?.payments?.[0];
+    let order: unknown;
+    try {
+      order = await response.json();
+    } catch {
+      console.error("Mercado Pago webhook provider error", { stage, reason: "invalid_order_response" });
+      return NextResponse.json({ ok: false, error: "Could not verify payment order." }, { status: 502 });
+    }
+    if (!isMercadoPagoOrder(order, externalOrderId)) {
+      console.error("Mercado Pago webhook provider error", { stage, reason: "inconsistent_order_response" });
+      return NextResponse.json({ ok: false, error: "Could not verify payment order." }, { status: 502 });
+    }
+
     stage = "local_order_completion";
+    const payment = order.transactions?.payments?.[0];
     const db = createAdminServerClient();
     const result: any = await db.rpc("complete_mercadopago_order", {
       p_order: order.external_reference,
@@ -101,9 +112,9 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Mercado Pago webhook failed", {
       stage,
-      externalOrderId: externalOrderId || undefined,
+      externalOrderId,
       error: error instanceof Error ? error.message : "unknown_error",
     });
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Error de webhook." }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Webhook processing failed." }, { status: 500 });
   }
 }
