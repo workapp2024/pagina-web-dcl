@@ -40,6 +40,12 @@ function isMercadoPagoOrder(value: unknown, externalOrderId: string): value is M
   return order.id === externalOrderId && Boolean(order.external_reference) && Boolean(order.currency);
 }
 
+function hasOrderIdentifierShape(externalOrderId: string): boolean {
+  // Checkout API Orders uses a ULID, optionally prefixed with ORD. A simulator
+  // Data ID such as "123456" cannot be a real Orders API resource.
+  return /^(?:ORD)?[0-9A-HJKMNP-TV-Z]{26}$/i.test(externalOrderId);
+}
+
 export async function POST(request: NextRequest) {
   let stage = "request_received";
   const type = request.nextUrl.searchParams.get("type");
@@ -109,6 +115,10 @@ export async function POST(request: NextRequest) {
     if (response.status === 404) {
       console.warn("Mercado Pago webhook ignored", { ...responseLog, reason: "external_order_not_found" });
       return NextResponse.json({ ok: true, ignored: "external_order_not_found" });
+    }
+    if (response.status === 400 && !hasOrderIdentifierShape(externalOrderId)) {
+      console.warn("Mercado Pago webhook ignored", { ...responseLog, reason: "simulated_or_invalid_external_order" });
+      return NextResponse.json({ ok: true, ignored: "simulated_or_invalid_external_order" });
     }
     if (response.status === 401 || response.status === 403) {
       console.error("Mercado Pago webhook provider authorization failed", { ...responseLog, reason: "credentials_not_authorized_for_orders" });
