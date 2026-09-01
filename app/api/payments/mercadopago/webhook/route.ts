@@ -38,6 +38,13 @@ export async function POST(request: Request) {
       cache: "no-store",
     });
     const order = await response.json();
+    // El simulador de Webhooks permite usar un Data ID arbitrario. Después de
+    // validar su firma, un 404 de Orders API no representa un pago ni un error
+    // interno: se confirma la recepción y se omite sin llamar a la RPC.
+    if (response.status === 404) {
+      console.warn("Mercado Pago webhook ignored: external order not found", { externalOrderId });
+      return NextResponse.json({ ok: true, ignored: "external_order_not_found" });
+    }
     if (!response.ok || order.id !== externalOrderId || !order.external_reference || !order.currency) {
       throw new Error("No se pudo verificar la order de Mercado Pago.");
     }
