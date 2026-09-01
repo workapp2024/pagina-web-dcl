@@ -5,6 +5,7 @@ import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { ManagedImage } from "@/components/ui/ManagedImage";
 import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
 import { getSupabaseProducts } from "@/lib/supabase/products";
+import { whatsappUrl } from "@/lib/whatsapp";
 
 export const revalidate = 60;
 
@@ -36,9 +37,7 @@ export default async function ProductoDetallePage({ params }: ProductoDetallePag
     notFound();
   }
 
-  const whatsappMessage = encodeURIComponent(
-    `Hola DCL Cree LED, quiero consultar por ${product.name}.`
-  );
+  const whatsappHref = whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${product.name}.`);
 
   const specs = [
     { label: "Conector", value: product.connectorType },
@@ -98,7 +97,7 @@ export default async function ProductoDetallePage({ params }: ProductoDetallePag
 
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <a
-                    href={`https://api.whatsapp.com/send?text=${whatsappMessage}`}
+                    href={whatsappHref}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center justify-center rounded-full bg-red-600 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500"

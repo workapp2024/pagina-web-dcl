@@ -2,70 +2,26 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
-const items = [
-  { href: "/admin", label: "Resumen" },
-  { href: "/admin/productos", label: "Productos" },
-  { href: "/admin/inventario", label: "Inventario" },
-  { href: "/admin/ventas", label: "Ventas" },
-  { href: "/admin/instalaciones", label: "Instalaciones" },
-  { href: "/admin/garantias", label: "Garantías y reclamos" },
-  { href: "/admin/vehiculos", label: "Vehículos (Home)" },
-  { href: "/admin/compatibilidades", label: "Compatibilidades" },
-  { href: "/admin/promociones", label: "Promociones" },
-  { href: "/admin/home", label: "Home" },
-  { href: "/admin/configuracion", label: "Configuración" },
+const groups = [
+  { label: "Resumen", icon: "◈", items: [{ href: "/admin", label: "Dashboard", icon: "⌂" }] },
+  { label: "Comercial", icon: "◉", items: [{ href: "/admin/ventas", label: "Ventas", icon: "↗" }, { href: "/admin/pedidos", label: "Pedidos", icon: "□" }, { href: "/admin/clientes", label: "Clientes", icon: "○" }, { href: "/admin/finanzas", label: "Finanzas", icon: "$" }, { href: "/admin/promociones", label: "Promociones", icon: "✦" }] },
+  { label: "Productos y stock", icon: "▣", items: [{ href: "/admin/productos", label: "Productos", icon: "◇" }, { href: "/admin/inventario", label: "Inventario", icon: "≡" }, { href: "/admin/vehiculos", label: "Vehículos", icon: "▱" }, { href: "/admin/compatibilidades", label: "Compatibilidades", icon: "⌘" }] },
+  { label: "Operaciones", icon: "✓", items: [{ href: "/admin/instalaciones", label: "Instalaciones", icon: "⌁" }, { href: "/admin/garantias", label: "Garantías y reclamos", icon: "!" }] },
+  { label: "Sitio y configuración", icon: "⚙", items: [{ href: "/admin/home", label: "Página web / Home", icon: "⌂" }, { href: "/admin/configuracion", label: "Configuración", icon: "⚙" }] },
 ];
+const frequent = [{ href: "/admin", label: "Inicio", icon: "⌂" }, { href: "/admin/ventas", label: "Ventas", icon: "↗" }, { href: "/admin/instalaciones", label: "Operaciones", icon: "✓" }];
+
+function isGroupActive(pathname: string, group: typeof groups[number]) { return group.items.some((item) => pathname === item.href); }
+function NavigationGroups({ mobile = false, close }: { mobile?: boolean; close?: () => void }) {
+  const pathname = usePathname(); const [open, setOpen] = useState<string | null>(groups.find((group) => isGroupActive(pathname, group))?.label || "Resumen");
+  useEffect(() => { const active = groups.find((group) => isGroupActive(pathname, group)); if (active) setOpen(active.label); }, [pathname]);
+  return <div className={mobile ? "space-y-2" : "space-y-2"}>{groups.map((group) => { const active = isGroupActive(pathname, group), expanded = open === group.label; return <section key={group.label} className="rounded-xl border border-white/10 bg-white/0"><button type="button" onClick={() => setOpen(expanded ? null : group.label)} className={`flex w-full items-center justify-between px-3 py-3 text-left text-xs font-bold uppercase tracking-[.12em] ${active ? "text-red-300" : "text-zinc-400"}`}><span><span className="mr-2 text-sm">{group.icon}</span>{group.label}</span><span>{expanded ? "−" : "+"}</span></button>{expanded && <div className="space-y-1 px-2 pb-2">{group.items.map((item) => <Link key={item.href} href={item.href} onClick={close} className={`flex min-h-11 items-center rounded-lg px-3 text-sm ${pathname === item.href ? "bg-red-600/15 font-bold text-white" : "text-zinc-300 hover:bg-white/5"}`}><span className="mr-3 w-4 text-center text-red-300">{item.icon}</span>{item.label}</Link>)}</div>}</section>; })}</div>;
+}
 
 export function AdminSidebar() {
-  const pathname = usePathname();
-  const router = useRouter();
-
-  const handleLogout = async () => {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin/login");
-    router.refresh();
-  };
-
-  return (
-    <aside className="w-full rounded-3xl border border-white/10 bg-zinc-950/80 p-4 lg:w-72">
-      <div className="mb-6 flex items-center gap-3 border-b border-white/10 pb-4">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-red-500/60 bg-red-600/10 text-xs font-black uppercase tracking-[0.18em] text-red-400">
-          DCL
-        </div>
-        <div>
-          <div className="text-[9px] font-semibold uppercase tracking-[0.28em] text-zinc-400">Cree LED</div>
-          <div className="text-lg font-black uppercase tracking-[-0.06em] text-white">Panel</div>
-        </div>
-      </div>
-
-      <nav className="space-y-2">
-        {items.map((item) => {
-          const active = pathname === item.href;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={[
-                "block rounded-2xl border px-4 py-3 text-sm font-semibold transition",
-                active
-                  ? "border-red-500/60 bg-red-600/15 text-red-200"
-                  : "border-white/10 bg-white/0 text-zinc-300 hover:border-red-500/30 hover:text-white",
-              ].join(" ")}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="w-full text-left rounded-2xl border border-white/10 bg-white/0 px-4 py-3 text-sm font-semibold text-red-400 transition hover:border-red-500/40 hover:bg-red-500/10"
-        >
-          Cerrar sesión
-        </button>
-      </nav>
-    </aside>
-  );
+  const pathname = usePathname(), router = useRouter(); const [moreOpen, setMoreOpen] = useState(false);
+  const logout = async () => { await fetch("/api/admin/logout", { method: "POST" }); router.push("/admin/login"); router.refresh(); };
+  return <><aside className="hidden w-72 shrink-0 rounded-3xl border border-white/10 bg-zinc-950/80 p-4 lg:sticky lg:top-4 lg:block lg:h-fit"><div className="mb-5 flex items-center gap-3 border-b border-white/10 pb-4"><div className="flex h-11 w-11 items-center justify-center rounded-full border border-red-500/60 bg-red-600/10 text-xs font-black text-red-400">DCL</div><div><small className="uppercase tracking-[.2em] text-zinc-400">Cree LED</small><b className="block text-lg">Panel</b></div></div><NavigationGroups/><div className="mt-5 border-t border-white/10 pt-4"><button type="button" onClick={logout} className="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold text-red-400 hover:bg-red-500/10">Cerrar sesión</button></div></aside><nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-zinc-950/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden"><div className="mx-auto grid max-w-md grid-cols-4 gap-1">{frequent.map((item) => <Link key={item.href} href={item.href} className={`flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold ${pathname === item.href ? "bg-red-600/15 text-red-300" : "text-zinc-400"}`}><span className="text-base">{item.icon}</span>{item.label}</Link>)}<button type="button" onClick={() => setMoreOpen(true)} className="flex min-h-12 flex-col items-center justify-center rounded-xl text-[10px] font-bold text-zinc-400"><span className="text-base">•••</span>Más</button></div></nav>{moreOpen && <div className="fixed inset-0 z-[60] bg-black/70 p-3 lg:hidden"><section className="absolute inset-x-3 bottom-3 max-h-[78svh] overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"><div className="mb-4 flex items-center justify-between"><b>Más funciones</b><button onClick={() => setMoreOpen(false)} className="rounded-full border border-white/10 px-3 py-2 text-xs">Cerrar</button></div><NavigationGroups mobile close={() => setMoreOpen(false)}/><button type="button" onClick={logout} className="mt-4 w-full rounded-xl border border-red-500/30 px-3 py-3 text-left text-sm font-semibold text-red-400">Cerrar sesión</button></section></div>}</>;
 }

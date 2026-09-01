@@ -1,3 +1,6 @@
+import { whatsappUrl } from "@/lib/whatsapp";
+import { DEFAULT_THEME, type ThemePreset } from "@/lib/theme";
+
 export type Product = {
   id: string;
   name: string;
@@ -64,6 +67,7 @@ export type Promotion = {
 };
 
 export type SiteSettings = {
+  themePreset: ThemePreset;
   logo: string;
   whatsapp: string;
   instagram: string;
@@ -132,8 +136,9 @@ export const reasons: Reason[] = [
 
 export const defaultSiteContent: SiteContent = {
   siteSettings: {
+    themePreset: DEFAULT_THEME,
     logo: "/brand/logo-dcl.png.png",
-    whatsapp: "https://api.whatsapp.com/send?text=Hola%20DCL%20Cree%20LED%2C%20quiero%20consultar%20por%20iluminaci%C3%B3n%20para%20mi%20veh%C3%ADculo.",
+    whatsapp: whatsappUrl("Hola DCL Cree LED, quiero consultar por iluminación para mi vehículo."),
     instagram: "https://instagram.com",
     facebook: "https://facebook.com",
     email: "ventas@dclcreeled.com.ar",
@@ -231,7 +236,7 @@ export const defaultSiteContent: SiteContent = {
       description: "Preparado para acompañar tu próxima compra.",
       image: "https://images.unsplash.com/photo-1493375366763-3ed5e0e6d8ec?auto=format&fit=crop&w=900&q=80",
       ctaText: "CONSULTAR",
-      ctaHref: "https://api.whatsapp.com/send?text=Hola%20DCL%20Cree%20LED%2C%20quiero%20consultar%20por%20el%20combo%20de%20iluminaci%C3%B3n.",
+      ctaHref: whatsappUrl("Hola DCL Cree LED, quiero consultar por el combo de iluminación."),
       price: "$68.999",
       active: true,
       order: 1,
@@ -242,7 +247,7 @@ export const defaultSiteContent: SiteContent = {
       description: "Próximamente nuevas promociones para vehículos y accesorios.",
       image: "https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&w=900&q=80",
       ctaText: "VER OFERTA",
-      ctaHref: "https://api.whatsapp.com/send?text=Hola%20DCL%20Cree%20LED%2C%20quiero%20consultar%20por%20la%20oferta%20destacada.",
+      ctaHref: whatsappUrl("Hola DCL Cree LED, quiero consultar por la oferta destacada."),
       active: true,
       order: 2,
     },
@@ -252,7 +257,7 @@ export const defaultSiteContent: SiteContent = {
       description: "Nuevas opciones para ir viendo en la próxima temporada.",
       image: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80",
       ctaText: "CONSULTAR",
-      ctaHref: "https://api.whatsapp.com/send?text=Hola%20DCL%20Cree%20LED%2C%20quiero%20consultar%20por%20los%20lanzamientos.",
+      ctaHref: whatsappUrl("Hola DCL Cree LED, quiero consultar por los lanzamientos."),
       active: true,
       order: 3,
     },

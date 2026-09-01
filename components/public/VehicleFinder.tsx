@@ -14,15 +14,9 @@ import {
   type VehicleModel,
 } from "@/lib/supabase/vehicle-compatibility";
 import type { Product } from "@/lib/site-data";
+import { whatsappUrl } from "@/lib/whatsapp";
 
 type Mode = "vehicle" | "connector" | "unknown";
-
-function buildWhatsAppLink(baseWhatsapp: string, message: string): string {
-  // El sitio guarda el enlace de WhatsApp ya armado (api.whatsapp.com/send?text=...).
-  // Si no está configurado, se arma uno genérico con el mensaje indicado.
-  if (baseWhatsapp && baseWhatsapp.includes("api.whatsapp.com")) return baseWhatsapp;
-  return `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-}
 
 function CompatibleProducts({ products, connector }: { products: Product[]; connector: string }) {
   const matches = products.filter(
@@ -126,10 +120,7 @@ export function VehicleFinder() {
       )
     : [];
 
-  const whatsappHref = buildWhatsAppLink(
-    content.siteSettings.whatsapp,
-    "Hola DCL Cree LED, no encuentro mi vehículo/conector en la web. ¿Me ayudan a elegir el LED correcto?"
-  );
+  const whatsappHref = whatsappUrl("Hola DCL Cree LED, no encuentro mi vehículo/conector en la web. ¿Me ayudan a elegir el LED correcto?");
 
   const tabs: { id: Mode; label: string }[] = [
     { id: "vehicle", label: "Conozco mi vehículo" },

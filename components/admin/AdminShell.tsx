@@ -13,9 +13,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:flex-row lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-3 py-4 sm:px-6 sm:py-8 lg:flex-row lg:gap-6 lg:px-8">
         <AdminSidebar />
-        <main className="flex-1 rounded-[2rem] border border-white/10 bg-zinc-950/70 p-5 sm:p-6">{children}</main>
+        <main className="flex-1 rounded-[2rem] border border-white/10 bg-zinc-950/70 p-4 pb-24 sm:p-6 sm:pb-24 lg:pb-6">{children}</main>
       </div>
     </div>
   );

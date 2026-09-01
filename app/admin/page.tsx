@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-
+import { DashboardManager } from "@/components/admin/DashboardManager";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 
 export default async function AdminHomePage() {
@@ -7,7 +7,8 @@ export default async function AdminHomePage() {
     redirect("/admin/login");
   }
 
-  return (
+  return <DashboardManager />;
+  /* return (
     <div>
           <h1 className="text-3xl font-black uppercase tracking-[-0.06em] text-white">Resumen de administración</h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-400">
@@ -33,5 +34,5 @@ export default async function AdminHomePage() {
             </div>
           </div>
     </div>
-  );
+  ); */
 }

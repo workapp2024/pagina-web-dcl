@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { createAdminServerClient } from "@/lib/supabase/server";
+import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
+import { rateLimit } from "@/lib/rate-limit";
 
 type MercadoPagoOrder = {
   id?: string;
@@ -12,6 +14,56 @@ type MercadoPagoOrder = {
   transactions?: { payments?: Array<{ id?: string; status?: string }> };
 };
 
+type MercadoPagoErrorDiagnostic = {
+  error?: string;
+  message?: string;
+  code?: string;
+  cause?: string | string[];
+};
+type LocalOrder = { total: number | string; currency: string };
+type LocalTransaction = { id: string; external_idempotency_key: string; external_order_id: string | null };
+
+function sanitizeDiagnosticValue(value: unknown, maxLength = 180): string | undefined {
+  if (typeof value !== "string" && typeof value !== "number") return undefined;
+
+  const sanitized = String(value).replace(/[\r\n\t]+/g, " ").trim().slice(0, maxLength);
+  return sanitized || undefined;
+}
+
+function sanitizeCause(value: unknown): string | string[] | undefined {
+  if (Array.isArray(value)) {
+    const causes = value
+      .map((item) => {
+        if (typeof item === "object" && item !== null) {
+          const cause = item as Record<string, unknown>;
+          return sanitizeDiagnosticValue(cause.code ?? cause.message ?? cause.description);
+        }
+        return sanitizeDiagnosticValue(item);
+      })
+      .filter((item): item is string => Boolean(item))
+      .slice(0, 5);
+    return causes.length ? causes : undefined;
+  }
+
+  if (typeof value === "object" && value !== null) {
+    const cause = value as Record<string, unknown>;
+    return sanitizeDiagnosticValue(cause.code ?? cause.message ?? cause.description);
+  }
+
+  return sanitizeDiagnosticValue(value);
+}
+
+function getMercadoPagoErrorDiagnostic(value: unknown): MercadoPagoErrorDiagnostic {
+  if (!value || typeof value !== "object") return {};
+  const payload = value as Record<string, unknown>;
+  return {
+    error: sanitizeDiagnosticValue(payload.error),
+    message: sanitizeDiagnosticValue(payload.message),
+    code: sanitizeDiagnosticValue(payload.code),
+    cause: sanitizeCause(payload.cause ?? payload.details),
+  };
+}
+
 function localStatus(status?: string): "pending" | "approved" | "rejected" | "error" {
   if (status === "processed") return "approved";
   if (status === "rejected" || status === "cancelled") return "rejected";
@@ -19,27 +71,31 @@ function localStatus(status?: string): "pending" | "approved" | "rejected" | "er
 }
 
 export async function POST(request: Request) {
+  const limited = rateLimit(request, "mercadopago-order", { limit: 10, windowMs: 60 * 1000 });
+  if (limited) return limited;
   try {
-    const body = await request.json();
-    const orderId = String(body.orderId ?? "");
-    const token = String(body.token ?? "");
-    const paymentMethodId = String(body.payment_method_id ?? "");
-    const paymentType = String(body.payment_type ?? "");
+    const body = await readJsonObject(request);
+    if (!body) return apiError("BAD_REQUEST", "Datos de pago inválidos.", 400);
+    const orderId = body.orderId;
+    const token = boundedString(body.token, 4096, { required: true });
+    const paymentMethodId = boundedString(body.payment_method_id, 80, { required: true });
+    const paymentType = boundedString(body.payment_type, 80, { required: true });
     const installments = Number(body.installments);
-    const payerEmail = String(body.payer?.email ?? "").trim();
+    const payer = body.payer && typeof body.payer === "object" ? body.payer as Record<string, unknown> : {};
+    const payerEmail = boundedString(payer.email, 254, { required: true });
 
-    if (!orderId || !token || !paymentMethodId || !paymentType || !payerEmail || !Number.isInteger(installments) || installments < 1) {
+    if (!isUuid(orderId) || !token || !paymentMethodId || !paymentType || !payerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail) || !Number.isInteger(installments) || installments < 1 || installments > 36) {
       return NextResponse.json({ ok: false, error: "Datos de pago incompletos." }, { status: 400 });
     }
 
     const db = createAdminServerClient();
-    const orderQuery: any = await db.from("orders").select("total,currency").eq("id", orderId).single();
-    const transactionQuery: any = await db
+    const orderQuery = await db.from("orders").select("total,currency").eq("id", orderId).single() as unknown as { data: LocalOrder | null };
+    const transactionQuery = await db
       .from("payment_transactions")
       .select("id,external_idempotency_key,external_order_id")
       .eq("order_id", orderId)
       .eq("provider", "mercadopago")
-      .single();
+      .single() as unknown as { data: LocalTransaction | null };
     const order = orderQuery.data;
     const transaction = transactionQuery.data;
     if (!order || !transaction) throw new Error("Pedido no encontrado.");
@@ -53,7 +109,7 @@ export async function POST(request: Request) {
       processing_mode: "automatic",
       total_amount: amount,
       external_reference: orderId,
-      payer: { email: payerEmail, identification: body.payer?.identification },
+      payer: { email: payerEmail, identification: payer.identification },
       transactions: {
         payments: [{ amount, payment_method: { id: paymentMethodId, type: paymentType, token, installments } }],
       },
@@ -67,8 +123,25 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify(mercadoPagoRequest),
     });
-    const mercadoPagoOrder = (await response.json()) as MercadoPagoOrder;
+    let mercadoPagoOrder: MercadoPagoOrder;
+    try {
+      mercadoPagoOrder = (await response.json()) as MercadoPagoOrder;
+    } catch {
+      console.error("Mercado Pago Orders API returned an unreadable response", {
+        stage: "mercadopago_order_response_parsing",
+        responseStatus: response.status,
+        responseOk: response.ok,
+      });
+      return NextResponse.json({ ok: false, error: "Respuesta inválida de Mercado Pago." }, { status: 502 });
+    }
     if (!response.ok) {
+      const diagnostic = getMercadoPagoErrorDiagnostic(mercadoPagoOrder);
+      console.warn("Mercado Pago Orders API rejected the order", {
+        stage: "mercadopago_order_creation",
+        responseStatus: response.status,
+        responseOk: response.ok,
+        ...diagnostic,
+      });
       const retryAfter = response.headers.get("retry-after");
       return NextResponse.json(
         { ok: false, error: mercadoPagoOrder.message || "No se pudo procesar el pago.", retryAfter },
@@ -98,6 +171,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, data: mercadoPagoOrder });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Error de pago." }, { status: 400 });
+    return apiInternalError("mercadopago_order_creation", error);
   }
 }

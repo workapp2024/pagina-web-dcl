@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { apiError, apiInternalError } from "@/lib/api";
+import { rateLimit } from "@/lib/rate-limit";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import {
   STORAGE_BUCKET,
@@ -16,9 +18,11 @@ const VALID_CATEGORIES: StorageCategory[] = ["products", "promotions", "vehicles
  * Nunca se expone la service role key al navegador: la subida ocurre exclusivamente en el servidor.
  */
 export async function POST(request: Request) {
+  const limited = rateLimit(request, "admin-upload", { limit: 20, windowMs: 10 * 60 * 1000 });
+  if (limited) return limited;
   const authenticated = await isAdminAuthenticated();
   if (!authenticated) {
-    return NextResponse.json({ ok: false, message: "No autorizado." }, { status: 401 });
+    return apiError("UNAUTHORIZED", "No autorizado.", 401);
   }
 
   if (!isServiceRoleConfigured()) {
@@ -62,7 +66,7 @@ export async function POST(request: Request) {
 
     if (error) {
       console.warn("Error al subir imagen a Supabase Storage:", error.message);
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      return apiError("INTERNAL_ERROR", "No se pudo subir la imagen.", 500);
     }
 
     const publicUrl = getStoragePublicUrl(data.path);
@@ -70,9 +74,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, path: data.path, publicUrl });
   } catch (err) {
     console.error("Excepción en API de subida de imágenes:", err);
-    return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "Error interno del servidor." },
-      { status: 500 }
-    );
+    return apiInternalError("admin_upload", err);
   }
 }

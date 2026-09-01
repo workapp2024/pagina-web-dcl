@@ -10,7 +10,17 @@
   --red-strong: #dc2626;
   --font-geist-sans: Arial, Helvetica, sans-serif;
   --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --surface: #111111;
+  --surface-soft: #171717;
+  --border: rgba(255, 255, 255, 0.1);
+  --radius: 1rem;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  --space-scale: 1;
 }
+
+html[data-theme="clean-light"] { --background:#f7f8fa; --foreground:#172033; --muted:#64748b; --surface:#ffffff; --border:rgba(15,23,42,.12); --red:#2563eb; --red-strong:#1d4ed8; }
+html[data-theme="graphite-pro"] { --background:#202226; --foreground:#edf0f4; --muted:#9ca3af; --surface:#292c31; --border:rgba(226,232,240,.13); --red:#94a3b8; --red-strong:#cbd5e1; }
+html[data-theme="midnight-blue"] { --background:#0b1220; --foreground:#e6f4ff; --muted:#9bb3c9; --surface:#121d31; --border:rgba(103,232,249,.18); --red:#0ea5e9; --red-strong:#0284c7; }
 
 @theme inline {
   --color-background: var(--background);
@@ -30,6 +40,17 @@ body {
   font-family: var(--font-geist-sans);
   line-height: 1.5;
 }
+
+/* Tokens compartidos: permiten que los componentes Tailwind existentes adopten cada preset. */
+html[data-theme] .bg-black, html[data-theme] .bg-zinc-950 { background-color: var(--background) !important; }
+html[data-theme] .bg-zinc-900, html[data-theme] .bg-white\/5, html[data-theme] .bg-white\/3 { background-color: var(--surface) !important; }
+html[data-theme] .bg-zinc-900\/80, html[data-theme] .bg-zinc-950\/80, html[data-theme] .bg-zinc-950\/70, html[data-theme] .bg-zinc-950\/60 { background-color: var(--surface) !important; }
+html[data-theme] .text-white { color: var(--foreground) !important; }
+html[data-theme] .text-zinc-400, html[data-theme] .text-zinc-500 { color: var(--muted) !important; }
+html[data-theme] .border-white\/10, html[data-theme] .border-white\/15 { border-color: var(--border) !important; }
+html[data-theme] .bg-red-600 { background-color: var(--red) !important; }
+html[data-theme] .hover\:bg-red-500:hover { background-color: var(--red-strong) !important; }
+html[data-theme="clean-light"] .text-red-300, html[data-theme="clean-light"] .text-red-400 { color: var(--red) !important; }
 
 * {
   box-sizing: border-box;

@@ -3,6 +3,7 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "@/lib/supabase/database.types";
+import { DEFAULT_THEME, isThemePreset } from "@/lib/theme";
 
 export type SiteSettingsInsert = Database["public"]["Tables"]["site_settings"]["Insert"];
 
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
       why_us_section_title: siteSettings.whyUsSectionTitle || "",
       products_section_title: siteSettings.productsSectionTitle || "",
       promotions_section_title: siteSettings.promotionsSectionTitle || "",
+      theme_preset: isThemePreset(siteSettings.themePreset) ? siteSettings.themePreset : DEFAULT_THEME,
     };
 
     const supabase = createAdminServerClient();

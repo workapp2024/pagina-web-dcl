@@ -16,6 +16,7 @@ import { getSupabasePromotions } from "@/lib/supabase/promotions";
 import { getSupabaseVehicleCategories } from "@/lib/supabase/vehicle-categories";
 import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
 import { getSupabaseHomeSettings } from "@/lib/supabase/home-settings";
+import { DEFAULT_THEME, isThemePreset } from "@/lib/theme";
 
 type SiteContentUpdater = SiteContent | ((previous: SiteContent) => SiteContent);
 
@@ -112,6 +113,12 @@ export function SiteContentProvider({ children, initialProducts }: SiteContentPr
       isMounted = false;
     };
   }, [initialProducts]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = isThemePreset(content.siteSettings.themePreset)
+      ? content.siteSettings.themePreset
+      : DEFAULT_THEME;
+  }, [content.siteSettings.themePreset]);
 
   useEffect(() => {
     if (isHydrated) saveSiteContent(content);

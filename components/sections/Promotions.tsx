@@ -2,6 +2,7 @@
 
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import { ManagedImage } from "@/components/ui/ManagedImage";
+import { isWhatsAppUrl, whatsappUrl } from "@/lib/whatsapp";
 
 export function Promotions() {
   const { content } = useSiteContent();
@@ -26,7 +27,7 @@ export function Promotions() {
               <p className="mt-2 text-sm leading-6 text-zinc-300">{promo.description}</p>
               {promo.price ? <p className="mt-3 text-lg font-black text-red-400">{promo.price}</p> : null}
               <a
-                href={promo.ctaHref}
+                href={isWhatsAppUrl(promo.ctaHref) ? whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${promo.title}.`) : promo.ctaHref}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-auto inline-flex min-h-[44px] items-center justify-center rounded-full border border-red-500/50 bg-red-600/10 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-red-300 transition hover:bg-red-600/20"

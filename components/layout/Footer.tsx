@@ -37,9 +37,7 @@ export function Footer() {
         <div>
           <h3 className="text-sm font-bold uppercase tracking-[0.22em] text-zinc-300">Contacto</h3>
           <div className="mt-4 space-y-3 text-sm text-zinc-400">
-            <a href="https://api.whatsapp.com/send?text=Hola%20DCL%20Cree%20LED%2C%20quiero%20consultar%20por%20iluminaci%C3%B3n%20para%20mi%20veh%C3%ADculo." target="_blank" rel="noreferrer" className="block transition hover:text-red-400">
-              WhatsApp
-            </a>
+            <WhatsAppButton label="WhatsApp" className="p-0 bg-transparent text-zinc-400 hover:bg-transparent hover:text-red-400" />
             <a href="#nosotros" className="block transition hover:text-red-400">
               Redes sociales
             </a>

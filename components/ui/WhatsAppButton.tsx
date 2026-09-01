@@ -1,3 +1,5 @@
+import { whatsappUrl } from "@/lib/whatsapp";
+
 type WhatsAppButtonProps = {
   label?: string;
   className?: string;
@@ -9,8 +11,7 @@ export function WhatsAppButton({
   className = "",
   floating = false,
 }: WhatsAppButtonProps) {
-  const whatsappHref =
-    "https://api.whatsapp.com/send?text=Hola%20DCL%20Cree%20LED%2C%20quiero%20consultar%20por%20iluminaci%C3%B3n%20para%20mi%20veh%C3%ADculo.";
+  const whatsappHref = whatsappUrl("Hola DCL Cree LED, quiero consultar por iluminación para mi vehículo.");
 
   return (
     <a

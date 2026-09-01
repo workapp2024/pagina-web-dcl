@@ -259,6 +259,7 @@ export interface Database {
           why_us_section_title: string;
           products_section_title: string;
           promotions_section_title: string;
+          theme_preset: "dcl-dark" | "clean-light" | "graphite-pro" | "midnight-blue";
           updated_at: string;
         };
         Insert: {
@@ -275,6 +276,7 @@ export interface Database {
           why_us_section_title?: string;
           products_section_title?: string;
           promotions_section_title?: string;
+          theme_preset?: "dcl-dark" | "clean-light" | "graphite-pro" | "midnight-blue";
           updated_at?: string;
         };
         Update: {
@@ -291,6 +293,7 @@ export interface Database {
           why_us_section_title?: string;
           products_section_title?: string;
           promotions_section_title?: string;
+          theme_preset?: "dcl-dark" | "clean-light" | "graphite-pro" | "midnight-blue";
           updated_at?: string;
         };
       };

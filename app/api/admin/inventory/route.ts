@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { apiError, apiInternalError, boundedString, readJsonObject } from "@/lib/api";
 import type { Database } from "@/lib/supabase/database.types";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import type {
@@ -106,17 +107,18 @@ export async function POST(request: Request) {
   if (accessError) return accessError;
 
   try {
-    const payload = (await request.json()) as Partial<CreateInventoryMovementInput>;
-    const productId = payload.productId?.trim();
+    const payload = await readJsonObject(request) as Partial<CreateInventoryMovementInput> | null;
+    if (!payload) return apiError("BAD_REQUEST", "La solicitud no tiene un formato válido.", 400);
+    const productId = boundedString(payload.productId, 64, { required: true });
     const type = payload.type;
     const quantity = Number(payload.quantity);
-    const reason = payload.reason?.trim() || "";
+    const reason = boundedString(payload.reason, 500) || "";
 
     if (!productId || !type || !["entrada", "salida", "ajuste"].includes(type)) {
       return NextResponse.json({ ok: false, message: "Producto y tipo de movimiento válidos son obligatorios." }, { status: 400 });
     }
 
-    if (!Number.isInteger(quantity) || quantity === 0) {
+    if (!Number.isInteger(quantity) || quantity === 0 || Math.abs(quantity) > 100_000) {
       return NextResponse.json({ ok: false, message: "La cantidad debe ser un número entero distinto de cero." }, { status: 400 });
     }
 
@@ -190,9 +192,6 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("Excepción al registrar movimiento de inventario:", err);
-    return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : "Error interno del servidor." },
-      { status: 500 },
-    );
+    return apiInternalError("admin_inventory_movement", err);
   }
 }

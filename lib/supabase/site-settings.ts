@@ -4,6 +4,8 @@ import { isSupabaseConfigured } from "./test-connection";
 import { sanitizeStoredImageUrl } from "./storage";
 import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "./database.types";
+import { isThemePreset } from "@/lib/theme";
+import { whatsappUrl } from "@/lib/whatsapp";
 
 export type SiteSettingsRow = Database["public"]["Tables"]["site_settings"]["Row"];
 
@@ -37,12 +39,13 @@ export async function getSupabaseSiteSettings(): Promise<Partial<SiteSettings> |
     const settings: Partial<SiteSettings> = {};
     const sanitizedLogo = sanitizeStoredImageUrl(row.logo_url);
     if (sanitizedLogo) settings.logo = sanitizedLogo;
-    if (row.whatsapp) settings.whatsapp = row.whatsapp;
+    settings.whatsapp = whatsappUrl("Hola DCL Cree LED, quiero consultar por iluminación para mi vehículo.");
     if (row.instagram) settings.instagram = row.instagram;
     if (row.facebook) settings.facebook = row.facebook;
     if (row.email) settings.email = row.email;
     if (row.phone) settings.phone = row.phone;
     if (row.address) settings.address = row.address;
+    if (isThemePreset((row as any).theme_preset)) settings.themePreset = (row as any).theme_preset;
     if (row.vehicle_section_title) settings.vehicleSectionTitle = row.vehicle_section_title;
     if (row.needs_section_title) settings.needsSectionTitle = row.needs_section_title;
     if (row.why_us_section_title) settings.whyUsSectionTitle = row.why_us_section_title;

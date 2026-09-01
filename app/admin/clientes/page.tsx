@@ -1,0 +1,1 @@
+import {redirect} from "next/navigation";import {isAdminAuthenticated} from "@/lib/admin-auth";import {CustomersManager} from "@/components/admin/CustomersManager";export default async function Page(){if(!(await isAdminAuthenticated()))redirect("/admin/login");return <CustomersManager/>}
