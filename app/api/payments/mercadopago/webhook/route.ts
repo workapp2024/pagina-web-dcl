@@ -12,6 +12,28 @@ type MercadoPagoOrder = {
   transactions?: { payments?: Array<{ id?: string | number }> };
 };
 
+type ProviderDiagnostic = { providerCode?: string; providerMessage?: string };
+
+function sanitizeProviderText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string" && typeof value !== "number") return undefined;
+  const sanitized = String(value).replace(/[\r\n\t]+/g, " ").trim().slice(0, maxLength);
+  return sanitized || undefined;
+}
+
+async function getProviderDiagnostic(response: Response): Promise<ProviderDiagnostic> {
+  try {
+    const payload: unknown = await response.clone().json();
+    if (!payload || typeof payload !== "object") return {};
+    const error = payload as Record<string, unknown>;
+    return {
+      providerCode: sanitizeProviderText(error.code ?? error.error ?? error.status, 80),
+      providerMessage: sanitizeProviderText(error.message ?? error.error_description ?? error.cause, 180),
+    };
+  } catch {
+    return {};
+  }
+}
+
 function isMercadoPagoOrder(value: unknown, externalOrderId: string): value is MercadoPagoOrder {
   if (!value || typeof value !== "object") return false;
   const order = value as MercadoPagoOrder;
@@ -75,12 +97,25 @@ export async function POST(request: NextRequest) {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
+    const providerDiagnostic = await getProviderDiagnostic(response);
+    const responseLog = {
+      stage,
+      externalOrderId,
+      responseStatus: response.status,
+      responseOk: response.ok,
+      ...providerDiagnostic,
+    };
+    console.info("Mercado Pago Orders API response", responseLog);
     if (response.status === 404) {
-      console.warn("Mercado Pago webhook ignored", { stage, reason: "external_order_not_found", externalOrderId });
+      console.warn("Mercado Pago webhook ignored", { ...responseLog, reason: "external_order_not_found" });
       return NextResponse.json({ ok: true, ignored: "external_order_not_found" });
     }
+    if (response.status === 401 || response.status === 403) {
+      console.error("Mercado Pago webhook provider authorization failed", { ...responseLog, reason: "credentials_not_authorized_for_orders" });
+      return NextResponse.json({ ok: false, error: "Could not authorize payment order verification." }, { status: 502 });
+    }
     if (!response.ok) {
-      console.error("Mercado Pago webhook provider error", { stage, status: response.status });
+      console.error("Mercado Pago webhook provider error", responseLog);
       return NextResponse.json({ ok: false, error: "Could not verify payment order." }, { status: 502 });
     }
 
