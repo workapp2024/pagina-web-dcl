@@ -1,8 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import type { CompatibilityFormPayload } from "@/lib/supabase/vehicle-compatibility";
+import { boundedString, readJsonObject } from "@/lib/api";
+import { rateLimit } from "@/lib/rate-limit";
 
 type BrandRow = Database["public"]["Tables"]["vehicle_brands"]["Row"];
 type ModelRow = Database["public"]["Tables"]["vehicle_models"]["Row"];
@@ -20,6 +23,8 @@ function slugify(value: string): string {
 }
 
 export async function POST(request: Request) {
+  const limited = rateLimit(request, "admin-vehicle-compatibility", { limit: 30, windowMs: 10 * 60 * 1000 });
+  if (limited) return limited;
   const authenticated = await isAdminAuthenticated();
   if (!authenticated) {
     return NextResponse.json({ ok: false, message: "No autorizado." }, { status: 401 });
@@ -37,16 +42,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const payload = (await request.json()) as CompatibilityFormPayload;
+    const raw = await readJsonObject(request);
+    if (!raw) return NextResponse.json({ ok: false, message: "Solicitud inválida." }, { status: 400 });
+    const payload = raw as CompatibilityFormPayload;
 
-    const brandName = (payload.brandName || "").trim();
-    const modelName = (payload.modelName || "").trim();
-    const vehicleType = (payload.vehicleType || "Auto").trim();
+    const brandName = boundedString(payload.brandName, 100, { required: true }) || "";
+    const modelName = boundedString(payload.modelName, 100, { required: true }) || "";
+    const vehicleType = boundedString(payload.vehicleType || "Auto", 50, { required: true }) || "Auto";
     const yearFrom = Number(payload.yearFrom);
+    const yearTo = payload.yearTo == null ? null : Number(payload.yearTo);
+    const combinedHighLow = Boolean(payload.combinedHighLow);
+    const connectorLow = boundedString(payload.connectorLow, 50) || null;
 
-    if (!brandName || !modelName || !Number.isFinite(yearFrom)) {
+    if (!brandName || !modelName || !Number.isInteger(yearFrom) || yearFrom < 1886 || yearFrom > 2200 || (yearTo !== null && (!Number.isInteger(yearTo) || yearTo < yearFrom || yearTo > 2200)) || (combinedHighLow && !connectorLow)) {
       return NextResponse.json(
-        { ok: false, message: "Marca, modelo y año desde son obligatorios." },
+        { ok: false, message: "Marca, modelo y año desde son obligatorios; revisá el conector combinado." },
         { status: 400 }
       );
     }
@@ -117,13 +127,14 @@ export async function POST(request: Request) {
       id: payload.id || `compat-${Date.now()}`,
       model_id: modelId,
       year_from: yearFrom,
-      year_to: payload.yearTo ?? null,
-      version: payload.version || null,
-      connector_low: payload.connectorLow || null,
-      connector_high: payload.connectorHigh || null,
-      connector_fog: payload.connectorFog || null,
-      connector_aux: payload.connectorAux || null,
-      notes: payload.notes || "",
+      year_to: yearTo,
+      version: boundedString(payload.version, 100) || null,
+      connector_low: connectorLow,
+      connector_high: combinedHighLow ? null : boundedString(payload.connectorHigh, 50) || null,
+      connector_fog: boundedString(payload.connectorFog, 50) || null,
+      connector_aux: boundedString(payload.connectorAux, 50) || null,
+      combined_high_low: combinedHighLow,
+      notes: boundedString(payload.notes, 1000) || "",
       active: payload.active === undefined ? true : Boolean(payload.active),
     };
 

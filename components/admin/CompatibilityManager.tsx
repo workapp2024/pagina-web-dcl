@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,6 +21,7 @@ const emptyForm = {
   connectorHigh: "",
   connectorFog: "",
   connectorAux: "",
+  combinedHighLow: false,
   notes: "",
   active: true,
 };
@@ -49,12 +51,12 @@ export function AdminCompatibilityManager() {
     loadRows();
   }, []);
 
-  const updateField = (field: keyof typeof emptyForm, value: string) => {
+  const updateField = (field: keyof typeof emptyForm, value: string | boolean) => {
     setForm((previous) => ({ ...previous, [field]: value }));
   };
 
   const handleSubmit = async () => {
-    if (!form.brandName.trim() || !form.modelName.trim() || !form.yearFrom.trim()) {
+    if (!form.brandName.trim() || !form.modelName.trim() || !form.yearFrom.trim() || (form.combinedHighLow && !form.connectorLow.trim())) {
       setStatus({ type: "error", message: "Marca, modelo y año desde son obligatorios." });
       return;
     }
@@ -74,6 +76,7 @@ export function AdminCompatibilityManager() {
       connectorHigh: form.connectorHigh.trim() || undefined,
       connectorFog: form.connectorFog.trim() || undefined,
       connectorAux: form.connectorAux.trim() || undefined,
+      combinedHighLow: form.combinedHighLow,
       notes: form.notes.trim() || undefined,
     });
 
@@ -101,6 +104,7 @@ export function AdminCompatibilityManager() {
       connectorHigh: row.connectorHigh || "",
       connectorFog: row.connectorFog || "",
       connectorAux: row.connectorAux || "",
+      combinedHighLow: row.combinedHighLow,
       notes: row.notes || "",
       active: row.active,
     });
@@ -229,9 +233,15 @@ export function AdminCompatibilityManager() {
             <input
               placeholder="H1"
               value={form.connectorHigh}
+              disabled={form.combinedHighLow}
               onChange={(event) => updateField("connectorHigh", event.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
+              className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white disabled:opacity-40"
             />
+          </label>
+
+          <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-zinc-900 px-3 py-3 text-sm text-zinc-200">
+            <input type="checkbox" checked={form.combinedHighLow} onChange={(event) => setForm((previous) => ({ ...previous, combinedHighLow: event.target.checked, connectorHigh: event.target.checked ? "" : previous.connectorHigh }))} />
+            Alta y baja juntas (una lámpara)
           </label>
 
           <label className="block text-sm text-zinc-300">
@@ -327,7 +337,7 @@ export function AdminCompatibilityManager() {
                     <td className="py-2 pr-3 font-semibold text-white">{row.brandName} {row.modelName}</td>
                     <td className="py-2 pr-3">{row.yearFrom}{row.yearTo ? `–${row.yearTo}` : "+"}</td>
                     <td className="py-2 pr-3">
-                      {[row.connectorLow, row.connectorHigh, row.connectorFog, row.connectorAux].filter(Boolean).join(" / ") || "—"}
+                      {row.combinedHighLow ? `Alta y baja: ${row.connectorLow}` : [row.connectorLow, row.connectorHigh, row.connectorFog, row.connectorAux].filter(Boolean).join(" / ") || "—"}
                     </td>
                     <td className="py-2 pr-3">
                       <span className={row.active ? "text-emerald-300" : "text-zinc-500"}>{row.active ? "Activa" : "Inactiva"}</span>

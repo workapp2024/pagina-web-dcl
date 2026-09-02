@@ -133,6 +133,31 @@ export interface Database {
           created_at?: string;
         };
       };
+      financial_accounts: {
+        Row: { id: string; name: string; account_type: string; active: boolean; sort_order: number; created_at: string };
+        Insert: { id: string; name: string; account_type?: string; active?: boolean; sort_order?: number; created_at?: string };
+        Update: { id?: string; name?: string; account_type?: string; active?: boolean; sort_order?: number; created_at?: string };
+      };
+      financial_periods: {
+        Row: { id: string; name: string; starts_at: string; ends_at: string | null; status: "open" | "closed"; created_at: string; closed_at: string | null };
+        Insert: { id?: string; name: string; starts_at?: string; ends_at?: string | null; status?: "open" | "closed"; created_at?: string; closed_at?: string | null };
+        Update: { id?: string; name?: string; starts_at?: string; ends_at?: string | null; status?: "open" | "closed"; created_at?: string; closed_at?: string | null };
+      };
+      financial_activation: {
+        Row: { singleton: boolean; activated_at: string; initial_period_id: string; activation_key: string };
+        Insert: { singleton?: boolean; activated_at?: string; initial_period_id: string; activation_key: string };
+        Update: { singleton?: boolean; activated_at?: string; initial_period_id?: string; activation_key?: string };
+      };
+      financial_operation_requests: {
+        Row: { idempotency_key: string; operation_type: string; result_id: string | null; created_at: string };
+        Insert: { idempotency_key: string; operation_type: string; result_id?: string | null; created_at?: string };
+        Update: { idempotency_key?: string; operation_type?: string; result_id?: string | null; created_at?: string };
+      };
+      cash_movements: {
+        Row: { id: string; movement_type: string; amount: number; occurred_at: string; description: string; sale_id: string | null; account_id: string | null; period_id: string | null; transfer_id: string | null; idempotency_key: string | null; created_at: string };
+        Insert: { id?: string; movement_type: string; amount: number; occurred_at?: string; description?: string; sale_id?: string | null; account_id?: string | null; period_id?: string | null; transfer_id?: string | null; idempotency_key?: string | null; created_at?: string };
+        Update: { id?: string; movement_type?: string; amount?: number; occurred_at?: string; description?: string; sale_id?: string | null; account_id?: string | null; period_id?: string | null; transfer_id?: string | null; idempotency_key?: string | null; created_at?: string };
+      };
       customers: {
         Row: { id: string; full_name: string; phone: string | null; email: string | null; document_number: string | null; notes: string; created_at: string; updated_at: string };
         Insert: { id?: string; full_name: string; phone?: string | null; email?: string | null; document_number?: string | null; notes?: string; created_at?: string; updated_at?: string };
@@ -395,6 +420,7 @@ export interface Database {
           connector_high: string | null;
           connector_fog: string | null;
           connector_aux: string | null;
+          combined_high_low: boolean;
           notes: string;
           active: boolean;
           created_at: string;
@@ -410,6 +436,7 @@ export interface Database {
           connector_high?: string | null;
           connector_fog?: string | null;
           connector_aux?: string | null;
+          combined_high_low?: boolean;
           notes?: string;
           active?: boolean;
           created_at?: string;
@@ -425,6 +452,7 @@ export interface Database {
           connector_high?: string | null;
           connector_fog?: string | null;
           connector_aux?: string | null;
+          combined_high_low?: boolean;
           notes?: string;
           active?: boolean;
           created_at?: string;

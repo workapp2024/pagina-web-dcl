@@ -20,6 +20,7 @@ export type VehicleCompatibility = {
   connectorHigh: string | null;
   connectorFog: string | null;
   connectorAux: string | null;
+  combinedHighLow: boolean;
   notes: string;
 };
 
@@ -131,6 +132,28 @@ export async function getPublicVehicleCompatibilitiesByModel(modelId: string): P
   }
 }
 
+export async function searchPublicVehicleCompatibilities(vehicleType: string, brandId?: string, modelId?: string): Promise<VehicleCompatibilityFull[] | null> {
+  if (!isSupabaseConfigured() || !vehicleType) return [];
+  try {
+    const client = typeof window === "undefined" ? createServerClient() : createBrowserClient();
+    let modelsQuery = client.from("vehicle_models").select("*").eq("active", true).eq("vehicle_type", vehicleType);
+    if (brandId) modelsQuery = modelsQuery.eq("brand_id", brandId);
+    if (modelId) modelsQuery = modelsQuery.eq("id", modelId);
+    const { data: modelRows, error: modelsError } = await modelsQuery;
+    if (modelsError || !modelRows) return null;
+    const models = modelRows as VehicleModelRow[];
+    if (!models.length) return [];
+    const { data: compatibilityRows, error: compatibilityError } = await client.from("vehicle_compatibilities").select("*").eq("active", true).in("model_id", models.map(row => row.id)).order("year_from", { ascending: true, nullsFirst: true });
+    if (compatibilityError || !compatibilityRows) return null;
+    const brandIds = Array.from(new Set(models.map(row => row.brand_id)));
+    const { data: brandRows, error: brandsError } = await client.from("vehicle_brands").select("*").in("id", brandIds);
+    if (brandsError || !brandRows) return null;
+    const modelsById = new Map(models.map(row => [row.id, row]));
+    const brandsById = new Map((brandRows as VehicleBrandRow[]).map(row => [row.id, row]));
+    return (compatibilityRows as VehicleCompatibilityRow[]).map(row => { const model = modelsById.get(row.model_id)!; return { ...mapCompatibilityRow(row), modelName: model.name, brandName: brandsById.get(model.brand_id)?.name || "", vehicleType: model.vehicle_type }; });
+  } catch { return null; }
+}
+
 function mapCompatibilityRow(row: VehicleCompatibilityRow): VehicleCompatibility {
   return {
     id: row.id,
@@ -143,6 +166,7 @@ function mapCompatibilityRow(row: VehicleCompatibilityRow): VehicleCompatibility
     connectorHigh: row.connector_high,
     connectorFog: row.connector_fog,
     connectorAux: row.connector_aux,
+    combinedHighLow: row.combined_high_low,
     notes: row.notes,
   };
 }
@@ -196,6 +220,7 @@ export type CompatibilityFormPayload = {
   connectorHigh?: string;
   connectorFog?: string;
   connectorAux?: string;
+  combinedHighLow?: boolean;
   notes?: string;
 };
 
