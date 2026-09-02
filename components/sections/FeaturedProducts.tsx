@@ -15,7 +15,7 @@ export function FeaturedProducts() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
-        {content.products.filter((product) => product.featured && product.active).map((product) => (
+        {content.products.filter((product) => product.featured && product.active && product.showInCatalog).map((product) => (
           <ProductCard key={product.id} {...product} />
         ))}
       </div>

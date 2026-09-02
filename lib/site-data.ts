@@ -12,6 +12,7 @@ export type Product = {
   category: string;
   featured: boolean;
   active: boolean;
+  showInCatalog: boolean;
   href: string;
   ctaText: string;
   order: number;
@@ -24,6 +25,7 @@ export type Product = {
   canbus?: boolean;
   chipType?: string;
   warranty?: string;
+  warrantyDays?: number;
   /** Campos privados: sólo se cargan a través de la API administrativa. */
   costPrice?: number;
   marginPercentage?: number;
@@ -172,6 +174,7 @@ export const defaultSiteContent: SiteContent = {
       category: "Ópticas",
       featured: true,
       active: true,
+      showInCatalog: true,
       href: "/productos/s6-hd",
       ctaText: "VER PRODUCTO",
       order: 1,
@@ -185,6 +188,7 @@ export const defaultSiteContent: SiteContent = {
       category: "Proyectores",
       featured: true,
       active: true,
+      showInCatalog: true,
       href: "/productos/f4-24v",
       ctaText: "VER PRODUCTO",
       order: 2,
@@ -198,6 +202,7 @@ export const defaultSiteContent: SiteContent = {
       category: "Spotlights",
       featured: true,
       active: true,
+      showInCatalog: true,
       href: "/productos/ir100",
       ctaText: "VER PRODUCTO",
       order: 3,
@@ -211,6 +216,7 @@ export const defaultSiteContent: SiteContent = {
       category: "Premium",
       featured: true,
       active: true,
+      showInCatalog: true,
       href: "/productos/kb3-premium",
       ctaText: "VER PRODUCTO",
       order: 4,
@@ -224,6 +230,7 @@ export const defaultSiteContent: SiteContent = {
       category: "Modelos Offroad",
       featured: false,
       active: true,
+      showInCatalog: true,
       href: "/productos/irx-dakar",
       ctaText: "VER PRODUCTO",
       order: 5,

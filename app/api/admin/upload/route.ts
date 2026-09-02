@@ -11,7 +11,7 @@ import {
   type StorageCategory,
 } from "@/lib/supabase/storage";
 
-const VALID_CATEGORIES: StorageCategory[] = ["products", "promotions", "vehicles", "hero", "site"];
+const VALID_CATEGORIES: StorageCategory[] = ["products", "promotions", "vehicles", "hero", "site", "gallery"];
 
 /**
  * Recibe un archivo desde el panel admin y lo sube a Supabase Storage usando la service role key.

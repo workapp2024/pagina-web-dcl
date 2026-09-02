@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import Link from "next/link";
@@ -9,7 +10,7 @@ const groups = [
   { label: "Comercial", icon: "◉", items: [{ href: "/admin/ventas", label: "Ventas", icon: "↗" }, { href: "/admin/pedidos", label: "Pedidos", icon: "□" }, { href: "/admin/clientes", label: "Clientes", icon: "○" }, { href: "/admin/finanzas", label: "Finanzas", icon: "$" }, { href: "/admin/promociones", label: "Promociones", icon: "✦" }] },
   { label: "Productos y stock", icon: "▣", items: [{ href: "/admin/productos", label: "Productos", icon: "◇" }, { href: "/admin/inventario", label: "Inventario", icon: "≡" }, { href: "/admin/vehiculos", label: "Vehículos", icon: "▱" }, { href: "/admin/compatibilidades", label: "Compatibilidades", icon: "⌘" }] },
   { label: "Operaciones", icon: "✓", items: [{ href: "/admin/instalaciones", label: "Instalaciones", icon: "⌁" }, { href: "/admin/garantias", label: "Garantías y reclamos", icon: "!" }] },
-  { label: "Sitio y configuración", icon: "⚙", items: [{ href: "/admin/home", label: "Página web / Home", icon: "⌂" }, { href: "/admin/configuracion", label: "Configuración", icon: "⚙" }] },
+  { label: "Sitio y configuración", icon: "⚙", items: [{ href: "/admin/home", label: "Página web / Home", icon: "⌂" }, { href: "/admin/galeria", label: "Galería", icon: "▣" }, { href: "/admin/configuracion", label: "Configuración", icon: "⚙" }] },
 ];
 const frequent = [{ href: "/admin", label: "Inicio", icon: "⌂" }, { href: "/admin/ventas", label: "Ventas", icon: "↗" }, { href: "/admin/instalaciones", label: "Operaciones", icon: "✓" }];
 

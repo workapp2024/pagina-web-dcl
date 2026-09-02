@@ -22,6 +22,7 @@ export interface Database {
           cta_text: string;
           featured: boolean;
           active: boolean;
+          show_in_catalog: boolean;
           sort_order: number;
           watts: number | null;
           lumens: number | null;
@@ -31,6 +32,7 @@ export interface Database {
           canbus: boolean;
           chip_type: string | null;
           warranty: string | null;
+          warranty_days: number | null;
           cost_price: number | null;
           margin_percentage: number | null;
           stock: number;
@@ -50,6 +52,7 @@ export interface Database {
           cta_text?: string;
           featured?: boolean;
           active?: boolean;
+          show_in_catalog?: boolean;
           sort_order?: number;
           watts?: number | null;
           lumens?: number | null;
@@ -59,6 +62,7 @@ export interface Database {
           canbus?: boolean;
           chip_type?: string | null;
           warranty?: string | null;
+          warranty_days?: number | null;
           cost_price?: number | null;
           margin_percentage?: number | null;
           stock?: number;
@@ -78,6 +82,7 @@ export interface Database {
           cta_text?: string;
           featured?: boolean;
           active?: boolean;
+          show_in_catalog?: boolean;
           sort_order?: number;
           watts?: number | null;
           lumens?: number | null;
@@ -87,6 +92,7 @@ export interface Database {
           canbus?: boolean;
           chip_type?: string | null;
           warranty?: string | null;
+          warranty_days?: number | null;
           cost_price?: number | null;
           margin_percentage?: number | null;
           stock?: number;
@@ -128,9 +134,9 @@ export interface Database {
         };
       };
       customers: {
-        Row: { id: string; full_name: string; phone: string | null; email: string | null; notes: string; created_at: string; updated_at: string };
-        Insert: { id?: string; full_name: string; phone?: string | null; email?: string | null; notes?: string; created_at?: string; updated_at?: string };
-        Update: { id?: string; full_name?: string; phone?: string | null; email?: string | null; notes?: string; created_at?: string; updated_at?: string };
+        Row: { id: string; full_name: string; phone: string | null; email: string | null; document_number: string | null; notes: string; created_at: string; updated_at: string };
+        Insert: { id?: string; full_name: string; phone?: string | null; email?: string | null; document_number?: string | null; notes?: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; full_name?: string; phone?: string | null; email?: string | null; document_number?: string | null; notes?: string; created_at?: string; updated_at?: string };
       };
       customer_vehicles: {
         Row: { id: string; customer_id: string; vehicle_model_id: string | null; brand_name: string; model_name: string; year: number | null; plate: string | null; notes: string; created_at: string; updated_at: string };
@@ -148,9 +154,9 @@ export interface Database {
         Update: { id?: string; sale_id?: string; product_id?: string; product_name?: string; quantity?: number; unit_price?: number; unit_cost?: number | null; line_total?: number; created_at?: string };
       };
       installations: {
-        Row: { id: string; sale_id: string; customer_vehicle_id: string | null; status: "pending" | "completed" | "cancelled"; scheduled_at: string | null; completed_at: string | null; notes: string; created_at: string; updated_at: string };
-        Insert: { id?: string; sale_id: string; customer_vehicle_id?: string | null; status?: "pending" | "completed" | "cancelled"; scheduled_at?: string | null; completed_at?: string | null; notes?: string; created_at?: string; updated_at?: string };
-        Update: { id?: string; sale_id?: string; customer_vehicle_id?: string | null; status?: "pending" | "completed" | "cancelled"; scheduled_at?: string | null; completed_at?: string | null; notes?: string; created_at?: string; updated_at?: string };
+        Row: { id: string; sale_id: string; customer_vehicle_id: string | null; status: "pending" | "completed" | "cancelled"; scheduled_at: string | null; completed_at: string | null; notes: string; location: string | null; contact_phone: string | null; work_type: string | null; estimated_difficulty: "low" | "medium" | "high" | null; assigned_technician: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; sale_id: string; customer_vehicle_id?: string | null; status?: "pending" | "completed" | "cancelled"; scheduled_at?: string | null; completed_at?: string | null; notes?: string; location?: string | null; contact_phone?: string | null; work_type?: string | null; estimated_difficulty?: "low" | "medium" | "high" | null; assigned_technician?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; sale_id?: string; customer_vehicle_id?: string | null; status?: "pending" | "completed" | "cancelled"; scheduled_at?: string | null; completed_at?: string | null; notes?: string; location?: string | null; contact_phone?: string | null; work_type?: string | null; estimated_difficulty?: "low" | "medium" | "high" | null; assigned_technician?: string | null; created_at?: string; updated_at?: string };
       };
       warranties: {
         Row: { id: string; sale_item_id: string; customer_id: string; customer_vehicle_id: string | null; status: "active" | "expired" | "void"; starts_at: string; expires_at: string | null; notes: string; created_at: string };

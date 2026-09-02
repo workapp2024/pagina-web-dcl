@@ -19,6 +19,7 @@ const PUBLIC_PRODUCT_COLUMNS = [
   "cta_text",
   "featured",
   "active",
+  "show_in_catalog",
   "sort_order",
   "watts",
   "lumens",
@@ -28,6 +29,7 @@ const PUBLIC_PRODUCT_COLUMNS = [
   "canbus",
   "chip_type",
   "warranty",
+  "warranty_days",
 ] as const;
 
 const PUBLIC_PRODUCT_SELECT = PUBLIC_PRODUCT_COLUMNS.join(",");
@@ -45,6 +47,7 @@ function mapProductRow(row: PublicProductRow, includePrivateFields = false): Pro
     category: row.category,
     featured: row.featured,
     active: row.active,
+    showInCatalog: row.show_in_catalog ?? true,
     href: `/productos/${row.slug}`,
     ctaText: row.cta_text || "VER PRODUCTO",
     order: row.sort_order,
@@ -56,6 +59,7 @@ function mapProductRow(row: PublicProductRow, includePrivateFields = false): Pro
     canbus: row.canbus,
     chipType: row.chip_type ?? undefined,
     warranty: row.warranty ?? undefined,
+    warrantyDays: row.warranty_days ?? undefined,
   };
 
   if (includePrivateFields) {
@@ -82,10 +86,19 @@ export async function getSupabaseProducts(): Promise<Product[] | null> {
 
   try {
     const client = typeof window === "undefined" ? createServerClient() : createBrowserClient();
-    const { data, error } = await client
+    let { data, error } = await client
       .from("products")
       .select(PUBLIC_PRODUCT_SELECT)
+      .eq("active", true)
+      .eq("show_in_catalog", true)
       .order("sort_order", { ascending: true });
+
+    if (error && /show_in_catalog|warranty_days/i.test(error.message)) {
+      const legacyColumns = PUBLIC_PRODUCT_COLUMNS.filter((column) => column !== "show_in_catalog" && column !== "warranty_days").join(",");
+      const legacy = await client.from("products").select(legacyColumns).eq("active", true).order("sort_order", { ascending: true });
+      data = (legacy.data || []).map((row) => ({ ...(row as unknown as Record<string, unknown>), show_in_catalog: true, warranty_days: null })) as typeof data;
+      error = legacy.error;
+    }
 
     if (error) {
       console.warn("Lectura de productos en Supabase no completada:", error.message);

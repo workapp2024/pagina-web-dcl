@@ -1,7 +1,7 @@
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
-import { ProductCard } from "@/components/ui/ProductCard";
+import { ProductCatalog } from "@/components/public/ProductCatalog";
 import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
 import { getSupabaseProducts } from "@/lib/supabase/products";
 
@@ -14,7 +14,7 @@ export const metadata = {
 
 export default async function ProductosPage() {
   const products = await getSupabaseProducts();
-  const activeProducts = (products ?? []).filter((product) => product.active);
+  const activeProducts = (products ?? []).filter((product) => product.active && product.showInCatalog);
 
   return (
     <SiteContentProvider initialProducts={products ?? undefined}>
@@ -41,11 +41,7 @@ export default async function ProductosPage() {
                 Todavía no hay productos cargados.
               </p>
             ) : (
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {activeProducts.map((product) => (
-                  <ProductCard key={product.id} {...product} />
-                ))}
-              </div>
+              <ProductCatalog products={activeProducts} />
             )}
           </section>
         </main>

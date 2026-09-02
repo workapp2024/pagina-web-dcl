@@ -265,6 +265,7 @@ export function AdminProductsManager() {
       category: "General",
       featured: false,
       active: true,
+      showInCatalog: true,
       order: products.length + 1,
       href: `/productos/${slug}`,
       ctaText: "VER PRODUCTO",
@@ -407,7 +408,17 @@ export function AdminProductsManager() {
                     />
                     Activo
                   </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={product.showInCatalog} onChange={(event) => updateProduct(product.id, { showInCatalog: event.target.checked })} />
+                    Mostrar en catálogo
+                  </label>
                 </div>
+
+                <label className="block max-w-xs text-sm text-zinc-300">
+                  <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Garantía predeterminada (días)</span>
+                  <input type="number" min={1} max={3650} value={product.warrantyDays ?? ""} onChange={(event) => updateProduct(product.id, { warrantyDays: event.target.value ? Number(event.target.value) : undefined })} className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white" />
+                  <span className="mt-1 block text-[11px] text-zinc-500">Se propone automáticamente al registrar una venta; puede cambiarse o desactivarse allí.</span>
+                </label>
 
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                   <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">

@@ -16,7 +16,7 @@ export const ALLOWED_MIME_TYPES = [
   "image/avif",
 ];
 
-export type StorageCategory = "products" | "promotions" | "vehicles" | "hero" | "site";
+export type StorageCategory = "products" | "promotions" | "vehicles" | "hero" | "site" | "gallery";
 
 /**
  * Valida formato y tamaño máximo de la imagen antes de subirla.
