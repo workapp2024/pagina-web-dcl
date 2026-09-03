@@ -1,3 +1,5 @@
 "use client";
-import { useCart } from "./CartProvider";
-export function CartLink(){const {count}=useCart();return <a href="/carrito" className="rounded-full border border-white/15 px-3 py-2 text-xs font-bold text-white">Carrito{count?` (${count})`:""}</a>}
+import Link from "next/link";
+import {useEffect,useRef,useState} from "react";
+import {useCart} from "./CartProvider";
+export function CartLink(){const{count,revision}=useCart(),initial=useRef(true),[pulse,setPulse]=useState(false);useEffect(()=>{if(initial.current){initial.current=false;return}setPulse(true);const timer=setTimeout(()=>setPulse(false),320);return()=>clearTimeout(timer)},[revision]);return <Link href="/carrito" aria-label={`Carrito${count?`, ${count} productos`:" vacío"}`} className={`relative inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-full border border-white/15 bg-zinc-950 px-2.5 text-xs font-bold text-white transition hover:border-red-500/60 lg:px-3 ${pulse?"scale-110 border-red-500":"scale-100"}`}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"><path d="M3 4h2l2.1 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L20 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg><span className="hidden lg:inline">Carrito</span>{count>0&&<span className="absolute -right-1.5 -top-1.5 grid min-h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white lg:static lg:min-h-5">{count>99?"99+":count}</span>}</Link>}

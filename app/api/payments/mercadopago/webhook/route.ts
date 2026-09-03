@@ -144,14 +144,14 @@ export async function POST(request: NextRequest) {
     stage = "local_order_completion";
     const payment = order.transactions?.payments?.[0];
     const db = createAdminServerClient();
-    const result: any = await db.rpc("complete_mercadopago_order", {
+    const result = await db.rpc("complete_mercadopago_order", {
       p_order: order.external_reference,
       p_external_order: order.id,
       p_payment: payment?.id ? String(payment.id) : "",
       p_amount: Number(order.total_amount),
       p_currency: order.currency,
       p_status: order.status,
-    } as never);
+    } as never) as unknown as { error: { message: string } | null };
     if (result.error) throw new Error(result.error.message);
     return NextResponse.json({ ok: true });
   } catch (error) {

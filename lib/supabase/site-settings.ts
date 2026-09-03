@@ -45,12 +45,22 @@ export async function getSupabaseSiteSettings(): Promise<Partial<SiteSettings> |
     if (row.email) settings.email = row.email;
     if (row.phone) settings.phone = row.phone;
     if (row.address) settings.address = row.address;
-    if (isThemePreset((row as any).theme_preset)) settings.themePreset = (row as any).theme_preset;
+    if (isThemePreset(row.theme_preset)) settings.themePreset = row.theme_preset;
     if (row.vehicle_section_title) settings.vehicleSectionTitle = row.vehicle_section_title;
     if (row.needs_section_title) settings.needsSectionTitle = row.needs_section_title;
     if (row.why_us_section_title) settings.whyUsSectionTitle = row.why_us_section_title;
     if (row.products_section_title) settings.productsSectionTitle = row.products_section_title;
     if (row.promotions_section_title) settings.promotionsSectionTitle = row.promotions_section_title;
+    if (typeof row.radio_enabled === "boolean") settings.radioEnabled = row.radio_enabled;
+    if (typeof row.radio_show_player === "boolean") settings.radioShowPlayer = row.radio_show_player;
+    if (row.radio_name) settings.radioName = row.radio_name;
+    if (row.radio_stream_url) settings.radioStreamUrl = row.radio_stream_url;
+    if (row.radio_subtitle) settings.radioSubtitle = row.radio_subtitle;
+    settings.transferAlias = row.transfer_alias || "";
+    settings.transferCbuCvu = row.transfer_cbu_cvu || "";
+    settings.transferHolder = row.transfer_holder || "";
+    settings.transferInstitution = row.transfer_institution || "";
+    settings.transferInstructions = row.transfer_instructions || "";
 
     return settings;
   } catch (err) {

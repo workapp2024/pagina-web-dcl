@@ -87,6 +87,16 @@ export type SiteSettings = {
   whyUsSectionTitle: string;
   productsSectionTitle: string;
   promotionsSectionTitle: string;
+  radioEnabled: boolean;
+  radioShowPlayer: boolean;
+  radioName: string;
+  radioStreamUrl: string;
+  radioSubtitle: string;
+  transferAlias: string;
+  transferCbuCvu: string;
+  transferHolder: string;
+  transferInstitution: string;
+  transferInstructions: string;
 };
 
 export type SiteContent = {
@@ -156,6 +166,16 @@ export const defaultSiteContent: SiteContent = {
     whyUsSectionTitle: "¿POR QUÉ DCL?",
     productsSectionTitle: "PRODUCTOS DESTACADOS",
     promotionsSectionTitle: "PROMOCIONES DCL",
+    radioEnabled: true,
+    radioShowPlayer: true,
+    radioName: "La Nueva",
+    radioStreamUrl: "https://stream.zeno.fm/owdfrxtingytv",
+    radioSubtitle: "Música mientras elegís tus Cree LED",
+    transferAlias: "",
+    transferCbuCvu: "",
+    transferHolder: "",
+    transferInstitution: "",
+    transferInstructions: "Enviá el comprobante por WhatsApp indicando el número de pedido.",
   },
   vehicleCategories: [
     { id: "auto", title: "Auto", description: "Iluminación para tu auto.", image: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80", href: "/vehiculos", active: true },

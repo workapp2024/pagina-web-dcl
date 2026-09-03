@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
@@ -6,6 +7,8 @@ import { ManagedImage } from "@/components/ui/ManagedImage";
 import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
 import { getSupabaseProducts } from "@/lib/supabase/products";
 import { whatsappUrl } from "@/lib/whatsapp";
+import { EventOnMount } from "@/components/analytics/EventOnMount";
+import { analyticsEvents } from "@/lib/analytics";
 
 export const revalidate = 60;
 
@@ -54,12 +57,13 @@ export default async function ProductoDetallePage({ params }: ProductoDetallePag
     <SiteContentProvider initialProducts={products ?? undefined}>
       <div className="min-h-screen bg-black text-white">
         <Header />
+        <EventOnMount event={analyticsEvents.productView} properties={{ product_id: product.id, product_slug: slug, category: product.category }}/>
 
         <main>
           <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-            <a href="/productos" className="mb-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-zinc-400 transition hover:text-red-300">
+            <Link href="/productos" className="mb-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-zinc-400 transition hover:text-red-300">
               ← Volver al catálogo
-            </a>
+            </Link>
 
             <div className="grid gap-10 lg:grid-cols-[1fr_1.1fr]">
               <div className="flex h-80 items-center justify-center overflow-hidden rounded-[1.75rem] border border-white/10 bg-zinc-950/60 p-6 lg:h-[480px]">

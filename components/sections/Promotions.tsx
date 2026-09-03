@@ -1,11 +1,15 @@
 "use client";
+import { useEffect, useMemo } from "react";
 
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import { ManagedImage } from "@/components/ui/ManagedImage";
 import { isWhatsAppUrl, whatsappUrl } from "@/lib/whatsapp";
+import { analyticsEvents, capture } from "@/lib/analytics";
 
 export function Promotions() {
   const { content } = useSiteContent();
+  const activePromotions = useMemo(() => content.promotions.filter((promo) => promo.active), [content.promotions]);
+  useEffect(() => { activePromotions.forEach(promo => capture(analyticsEvents.promotionView, { promotion_id: promo.id })); }, [activePromotions]);
 
   return (
     <section id="promociones" className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
@@ -16,7 +20,7 @@ export function Promotions() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        {content.promotions.filter((promo) => promo.active).map((promo) => (
+        {activePromotions.map((promo) => (
           <article key={promo.id} className="flex flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-zinc-900">
             <div className="relative flex h-64 w-full items-center justify-center overflow-hidden bg-zinc-950/70 p-3">
               <ManagedImage source={promo.image} alt={promo.title} className="max-h-full max-w-full object-contain" />
@@ -30,6 +34,10 @@ export function Promotions() {
                 href={isWhatsAppUrl(promo.ctaHref) ? whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${promo.title}.`) : promo.ctaHref}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => {
+                  capture(analyticsEvents.promotionClick, { promotion_id: promo.id });
+                  if (isWhatsAppUrl(promo.ctaHref)) capture(analyticsEvents.whatsappClick, { source: "promotion", promotion_id: promo.id });
+                }}
                 className="mt-auto inline-flex min-h-[44px] items-center justify-center rounded-full border border-red-500/50 bg-red-600/10 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-red-300 transition hover:bg-red-600/20"
               >
                 {promo.ctaText}

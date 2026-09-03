@@ -10,10 +10,11 @@ type ProductCardProps = {
   href: string;
   ctaText: string;
   price: number;
+  category: string;
   previousPrice?: number;
 };
 
-export function ProductCard({ id, name, description, image, href, ctaText, price, previousPrice }: ProductCardProps) {
+export function ProductCard({ id, name, description, image, href, ctaText, price, category, previousPrice }: ProductCardProps) {
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/3">
       <div className="relative flex h-64 w-full items-center justify-center overflow-hidden bg-zinc-950/60 p-4">
@@ -41,7 +42,7 @@ export function ProductCard({ id, name, description, image, href, ctaText, price
           >
             {ctaText}
           </a>
-          <AddToCartButton product={{ id, name, price, image, href }} />
+          <AddToCartButton product={{ id, name, price, image, href, category }} />
           <a
             href={whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${name}.`)}
             target="_blank"

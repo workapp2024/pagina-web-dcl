@@ -275,6 +275,47 @@ export interface Database {
           updated_at?: string;
         };
       };
+      radio_stations: {
+        Row: {
+          id: string;
+          name: string;
+          genre: string;
+          stream_url: string;
+          cover_url: string | null;
+          description: string;
+          active: boolean;
+          featured: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          genre?: string;
+          stream_url: string;
+          cover_url?: string | null;
+          description?: string;
+          active?: boolean;
+          featured?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          genre?: string;
+          stream_url?: string;
+          cover_url?: string | null;
+          description?: string;
+          active?: boolean;
+          featured?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       site_settings: {
         Row: {
           id: number;
@@ -291,6 +332,16 @@ export interface Database {
           products_section_title: string;
           promotions_section_title: string;
           theme_preset: "dcl-dark" | "clean-light" | "graphite-pro" | "midnight-blue";
+          radio_enabled: boolean;
+          radio_show_player: boolean;
+          radio_name: string;
+          radio_stream_url: string;
+          radio_subtitle: string;
+          transfer_alias: string;
+          transfer_cbu_cvu: string;
+          transfer_holder: string;
+          transfer_institution: string;
+          transfer_instructions: string;
           updated_at: string;
         };
         Insert: {
@@ -308,6 +359,16 @@ export interface Database {
           products_section_title?: string;
           promotions_section_title?: string;
           theme_preset?: "dcl-dark" | "clean-light" | "graphite-pro" | "midnight-blue";
+          radio_enabled?: boolean;
+          radio_show_player?: boolean;
+          radio_name?: string;
+          radio_stream_url?: string;
+          radio_subtitle?: string;
+          transfer_alias?: string;
+          transfer_cbu_cvu?: string;
+          transfer_holder?: string;
+          transfer_institution?: string;
+          transfer_instructions?: string;
           updated_at?: string;
         };
         Update: {
@@ -325,6 +386,16 @@ export interface Database {
           products_section_title?: string;
           promotions_section_title?: string;
           theme_preset?: "dcl-dark" | "clean-light" | "graphite-pro" | "midnight-blue";
+          radio_enabled?: boolean;
+          radio_show_player?: boolean;
+          radio_name?: string;
+          radio_stream_url?: string;
+          radio_subtitle?: string;
+          transfer_alias?: string;
+          transfer_cbu_cvu?: string;
+          transfer_holder?: string;
+          transfer_institution?: string;
+          transfer_instructions?: string;
           updated_at?: string;
         };
       };

@@ -7,6 +7,12 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "RATE_LIMITED"
   | "CONFIGURATION_ERROR"
+  | "OUT_OF_STOCK"
+  | "PRODUCT_NOT_FOUND"
+  | "PRODUCT_INACTIVE"
+  | "INVALID_QUANTITY"
+  | "PRICE_ERROR"
+  | "ORDER_CREATION_ERROR"
   | "INTERNAL_ERROR";
 
 export function apiError(code: ApiErrorCode, message: string, status: number) {

@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- legacy Supabase joins are normalized at the API boundary */
 import { NextResponse } from "next/server";
-import { apiInternalError, boundedString } from "@/lib/api";
+import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 
@@ -43,4 +44,10 @@ export async function GET(request: Request) {
     const rows = (orders || []).map((order: any) => ({ ...order, customer: customerById.get(order.customer_id), items: itemsByOrder.get(order.id) || [], payment: paymentByOrder.get(order.id) || null })).filter((row: any) => !needle || [row.id, row.customer?.full_name, row.customer?.phone, ...row.items.map((item: any) => item.product_name)].some(value => String(value || "").toLowerCase().includes(needle)));
     return NextResponse.json({ ok: true, data: rows, pagination: { page, limit, total: count || 0 } });
   } catch (error) { return apiInternalError("admin_orders_list", error); }
+}
+
+export async function POST(request: Request) {
+  const blocked=await guard();if(blocked)return blocked;
+  const body=await readJsonObject(request);if(body?.action!=="confirm_transfer"||!isUuid(body.orderId))return apiError("BAD_REQUEST","Acción inválida.",400);
+  try{const db=createAdminServerClient();const result=await db.rpc("complete_manual_transfer",{p_order:body.orderId} as never) as unknown as {data:string|null;error:{message:string}|null};if(result.error)throw new Error(result.error.message);if(!result.data)return apiError("BAD_REQUEST","No se pudo completar: verificá el stock.",409);return NextResponse.json({ok:true,saleId:result.data})}catch(error){return apiInternalError("confirm_manual_transfer",error)}
 }

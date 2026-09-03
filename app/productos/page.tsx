@@ -12,7 +12,8 @@ export const metadata = {
   description: "Catálogo completo de iluminación CREE LED para autos, camionetas, motos y vehículos de trabajo.",
 };
 
-export default async function ProductosPage() {
+export default async function ProductosPage({ searchParams }: { searchParams: Promise<{ categoria?: string }> }) {
+  const { categoria } = await searchParams;
   const products = await getSupabaseProducts();
   const activeProducts = (products ?? []).filter((product) => product.active && product.showInCatalog);
 
@@ -41,7 +42,7 @@ export default async function ProductosPage() {
                 Todavía no hay productos cargados.
               </p>
             ) : (
-              <ProductCatalog products={activeProducts} />
+              <ProductCatalog products={activeProducts} initialCategory={categoria} />
             )}
           </section>
         </main>

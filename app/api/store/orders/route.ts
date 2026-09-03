@@ -4,8 +4,9 @@ import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } fro
 import { rateLimit } from "@/lib/rate-limit";
 import { createAdminServerClient } from "@/lib/supabase/server";
 
-const PAYMENT_METHODS = new Set(["mercadopago", "transfer", "cash"]);
-type RpcResult = { data: string | null; error: { code?: string } | null };
+const PAYMENT_METHODS = new Set(["mercadopago", "card", "transfer"]);
+type RpcError = { code?: string; message?: string; details?: string; hint?: string };
+type RpcResult = { data: string | null; error: RpcError | null };
 type TotalQuery = { data: { total: number | string } | null; error: unknown };
 
 export async function POST(request: Request) {
@@ -43,8 +44,15 @@ export async function POST(request: Request) {
       p_notes: notes, p_method: paymentMethod, p_items: items, p_key: idempotencyKey,
     } as never) as unknown as RpcResult;
     if (result.error || !result.data) {
-      console.warn("Public order rejected", { stage: "create_public_order", code: result.error?.code });
-      return apiError("BAD_REQUEST", "No se pudo crear el pedido. Verificá el stock e intentá nuevamente.", 400);
+      const diagnostic = { stage: "create_public_order", code: result.error?.code, message: result.error?.message, details: result.error?.details, hint: result.error?.hint };
+      console.warn("Public order rejected", process.env.NODE_ENV === "production" ? { stage: diagnostic.stage, code: diagnostic.code } : diagnostic);
+      const reason = result.error?.message;
+      if (reason === "OUT_OF_STOCK") return apiError("OUT_OF_STOCK", "No hay stock suficiente para completar el pedido.", 409);
+      if (reason === "PRODUCT_NOT_FOUND") return apiError("PRODUCT_NOT_FOUND", "Uno de los productos ya no está disponible.", 404);
+      if (reason === "PRODUCT_INACTIVE") return apiError("PRODUCT_INACTIVE", "Uno de los productos fue desactivado.", 409);
+      if (reason === "INVALID_QUANTITY") return apiError("INVALID_QUANTITY", "La cantidad solicitada no es válida.", 400);
+      if (reason === "PRICE_ERROR") return apiError("PRICE_ERROR", "No se pudo validar el precio de un producto.", 409);
+      return apiError("ORDER_CREATION_ERROR", "No se pudo crear el pedido. Intentá nuevamente.", 500);
     }
     const totalQuery = await db.from("orders").select("total").eq("id", result.data).single() as unknown as TotalQuery;
     if (totalQuery.error || !totalQuery.data) return apiError("INTERNAL_ERROR", "No se pudo preparar el pedido.", 500);

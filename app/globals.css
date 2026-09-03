@@ -68,3 +68,22 @@ a {
 summary::-webkit-details-marker {
   display: none;
 }
+
+@keyframes gallery-marquee { to { transform: translate3d(calc(-50% - .5rem), 0, 0); } }
+.gallery-track { animation: gallery-marquee 48s linear infinite; }
+.gallery-marquee:hover .gallery-track { animation-play-state: paused; }
+@media (max-width: 640px) { .gallery-track { animation-duration: 58s; } }
+@media (prefers-reduced-motion: reduce) {
+  .gallery-marquee { overflow-x: auto; scrollbar-width: thin; touch-action: pan-x pan-y; }
+  .gallery-track { animation: none; transform: none; will-change: auto; }
+  .gallery-sequence[aria-hidden="true"] { display: none; }
+}
+@layer components {
+  .result-primary {
+    @apply inline-flex min-h-12 items-center justify-center rounded-full bg-red-600 px-5 text-center text-sm font-bold text-white transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400;
+  }
+
+  .result-secondary {
+    @apply inline-flex min-h-12 items-center justify-center rounded-full border border-white/15 px-5 text-center text-sm font-bold text-white transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white;
+  }
+}
