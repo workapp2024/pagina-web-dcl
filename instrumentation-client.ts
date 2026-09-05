@@ -1,4 +1,5 @@
 import posthog from "posthog-js";
+import { sanitizeStoreEvent } from "@/lib/store/analytics-privacy";
 
 const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -17,7 +18,8 @@ if (token && host) {
     before_send: event => {
       if (!event) return null;
       const path = window.location.pathname;
-      if (path.startsWith("/admin") || path.startsWith("/api/admin") || (path.startsWith("/checkout") && event.event === "$snapshot")) return null;
+      if (path.startsWith("/admin") || path.startsWith("/api/admin") || ((path.startsWith("/checkout") || window.location.search) && event.event === "$snapshot")) return null;
+      event.properties = sanitizeStoreEvent(event.event, event.properties);
       return event;
     },
   });

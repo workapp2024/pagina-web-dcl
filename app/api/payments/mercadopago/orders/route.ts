@@ -99,6 +99,9 @@ export async function POST(request: Request) {
     const order = orderQuery.data;
     const transaction = transactionQuery.data;
     if (!order || !transaction) throw new Error("Pedido no encontrado.");
+    const paymentWindow = await db.rpc("get_order_payment_window" as never, { p_order: orderId } as never) as unknown as { data: string | null; error: unknown };
+    if (paymentWindow.error) return apiError("INTERNAL_ERROR", "No se pudo verificar la reserva.", 503);
+    if (!paymentWindow.data || !Number.isFinite(Date.parse(paymentWindow.data)) || Date.parse(paymentWindow.data) <= Date.now()) return apiError("RESERVATION_EXPIRED", "La reserva ya no permite iniciar un pago.", 409);
 
     const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
     if (!accessToken) throw new Error("Mercado Pago no configurado.");
@@ -163,11 +166,17 @@ export async function POST(request: Request) {
       .update({
         external_order_id: mercadoPagoOrder.id,
         external_payment_id: payment?.id ?? null,
-        status: localStatus(mercadoPagoOrder.status),
       } as never)
       .eq("id", transaction.id)
       .or(`external_order_id.is.null,external_order_id.eq.${mercadoPagoOrder.id}`);
     if (error) throw new Error("No se pudo vincular la operación de Mercado Pago.");
+
+    const completion = await db.rpc("complete_mercadopago_order", {
+      p_order: orderId, p_external_order: mercadoPagoOrder.id, p_payment: payment?.id ?? "",
+      p_amount: Number(mercadoPagoOrder.total_amount), p_currency: mercadoPagoOrder.currency || order.currency,
+      p_status: localStatus(mercadoPagoOrder.status) === "rejected" ? "rejected" : mercadoPagoOrder.status || "pending",
+    } as never);
+    if (completion.error) throw new Error("No se pudo conciliar el pago. Consultá el estado del pedido antes de reintentar.");
 
     return NextResponse.json({ ok: true, data: mercadoPagoOrder });
   } catch (error) {

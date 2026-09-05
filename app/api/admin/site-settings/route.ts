@@ -39,6 +39,12 @@ export async function POST(request: Request) {
     const radioStreamUrl = boundedString(siteSettings.radioStreamUrl, 2000) || "";
     let parsedRadioUrl: URL | null = null; try { parsedRadioUrl = new URL(radioStreamUrl); } catch {}
     if (!parsedRadioUrl || parsedRadioUrl.protocol !== "https:") return NextResponse.json({ ok: false, message: "La URL de radio debe usar HTTPS." }, { status: 400 });
+    const transferAlias = boundedString(siteSettings.transferAlias, 120) || "";
+    const transferCbuCvu = boundedString(siteSettings.transferCbuCvu, 40) || "";
+    const transferHolder = boundedString(siteSettings.transferHolder, 160) || "";
+    const transferInstitution = boundedString(siteSettings.transferInstitution, 160) || "";
+    const hasTransferData = Boolean(transferAlias || transferCbuCvu || transferHolder || transferInstitution);
+    if (hasTransferData && (!(transferAlias || transferCbuCvu) || !transferHolder || !transferInstitution)) return NextResponse.json({ ok: false, message: "Para habilitar transferencia indicá alias o CBU/CVU, titular e institución." }, { status: 400 });
     const row: SiteSettingsInsert = {
       id: 1,
       logo_url: siteSettings.logo || "",
@@ -59,10 +65,10 @@ export async function POST(request: Request) {
       radio_name: radioName,
       radio_stream_url: radioStreamUrl,
       radio_subtitle: radioSubtitle,
-      transfer_alias: boundedString(siteSettings.transferAlias, 120) || "",
-      transfer_cbu_cvu: boundedString(siteSettings.transferCbuCvu, 40) || "",
-      transfer_holder: boundedString(siteSettings.transferHolder, 160) || "",
-      transfer_institution: boundedString(siteSettings.transferInstitution, 160) || "",
+      transfer_alias: transferAlias,
+      transfer_cbu_cvu: transferCbuCvu,
+      transfer_holder: transferHolder,
+      transfer_institution: transferInstitution,
       transfer_instructions: boundedString(siteSettings.transferInstructions, 1000) || "",
     };
 

@@ -9,11 +9,15 @@ import { getSupabaseProducts } from "@/lib/supabase/products";
 import { whatsappUrl } from "@/lib/whatsapp";
 import { EventOnMount } from "@/components/analytics/EventOnMount";
 import { analyticsEvents } from "@/lib/analytics";
+import { assessFitment } from "@/lib/store/fitment";
+import { ProductPurchaseActions } from "@/components/store/ProductPurchaseActions";
+import { getPublicVehicleCompatibilityById } from "@/lib/supabase/vehicle-compatibility";
 
 export const revalidate = 60;
 
 type ProductoDetallePageProps = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ fitment?: string; position?: string; year?: string }>;
 };
 
 export async function generateMetadata({ params }: ProductoDetallePageProps) {
@@ -31,8 +35,9 @@ export async function generateMetadata({ params }: ProductoDetallePageProps) {
   };
 }
 
-export default async function ProductoDetallePage({ params }: ProductoDetallePageProps) {
+export default async function ProductoDetallePage({ params, searchParams }: ProductoDetallePageProps) {
   const { slug } = await params;
+  const query = await searchParams;
   const products = await getSupabaseProducts();
   const product = (products ?? []).find((item) => item.href === `/productos/${slug}` && item.active);
 
@@ -41,6 +46,15 @@ export default async function ProductoDetallePage({ params }: ProductoDetallePag
   }
 
   const whatsappHref = whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${product.name}.`);
+  const fitment = query.fitment ? await getPublicVehicleCompatibilityById(query.fitment) : null;
+  const assessment = assessFitment(fitment, product.connectorType, query.position, query.year);
+  const positionLabels: Record<string, string> = { low: "Baja", high: "Alta", fog: "Antiniebla", aux: "Auxiliar" };
+  const selectedYear = Number(query.year);
+  const selectedConnector = assessment.connector;
+  const yearValid = assessment.state === "confirmed";
+  const connectorFitment = assessment.state !== "invalid" ? fitment : null;
+  const verifiedFitment = yearValid ? fitment : null;
+  const cartProduct = { id: product.id, name: product.name, price: product.price, image: product.image, href: product.href, category: product.category };
 
   const specs = [
     { label: "Conector", value: product.connectorType },
@@ -88,6 +102,12 @@ export default async function ProductoDetallePage({ params }: ProductoDetallePag
                   ) : null}
                 </div>
 
+                {verifiedFitment ? <div className="mt-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4"><p className="text-xs font-bold uppercase tracking-widest text-emerald-300">Compatible con</p><p className="mt-2 font-bold">{verifiedFitment.brandName} {verifiedFitment.modelName}{yearValid ? ` ${selectedYear}` : ""}</p><p className="mt-1 text-sm text-zinc-300">{positionLabels[query.position!]} · {selectedConnector}</p></div> : null}
+
+                {connectorFitment && !query.year && <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"><p className="font-bold">Confirmar el año del vehículo</p><p className="mt-2 text-sm">{connectorFitment.brandName} {connectorFitment.modelName}: {connectorFitment.yearFrom}{connectorFitment.yearTo ? ' a '+connectorFitment.yearTo : ' en adelante'}. El conector coincide para ese rango; falta confirmar el año de tu vehículo.</p></div>}
+                {assessment.state === "out_of_range" && <p className="mt-6 rounded-2xl border border-amber-500/30 p-4">El a?o indicado no corresponde al rango compatible de este producto. Revis? el a?o o consultanos antes de comprar.</p>}
+                <ProductPurchaseActions product={cartProduct}/>
+
                 {specs.length > 0 ? (
                   <div className="mt-8 grid gap-3 sm:grid-cols-2">
                     {specs.map((spec) => (
@@ -108,12 +128,12 @@ export default async function ProductoDetallePage({ params }: ProductoDetallePag
                   >
                     Consultar por WhatsApp
                   </a>
-                  <a
+                  {!verifiedFitment && <a
                     href="/vehiculos"
                     className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.14em] text-white transition hover:border-red-500/70 hover:text-red-300"
                   >
                     ¿Es compatible con mi vehículo?
-                  </a>
+                  </a>}
                 </div>
               </div>
             </div>

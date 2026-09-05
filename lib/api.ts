@@ -13,6 +13,8 @@ export type ApiErrorCode =
   | "INVALID_QUANTITY"
   | "PRICE_ERROR"
   | "ORDER_CREATION_ERROR"
+  | "IDEMPOTENCY_CONFLICT"
+  | "RESERVATION_EXPIRED"
   | "INTERNAL_ERROR";
 
 export function apiError(code: ApiErrorCode, message: string, status: number) {

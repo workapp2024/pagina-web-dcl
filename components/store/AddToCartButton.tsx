@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import { useCart, type CartProduct } from "./CartProvider";
 
@@ -8,9 +8,11 @@ export function AddToCartButton({ product }: { product: CartProduct }) {
   const { add, lines } = useCart();
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState("");
+  const inFlight = useRef(false);
 
   async function handleAdd() {
-    if (checking) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setChecking(true);
     setMessage("");
     const quantity = (lines.find(item => item.id === product.id)?.quantity || 0) + 1;
@@ -29,6 +31,7 @@ export function AddToCartButton({ product }: { product: CartProduct }) {
       capture(analyticsEvents.addToCartBlocked, { product_id: product.id, reason: "network" });
       setMessage("No se pudo verificar el stock");
     } finally {
+      inFlight.current = false;
       setChecking(false);
     }
   }

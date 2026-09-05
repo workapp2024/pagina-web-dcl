@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import { whatsappUrl } from "@/lib/whatsapp";
 
-type PaymentResult = "approved" | "pending" | "rejected";
-type OrderStatus = { result: PaymentResult; status: string; paymentMethod: string; total: number; currency: string; reference: string };
+type PaymentResult = "approved" | "pending" | "rejected" | "review";
+type OrderStatus = { result: PaymentResult; paymentReceived?: boolean; status: string; paymentMethod: string; total: number; currency: string; reference: string };
 const paymentLabels: Record<string, string> = { card: "Tarjeta", mercadopago: "Mercado Pago", transfer: "Transferencia" };
 
 function money(value: number, currency: string) {
@@ -59,6 +59,8 @@ export function CheckoutResult({ orderId }: { orderId: string }) {
 
   if (!order && !loadError) return <ResultShell symbol="…" tone="pending" title="Estamos verificando tu pago" description="Consultamos el estado seguro del pedido. Esto puede tardar unos segundos." />;
   if (!order) return <ResultShell symbol="!" tone="rejected" title="No pudimos consultar el pedido" description="El enlace no contiene una referencia válida o el estado no está disponible. No asumimos que el pago fue aprobado."><div className="mt-7 grid gap-3"><Link href="/" className="result-secondary">Volver al inicio</Link><a href={whatsappUrl(supportMessage)} target="_blank" rel="noopener noreferrer" className="result-primary">Consultar por WhatsApp</a></div></ResultShell>;
+
+  if (order.result === "review") return <ResultShell symbol="!" tone="review" title="Pedido en revision" description={order.paymentReceived ? "Recibimos el pago, pero no pudimos confirmar el stock reservado. No vuelvas a pagar. Contactanos para resolver tu pedido o la devolucion." : "No pudimos confirmar la reserva de stock. Contactanos antes de volver a pagar."}><OrderSummary order={order}/><a href={whatsappUrl(supportMessage)} target="_blank" rel="noopener noreferrer" className="result-primary mt-7">Consultar por WhatsApp</a></ResultShell>;
 
   if (order.result === "approved") return <ResultShell symbol="✓" tone="approved" eyebrow="Compra confirmada" title="Pago realizado correctamente" description="Recibimos tu pago. Ahora coordinemos la entrega o el retiro de tu compra."><OrderSummary order={order} /><div className="mt-7 grid gap-3"><a href={whatsappUrl(approvedMessage)} target="_blank" rel="noopener noreferrer" onClick={() => capture(analyticsEvents.deliveryWhatsappClicked, { source: "payment_success" })} className="result-primary">Coordinar entrega por WhatsApp</a><Link href="/" className="result-secondary">Volver al inicio</Link></div></ResultShell>;
 

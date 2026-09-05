@@ -154,6 +154,20 @@ export async function searchPublicVehicleCompatibilities(vehicleType: string, br
   } catch { return null; }
 }
 
+export async function getPublicVehicleCompatibilityById(id: string): Promise<VehicleCompatibilityFull | null> {
+  if (!isSupabaseConfigured() || !id) return null;
+  const client = createServerClient();
+  const { data: row } = await client.from("vehicle_compatibilities").select("*").eq("id", id).eq("active", true).maybeSingle();
+  if (!row) return null;
+  const compatibility = row as VehicleCompatibilityRow;
+  const { data: modelRow } = await client.from("vehicle_models").select("*").eq("id", compatibility.model_id).eq("active", true).maybeSingle();
+  if (!modelRow) return null;
+  const model = modelRow as VehicleModelRow;
+  const { data: brandRow } = await client.from("vehicle_brands").select("*").eq("id", model.brand_id).eq("active", true).maybeSingle();
+  if (!brandRow) return null;
+  return { ...mapCompatibilityRow(compatibility), brandName: (brandRow as VehicleBrandRow).name, modelName: model.name, vehicleType: model.vehicle_type };
+}
+
 function mapCompatibilityRow(row: VehicleCompatibilityRow): VehicleCompatibility {
   return {
     id: row.id,
