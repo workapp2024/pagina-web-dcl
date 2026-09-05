@@ -105,7 +105,7 @@ export default async function ProductoDetallePage({ params, searchParams }: Prod
                 {verifiedFitment ? <div className="mt-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4"><p className="text-xs font-bold uppercase tracking-widest text-emerald-300">Compatible con</p><p className="mt-2 font-bold">{verifiedFitment.brandName} {verifiedFitment.modelName}{yearValid ? ` ${selectedYear}` : ""}</p><p className="mt-1 text-sm text-zinc-300">{positionLabels[query.position!]} · {selectedConnector}</p></div> : null}
 
                 {connectorFitment && !query.year && <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"><p className="font-bold">Confirmar el año del vehículo</p><p className="mt-2 text-sm">{connectorFitment.brandName} {connectorFitment.modelName}: {connectorFitment.yearFrom}{connectorFitment.yearTo ? ' a '+connectorFitment.yearTo : ' en adelante'}. El conector coincide para ese rango; falta confirmar el año de tu vehículo.</p></div>}
-                {assessment.state === "out_of_range" && <p className="mt-6 rounded-2xl border border-amber-500/30 p-4">El a?o indicado no corresponde al rango compatible de este producto. Revis? el a?o o consultanos antes de comprar.</p>}
+                {assessment.state === "out_of_range" && <p className="mt-6 rounded-2xl border border-amber-500/30 p-4">El año indicado no corresponde al rango compatible de este producto. Revisá el año o consultanos antes de comprar.</p>}
                 <ProductPurchaseActions product={cartProduct}/>
 
                 {specs.length > 0 ? (
