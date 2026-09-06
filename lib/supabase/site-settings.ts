@@ -5,7 +5,7 @@ import { sanitizeStoredImageUrl } from "./storage";
 import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "./database.types";
 import { isThemePreset } from "@/lib/theme";
-import { whatsappUrl } from "@/lib/whatsapp";
+import { pickSiteSettings, type SiteSettingsSection } from "@/lib/site-settings-patch";
 
 export type SiteSettingsRow = Database["public"]["Tables"]["site_settings"]["Row"];
 
@@ -39,12 +39,12 @@ export async function getSupabaseSiteSettings(): Promise<Partial<SiteSettings> |
     const settings: Partial<SiteSettings> = {};
     const sanitizedLogo = sanitizeStoredImageUrl(row.logo_url);
     if (sanitizedLogo) settings.logo = sanitizedLogo;
-    settings.whatsapp = whatsappUrl("Hola DCL Cree LED, quiero consultar por iluminación para mi vehículo.");
-    if (row.instagram) settings.instagram = row.instagram;
-    if (row.facebook) settings.facebook = row.facebook;
-    if (row.email) settings.email = row.email;
-    if (row.phone) settings.phone = row.phone;
-    if (row.address) settings.address = row.address;
+    settings.whatsapp = row.whatsapp;
+    settings.instagram = row.instagram;
+    settings.facebook = row.facebook;
+    settings.email = row.email;
+    settings.phone = row.phone;
+    settings.address = row.address;
     if (isThemePreset(row.theme_preset)) settings.themePreset = row.theme_preset;
     if (row.vehicle_section_title) settings.vehicleSectionTitle = row.vehicle_section_title;
     if (row.needs_section_title) settings.needsSectionTitle = row.needs_section_title;
@@ -73,7 +73,8 @@ export async function getSupabaseSiteSettings(): Promise<Partial<SiteSettings> |
  * Persiste o actualiza site_settings (id=1) en Supabase llamando a la API segura del servidor (Etapa 8).
  */
 export async function upsertSupabaseSiteSettings(
-  siteSettings: Partial<SiteSettings>
+  siteSettings: Partial<SiteSettings>,
+  section: SiteSettingsSection
 ): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured()) {
     return { success: false, error: "Supabase no está configurado en las variables de entorno." };
@@ -85,7 +86,7 @@ export async function upsertSupabaseSiteSettings(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ siteSettings }),
+      body: JSON.stringify({ section, siteSettings: pickSiteSettings(section, siteSettings) }),
     });
 
     if (!response.ok) {

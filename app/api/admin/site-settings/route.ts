@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
-import type { SiteSettings } from "@/lib/site-data";
-import type { Database } from "@/lib/supabase/database.types";
-import { DEFAULT_THEME, isThemePreset } from "@/lib/theme";
-import { boundedString, readJsonObject } from "@/lib/api";
-
-export type SiteSettingsInsert = Database["public"]["Tables"]["site_settings"]["Insert"];
+import { buildSiteSettingsPatch } from "@/lib/site-settings-patch";
+import { readJsonObject } from "@/lib/api";
 
 export async function POST(request: Request) {
   const authenticated = await isAdminAuthenticated();
@@ -28,62 +24,27 @@ export async function POST(request: Request) {
   try {
     const body = await readJsonObject(request);
     if (!body) return NextResponse.json({ ok: false, message: "Datos de configuración no válidos." }, { status: 400 });
-    const siteSettings = body.siteSettings as Partial<SiteSettings> | undefined;
-
-    if (!siteSettings) {
-      return NextResponse.json({ ok: false, message: "Datos de configuración no válidos." }, { status: 400 });
+    let row;
+    try {
+      row = buildSiteSettingsPatch(body.section, body.siteSettings);
+    } catch (error) {
+      return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Datos no válidos." }, { status: 400 });
     }
-
-    const radioName = boundedString(siteSettings.radioName, 100) || "La Nueva";
-    const radioSubtitle = boundedString(siteSettings.radioSubtitle, 180) || "";
-    const radioStreamUrl = boundedString(siteSettings.radioStreamUrl, 2000) || "";
-    let parsedRadioUrl: URL | null = null; try { parsedRadioUrl = new URL(radioStreamUrl); } catch {}
-    if (!parsedRadioUrl || parsedRadioUrl.protocol !== "https:") return NextResponse.json({ ok: false, message: "La URL de radio debe usar HTTPS." }, { status: 400 });
-    const transferAlias = boundedString(siteSettings.transferAlias, 120) || "";
-    const transferCbuCvu = boundedString(siteSettings.transferCbuCvu, 40) || "";
-    const transferHolder = boundedString(siteSettings.transferHolder, 160) || "";
-    const transferInstitution = boundedString(siteSettings.transferInstitution, 160) || "";
-    const hasTransferData = Boolean(transferAlias || transferCbuCvu || transferHolder || transferInstitution);
-    if (hasTransferData && (!(transferAlias || transferCbuCvu) || !transferHolder || !transferInstitution)) return NextResponse.json({ ok: false, message: "Para habilitar transferencia indicá alias o CBU/CVU, titular e institución." }, { status: 400 });
-    const row: SiteSettingsInsert = {
-      id: 1,
-      logo_url: siteSettings.logo || "",
-      whatsapp: siteSettings.whatsapp || "",
-      instagram: siteSettings.instagram || "",
-      facebook: siteSettings.facebook || "",
-      email: siteSettings.email || "",
-      phone: siteSettings.phone || "",
-      address: siteSettings.address || "",
-      vehicle_section_title: siteSettings.vehicleSectionTitle || "",
-      needs_section_title: siteSettings.needsSectionTitle || "",
-      why_us_section_title: siteSettings.whyUsSectionTitle || "",
-      products_section_title: siteSettings.productsSectionTitle || "",
-      promotions_section_title: siteSettings.promotionsSectionTitle || "",
-      theme_preset: isThemePreset(siteSettings.themePreset) ? siteSettings.themePreset : DEFAULT_THEME,
-      radio_enabled: siteSettings.radioEnabled !== false,
-      radio_show_player: siteSettings.radioShowPlayer !== false,
-      radio_name: radioName,
-      radio_stream_url: radioStreamUrl,
-      radio_subtitle: radioSubtitle,
-      transfer_alias: transferAlias,
-      transfer_cbu_cvu: transferCbuCvu,
-      transfer_holder: transferHolder,
-      transfer_institution: transferInstitution,
-      transfer_instructions: boundedString(siteSettings.transferInstructions, 1000) || "",
-    };
 
     const supabase = createAdminServerClient();
     const { data, error } = await supabase
       .from("site_settings")
-      .upsert(row as never, { onConflict: "id" })
+      .update(row as never)
+      .eq("id", 1)
       .select("*")
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.warn("Error al persistir site_settings en Supabase:", error.message);
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
+    if (!data) return NextResponse.json({ ok: false, error: "No existe site_settings (id=1). No se creó ni reseteó configuración." }, { status: 409 });
     return NextResponse.json({ ok: true, data });
   } catch (err) {
     console.error("Excepción en API site-settings admin:", err);

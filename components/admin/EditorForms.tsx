@@ -15,6 +15,7 @@ import { getAdminSupabaseProducts, upsertSupabaseProduct } from "@/lib/supabase/
 import { upsertSupabasePromotion } from "@/lib/supabase/promotions";
 import { upsertSupabaseVehicleCategory } from "@/lib/supabase/vehicle-categories";
 import { upsertSupabaseSiteSettings } from "@/lib/supabase/site-settings";
+import { pickSiteSettings } from "@/lib/site-settings-patch";
 import { upsertSupabaseHomeSettings } from "@/lib/supabase/home-settings";
 import {
   calculateMarginPercentage,
@@ -953,16 +954,21 @@ export function AdminVehicleManager() {
 
 export function AdminHomeEditor() {
   const { content, setContent } = useSiteContent();
+  const [siteChanges, setSiteChanges] = useState<Partial<SiteSettings>>({});
   const [saveStatus, setSaveStatus] = useState<{ status: "saving" | "success" | "error"; message?: string } | null>(null);
 
-  const saveHomeToSupabase = async (customSettings?: SiteSettings) => {
+  const saveHomeToSupabase = async (customSettings?: SiteSettings, patch = siteChanges) => {
     const settingsToSave = customSettings || content.siteSettings;
     setSaveStatus({ status: "saving", message: "Guardando en Supabase..." });
 
     const [homeRes, siteRes] = await Promise.all([
       upsertSupabaseHomeSettings(settingsToSave),
-      upsertSupabaseSiteSettings(settingsToSave),
+      Object.keys(patch).length ? upsertSupabaseSiteSettings(patch, "home") : Promise.resolve({ success: true, error: undefined }),
     ]);
+
+    if (siteRes.success) setSiteChanges(current => Object.fromEntries(Object.entries(current).filter(([key, value]) =>
+      value !== patch[key as keyof SiteSettings]
+    )));
 
     if (homeRes.success && siteRes.success) {
       setSaveStatus({ status: "success", message: "✓ Guardado en Supabase" });
@@ -974,6 +980,7 @@ export function AdminHomeEditor() {
   };
 
   const updateSettings = (changes: Partial<SiteSettings>) => {
+    setSiteChanges(previous => ({ ...previous, ...pickSiteSettings("home", changes) }));
     setContent((previous) => ({
       ...previous,
       siteSettings: { ...previous.siteSettings, ...changes },
@@ -1017,7 +1024,7 @@ export function AdminHomeEditor() {
           fit="cover"
           onChange={(heroImage) => {
             updateSettings({ heroImage });
-            saveHomeToSupabase({ ...content.siteSettings, heroImage });
+            saveHomeToSupabase({ ...content.siteSettings, heroImage }, {});
           }}
         />
       </SectionCard>
@@ -1030,7 +1037,7 @@ export function AdminHomeEditor() {
           fit="contain"
           onChange={(logo) => {
             updateSettings({ logo });
-            saveHomeToSupabase({ ...content.siteSettings, logo });
+            saveHomeToSupabase({ ...content.siteSettings, logo }, { logo });
           }}
         />
       </SectionCard>
@@ -1131,15 +1138,23 @@ export function AdminHomeEditor() {
 
 export function AdminSiteSettingsForm() {
   const { content, setContent } = useSiteContent();
+  const [changes, setChanges] = useState<Partial<SiteSettings>>({});
   const [saveStatus, setSaveStatus] = useState<{ status: "saving" | "success" | "error"; message?: string } | null>(null);
 
-  const saveSiteSettingsToSupabase = async (customSettings?: SiteSettings) => {
-    const settingsToSave = customSettings || content.siteSettings;
+  const saveSiteSettingsToSupabase = async () => {
+    const settingsToSave = changes;
+    if (!Object.keys(settingsToSave).length) {
+      setSaveStatus({ status: "success", message: "No hay cambios para guardar." });
+      return;
+    }
     setSaveStatus({ status: "saving", message: "Guardando en Supabase..." });
 
-    const result = await upsertSupabaseSiteSettings(settingsToSave);
+    const result = await upsertSupabaseSiteSettings(settingsToSave, "configuration");
 
     if (result.success) {
+      setChanges(current => Object.fromEntries(Object.entries(current).filter(([key, value]) =>
+        value !== settingsToSave[key as keyof SiteSettings]
+      )));
       setSaveStatus({ status: "success", message: "✓ Guardado en Supabase" });
       setTimeout(() => setSaveStatus(null), 4000);
     } else {
@@ -1148,6 +1163,7 @@ export function AdminSiteSettingsForm() {
   };
 
   const updateSettings = (changes: Partial<SiteSettings>) => {
+    setChanges(previous => ({ ...previous, ...changes }));
     setContent((previous) => ({
       ...previous,
       siteSettings: { ...previous.siteSettings, ...changes },
