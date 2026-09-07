@@ -18,6 +18,8 @@ export interface Database {
           price: number;
           previous_price: number | null;
           category: string;
+          vehicle_types: string[] | null;
+          functions: string[] | null;
           image_url: string;
           cta_text: string;
           featured: boolean;
@@ -48,6 +50,8 @@ export interface Database {
           price?: number;
           previous_price?: number | null;
           category?: string;
+          vehicle_types?: string[] | null;
+          functions?: string[] | null;
           image_url?: string;
           cta_text?: string;
           featured?: boolean;
@@ -78,6 +82,8 @@ export interface Database {
           price?: number;
           previous_price?: number | null;
           category?: string;
+          vehicle_types?: string[] | null;
+          functions?: string[] | null;
           image_url?: string;
           cta_text?: string;
           featured?: boolean;

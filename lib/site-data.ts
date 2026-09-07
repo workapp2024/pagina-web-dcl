@@ -1,3 +1,4 @@
+import type { ProductVehicleType, ProductFunction } from "@/lib/product-taxonomy";
 import { whatsappUrl } from "@/lib/whatsapp";
 import { DEFAULT_THEME, type ThemePreset } from "@/lib/theme";
 
@@ -10,6 +11,8 @@ export type Product = {
   image: string;
   images?: string[];
   category: string;
+  vehicleTypes?: ProductVehicleType[];
+  functions?: ProductFunction[];
   featured: boolean;
   active: boolean;
   showInCatalog: boolean;

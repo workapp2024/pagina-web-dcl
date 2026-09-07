@@ -4,6 +4,8 @@ import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase
 import type { Product } from "@/lib/site-data";
 import type { Database } from "@/lib/supabase/database.types";
 import { mapAdminProductRow } from "@/lib/supabase/products";
+import { buildProductClassificationPatch } from "@/lib/product-taxonomy";
+import { readJsonObject } from "@/lib/api";
 
 export type ProductInsert = Database["public"]["Tables"]["products"]["Insert"];
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
@@ -74,6 +76,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Datos de producto no válidos." }, { status: 400 });
     }
 
+    const supabase = createAdminServerClient();
+    const existing = await supabase.from("products").select("id,category").eq("id", product.id).maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    const current = existing.data as { id: string; category: string } | null;
+    let classification;
+    try {
+      classification = buildProductClassificationPatch({
+        category: product.category || "General",
+        ...(product.vehicleTypes === undefined ? {} : { vehicleTypes: product.vehicleTypes }),
+        ...(product.functions === undefined ? {} : { functions: product.functions }),
+      }, current?.category);
+    } catch (error) {
+      return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Clasificación no válida." }, { status: 400 });
+    }
     const slug = product.href
       ? product.href.replace(/^\/productos\//, "")
       : product.id.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
@@ -88,7 +104,7 @@ export async function POST(request: Request) {
         product.previousPrice !== undefined && product.previousPrice !== null
           ? Number(product.previousPrice)
           : null,
-      category: product.category || "General",
+      ...(!current ? classification : {}),
       image_url: product.image || "",
       cta_text: product.ctaText || "VER PRODUCTO",
       featured: Boolean(product.featured),
@@ -109,12 +125,12 @@ export async function POST(request: Request) {
       stock_min: nonNegativeInteger(product.stockMin),
     };
 
-    const supabase = createAdminServerClient();
-    const { data, error } = await supabase
-      .from("products")
-      // El tipo manual de Supabase aún no declara Relationships; la librería
-      // infiere `never` para escrituras aunque el payload sí coincide con Insert.
-      .upsert(productRow as never, { onConflict: "id" })
+    // Classification edits have their own narrow PATCH. A stale full editor
+    // snapshot must not overwrite a more recent classification.
+    const query = current
+      ? supabase.from("products").update(productRow as never).eq("id", product.id)
+      : supabase.from("products").insert(productRow as never);
+    const { data, error } = await query
       .select("*")
       .single();
 
@@ -130,5 +146,36 @@ export async function POST(request: Request) {
       { ok: false, error: err instanceof Error ? err.message : "Error interno del servidor." },
       { status: 500 }
     );
+  }
+}
+
+export async function PATCH(request: Request) {
+  const accessError = await requireAdminWriteAccess();
+  if (accessError) return accessError;
+  const body = await readJsonObject(request);
+  if (!body || typeof body.id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(body.id)) {
+    return NextResponse.json({ ok: false, message: "Producto no válido." }, { status: 400 });
+  }
+  try {
+    const db = createAdminServerClient();
+    const { data: found, error: readError } = await db.from("products").select("category").eq("id", body.id).maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!found) return NextResponse.json({ ok: false, message: "El producto no existe." }, { status: 404 });
+    const current = found as { category: string };
+    let patch;
+    try { patch = buildProductClassificationPatch(body.classification, current.category); }
+    catch (error) { return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Clasificación no válida." }, { status: 400 }); }
+    const { data, error } = await db.from("products").update(patch as never).eq("id", body.id)
+      .eq("category", current.category).select("id,category,vehicle_types,functions").maybeSingle();
+    if (error) {
+      const message = /vehicle_types|functions/.test(error.message)
+        ? "La clasificación no pudo guardarse. Verificá que la migración de clasificación esté aplicada."
+        : "No se pudo guardar la clasificación.";
+      return NextResponse.json({ ok: false, message }, { status: 500 });
+    }
+    if (!data) return NextResponse.json({ ok: false, message: "El producto cambió. Recargá antes de guardar." }, { status: 409 });
+    return NextResponse.json({ ok: true, data });
+  } catch {
+    return NextResponse.json({ ok: false, message: "No se pudo consultar el producto." }, { status: 500 });
   }
 }

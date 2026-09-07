@@ -1,3 +1,4 @@
+import { normalizeVehicleTypes, normalizeProductFunctions } from "@/lib/product-taxonomy";
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
 import { isSupabaseConfigured } from "./test-connection";
@@ -15,6 +16,8 @@ const PUBLIC_PRODUCT_COLUMNS = [
   "price",
   "previous_price",
   "category",
+  "vehicle_types",
+  "functions",
   "image_url",
   "cta_text",
   "featured",
@@ -45,6 +48,8 @@ function mapProductRow(row: PublicProductRow, includePrivateFields = false): Pro
     previousPrice: row.previous_price !== null ? Number(row.previous_price) : undefined,
     image: sanitizeStoredImageUrl(row.image_url),
     category: row.category,
+    vehicleTypes: normalizeVehicleTypes(row.vehicle_types ?? []),
+    functions: normalizeProductFunctions(row.functions ?? []),
     featured: row.featured,
     active: row.active,
     showInCatalog: row.show_in_catalog ?? true,
@@ -93,6 +98,13 @@ export async function getSupabaseProducts(): Promise<Product[] | null> {
       .eq("show_in_catalog", true)
       .order("sort_order", { ascending: true });
 
+    if (error && /vehicle_types|functions/i.test(error.message) && ['42703', 'PGRST204'].includes(error.code)) {
+      // Read compatibility before the migration, still honoring catalog visibility.
+      const columns = PUBLIC_PRODUCT_COLUMNS.filter(column => column !== "vehicle_types" && column !== "functions").join(",");
+      const legacy = await client.from("products").select(columns).eq("active", true).eq("show_in_catalog", true).order("sort_order", { ascending: true });
+      data = legacy.data as typeof data;
+      error = legacy.error;
+    }
     if (error && /show_in_catalog|warranty_days/i.test(error.message)) {
       const legacyColumns = PUBLIC_PRODUCT_COLUMNS.filter((column) => column !== "show_in_catalog" && column !== "warranty_days").join(",");
       const legacy = await client.from("products").select(legacyColumns).eq("active", true).order("sort_order", { ascending: true });

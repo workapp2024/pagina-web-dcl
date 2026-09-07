@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ProductClassificationEditor } from "@/components/admin/ProductClassificationEditor";
 
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import type {
@@ -343,16 +344,9 @@ export function AdminProductsManager() {
                     <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Texto del botón</span>
                     <input value={product.ctaText} onChange={(event) => updateProduct(product.id, { ctaText: event.target.value })} className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white" />
                   </label>
-
-                  <label className="block text-sm text-zinc-300">
-                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Categoría</span>
-                    <input
-                      value={product.category}
-                      onChange={(event) => updateProduct(product.id, { category: event.target.value })}
-                      className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
-                    />
-                  </label>
                 </div>
+
+                <ProductClassificationEditor product={product} onSaved={classification => updateProduct(product.id, classification)} />
 
                 <label className="block text-sm text-zinc-300">
                   <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Descripción</span>
