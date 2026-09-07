@@ -3,7 +3,6 @@ import { FinalCTA } from "@/components/sections/FinalCTA";
 import { Hero } from "@/components/sections/Hero";
 import { NeedCategories } from "@/components/sections/NeedCategories";
 import { Promotions } from "@/components/sections/Promotions";
-import { VehicleCategories } from "@/components/sections/VehicleCategories";
 import { VehicleSelector } from "@/components/sections/VehicleSelector";
 import { WhyUs } from "@/components/sections/WhyUs";
 import { WorkGallery } from "@/components/sections/WorkGallery";
@@ -34,7 +33,6 @@ export default async function Home() {
         <main>
           <Hero />
           <VehicleSelector />
-          <VehicleCategories />
           <NeedCategories />
           <FeaturedProducts />
           <WhyUs />

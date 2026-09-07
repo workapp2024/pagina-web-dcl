@@ -3,6 +3,8 @@
 import posthog from "posthog-js";
 
 export const analyticsEvents = {
+  homeVehicleSelected: "home_vehicle_selected", homeNeedSelected: "home_need_selected",
+  productFilterApplied: "product_filter_applied", productFiltersCleared: "product_filters_cleared",
   pageView: "page_view", navigationClick: "navigation_click", productView: "product_viewed",
   categoryView: "category_view", addToCart: "add_to_cart", addToCartBlocked: "add_to_cart_blocked", removeFromCart: "remove_from_cart",
   cartView: "cart_view", checkoutStarted: "checkout_started", whatsappClick: "whatsapp_click",

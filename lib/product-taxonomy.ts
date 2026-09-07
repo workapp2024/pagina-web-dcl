@@ -1,10 +1,10 @@
 // Category IDs retain their stored labels to preserve existing catalog URLs and display.
 export const productCategories = [
-  { id: "General", label: "Sin clasificar" },
-  { id: "Iluminación frontal", label: "Iluminación frontal" },
-  { id: "Antiniebla", label: "Antiniebla" },
-  { id: "Auxiliar", label: "Auxiliar" },
-  { id: "Accesorios", label: "Accesorios" },
+  { id: "General", label: "Sin clasificar", slug: "general" },
+  { id: "Iluminación frontal", label: "Iluminación frontal", slug: "iluminacion-frontal" },
+  { id: "Antiniebla", label: "Antiniebla", slug: "antiniebla" },
+  { id: "Auxiliar", label: "Auxiliar", slug: "auxiliar" },
+  { id: "Accesorios", label: "Accesorios", slug: "accesorios" },
 ] as const;
 export const legacyProductCategories = ["Ópticas", "Opticas delanteras"] as const;
 export const productVehicleTypes = [
@@ -16,6 +16,15 @@ export const productFunctions = [
 ] as const;
 export type ProductVehicleType = (typeof productVehicleTypes)[number]["id"];
 export type ProductFunction = (typeof productFunctions)[number]["id"];
+
+export const commercialCategories = productCategories.filter(option => option.id !== "General");
+export const productNeeds: { id: string; label: string; filters: ProductClassificationFilters }[] = [
+  { id: "high", label: "Luces altas", filters: { function: "high" } },
+  { id: "low", label: "Luces bajas", filters: { function: "low" } },
+  { id: "fog", label: "Antinieblas", filters: { function: "fog" } },
+  ...commercialCategories.filter(option => option.id === "Auxiliar" || option.id === "Accesorios")
+    .map(option => ({ id: option.slug, label: option.id === "Auxiliar" ? "Auxiliares" : option.label, filters: { category: option.id } })),
+];
 
 export function isProductCategory(value: unknown): value is (typeof productCategories)[number]["id"] {
   return productCategories.some(option => option.id === value);

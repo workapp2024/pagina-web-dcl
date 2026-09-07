@@ -4,6 +4,7 @@ import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { ProductCatalog } from "@/components/public/ProductCatalog";
 import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
 import { getSupabaseProducts } from "@/lib/supabase/products";
+import { parseProductFilters, type CatalogParams } from "@/lib/product-filters";
 
 export const revalidate = 60;
 
@@ -12,8 +13,8 @@ export const metadata = {
   description: "Catálogo completo de iluminación CREE LED para autos, camionetas, motos y vehículos de trabajo.",
 };
 
-export default async function ProductosPage({ searchParams }: { searchParams: Promise<{ categoria?: string }> }) {
-  const { categoria } = await searchParams;
+export default async function ProductosPage({ searchParams }: { searchParams: Promise<CatalogParams> }) {
+  const filters = parseProductFilters(await searchParams);
   const products = await getSupabaseProducts();
   const activeProducts = (products ?? []).filter((product) => product.active && product.showInCatalog);
 
@@ -42,7 +43,7 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
                 Todavía no hay productos cargados.
               </p>
             ) : (
-              <ProductCatalog products={activeProducts} initialCategory={categoria} />
+              <ProductCatalog products={activeProducts} filters={filters} />
             )}
           </section>
         </main>

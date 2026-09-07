@@ -1,40 +1,65 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import type { Product } from "@/lib/site-data";
+import { productCategories, legacyProductCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
+import { categoryParam, filterCatalogProducts, parseProductFilters, productCatalogHref, productFilterEventProperties, productFilterLabels, type CatalogFilters } from "@/lib/product-filters";
 
-export function ProductCatalog({ products, initialCategory }: { products: Product[]; initialCategory?: string }) {
-  const categories = [...new Set(products.map(product => product.category))].sort();
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState(() => initialCategory && products.some(product => product.category === initialCategory) ? initialCategory : "all");
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return products.filter(product =>
-      (category === "all" || product.category === category) &&
-      (!needle || [product.name, product.description, product.category, product.connectorType].some(value => String(value || "").toLowerCase().includes(needle)))
-    );
-  }, [products, query, category]);
+const control = "mt-2 min-h-12 w-full min-w-0 rounded-xl border border-white/15 bg-zinc-950 px-3 text-base text-white";
 
-  useEffect(() => {
-    if (category !== "all") capture(analyticsEvents.categoryView, { category });
-  }, [category]);
-
-  useEffect(() => {
-    if (!query.trim()) return;
-    const timer = setTimeout(() => capture(analyticsEvents.catalogSearch, { query_length: query.trim().length, result_count: visible.length }), 600);
-    return () => clearTimeout(timer);
-  }, [query, visible.length]);
-
+export function ProductCatalog({ products, filters }: { products: Product[]; filters: CatalogFilters }) {
+  const visible = filterCatalogProducts(products, filters);
+  const context = productFilterLabels(filters.classification);
+  const clear = () => capture(analyticsEvents.productFiltersCleared, productFilterEventProperties(filters.classification));
   return <>
-    <div className="mb-7 grid gap-3 sm:grid-cols-[1fr_220px]">
-      <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar producto, categoría o conector" className="min-h-12 rounded-xl border border-white/10 bg-zinc-950 px-4 text-white" />
-      <select value={category} onChange={event => setCategory(event.target.value)} className="min-h-12 rounded-xl border border-white/10 bg-zinc-950 px-4 text-white">
-        <option value="all">Todas las categorías</option>
-        {categories.map(value => <option key={value}>{value}</option>)}
-      </select>
+    <form key={JSON.stringify(filters)} action="/productos" method="get" className="mb-7 space-y-4 rounded-2xl border border-white/10 p-4 sm:p-5" onSubmit={event => {
+      const values = Object.fromEntries(new FormData(event.currentTarget).entries()) as Record<string, string>;
+      const next = parseProductFilters(values);
+      if (!next.invalid) capture(analyticsEvents.productFilterApplied, productFilterEventProperties(next.classification));
+    }}>
+      <label className="block text-sm text-zinc-300">Buscar producto, categoría o conector
+        <input name="q" type="search" maxLength={120} defaultValue={filters.query} className={control} />
+      </label>
+      <div className="grid min-w-0 gap-4 sm:grid-cols-3">
+        <label className="min-w-0 text-sm text-zinc-300">Vehículo
+          <select name="vehiculo" defaultValue={filters.classification.vehicleType ?? ""} className={control}>
+            <option value="">Todos los vehículos</option>
+            {productVehicleTypes.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0 text-sm text-zinc-300">Categoría
+          <select name="categoria" defaultValue={filters.classification.category ? categoryParam(filters.classification.category) : ""} className={control}>
+            <option value="">Todas las categorías</option>
+            {productCategories.map(option => <option key={option.id} value={option.slug}>{option.label}</option>)}
+            {legacyProductCategories.filter(category => products.some(product => product.category === category) || filters.classification.category === category).map(category => <option key={category} value={category}>{category} (anterior)</option>)}
+          </select>
+        </label>
+        <label className="min-w-0 text-sm text-zinc-300">Función
+          <select name="funcion" defaultValue={filters.classification.function ?? ""} className={control}>
+            <option value="">Todas las funciones</option>
+            {productFunctions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+        </label>
+      </div>
+      {filters.classification.connectorType && <input type="hidden" name="conector" value={filters.classification.connectorType} />}
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className="min-h-12 rounded-full bg-red-600 px-5 text-sm font-bold text-white">Aplicar filtros</button>
+        <Link href="/productos" onClick={clear} className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-5 text-sm text-white">Limpiar filtros</Link>
+      </div>
+      <p className="text-xs leading-5 text-zinc-400">Estos filtros muestran clasificación comercial; no confirman compatibilidad con marca, modelo o año.</p>
+      <Link href={productCatalogHref(filters.classification).replace(/^\/productos/, "/vehiculos")} className="inline-flex min-h-11 items-center text-sm text-red-300 underline">Confirmar compatibilidad técnica</Link>
+    </form>
+    <div className="mb-5" aria-live="polite">
+      <h2 className="break-words text-xl font-bold text-white">{filters.invalid ? "Revisá los filtros del enlace" : context || "Catálogo completo"}</h2>
+      <p className="mt-2 text-sm text-zinc-400">{visible.length} producto(s){filters.query ? " para tu búsqueda" : ""}</p>
     </div>
-    {visible.length ? <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{visible.map(product => <ProductCard key={product.id} {...product} />)}</div> : <p className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-zinc-400">No encontramos productos para esa búsqueda.</p>}
+    {visible.length ? <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{visible.map(product => <ProductCard key={product.id} {...product} />)}</div> :
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm leading-6 text-zinc-300">
+        <p>{filters.invalid ? "El enlace contiene filtros no válidos. Elegí una combinación con los controles de arriba." : "No encontramos productos clasificados para esta combinación."}</p>
+        <p className="mt-2">Puede haber productos pendientes de clasificación. Probá otra categoría o consultá el catálogo completo.</p>
+        <Link href="/productos" onClick={clear} className="mt-3 inline-flex min-h-12 items-center font-bold text-red-300 underline">Ver catálogo completo</Link>
+      </div>}
   </>;
 }

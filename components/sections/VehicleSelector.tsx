@@ -1,2 +1,13 @@
-import { VehicleFinder } from "@/components/public/VehicleFinder";
-export function VehicleSelector(){return <section id="vehiculos" className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8"><div className="rounded-[2rem] border border-red-500/20 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-5 shadow-[0_30px_60px_rgba(0,0,0,.5)] sm:p-8 lg:p-10"><div className="mb-7 max-w-2xl"><h2 className="text-3xl font-black uppercase tracking-[-.06em] text-white md:text-4xl">Encontrá el LED para tu vehículo</h2><p className="mt-3 text-base leading-7 text-zinc-300">Elegí sólo los datos que conozcas. El año es opcional.</p></div><VehicleFinder/></div></section>}
+import Link from "next/link";
+import { VehicleCategories } from "@/components/sections/VehicleCategories";
+
+export function VehicleSelector() {
+  return <section id="vehiculos" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-14 sm:px-6 lg:px-8">
+    <div className="mb-7 max-w-2xl">
+      <h2 className="text-3xl font-black uppercase tracking-tight text-white">¿Qué vehículo tenés?</h2>
+      <p className="mt-3 text-sm leading-6 text-zinc-300">Elegí el tipo de vehículo. En el catálogo podés refinar por categoría y función, como Alta o Baja.</p>
+    </div>
+    <VehicleCategories />
+    <p className="mt-5 text-sm leading-6 text-zinc-400">Clasificación comercial, sin confirmar compatibilidad exacta. Si conocés marca, modelo y año, <Link href="/vehiculos" className="inline-flex min-h-11 items-center text-red-300 underline">consultá el buscador técnico</Link>.</p>
+  </section>;
+}
