@@ -1,4 +1,5 @@
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
+import Link from "next/link";
 
 export function FinalCTA() {
   return (
@@ -13,12 +14,12 @@ export function FinalCTA() {
         </p>
 
         <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
-          <a
-            href="#productos"
+          <Link
+            href="/productos"
             className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3.5 text-sm font-bold uppercase tracking-[0.14em] text-black transition hover:bg-zinc-200"
           >
             VER PRODUCTOS
-          </a>
+          </Link>
           <WhatsAppButton label="WHATSAPP" />
         </div>
       </div>

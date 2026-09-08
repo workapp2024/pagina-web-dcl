@@ -390,14 +390,6 @@ export function AdminProductsManager() {
                   <label className="inline-flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={product.featured}
-                      onChange={(event) => updateProduct(product.id, { featured: event.target.checked })}
-                    />
-                    Destacado
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
                       checked={product.active}
                       onChange={(event) => updateProduct(product.id, { active: event.target.checked })}
                     />

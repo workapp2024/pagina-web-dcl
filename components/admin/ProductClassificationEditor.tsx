@@ -9,7 +9,8 @@ export function ProductClassificationEditor({ product, onSaved }: { product: Pro
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const value = { ...product, ...changes };
-  const pending = !value.vehicleTypes?.length || value.category === "General" || !isProductCategory(value.category);
+  const accessory = value.category === "Accesorios";
+  const pending = (!accessory && !value.vehicleTypes?.length) || value.category === "General" || !isProductCategory(value.category);
   async function save() {
     if (busy || !Object.keys(changes).length) return;
     setBusy(true); setMessage("");
@@ -32,10 +33,17 @@ export function ProductClassificationEditor({ product, onSaved }: { product: Pro
       </select>
     </label>
     <div className="mt-4 grid gap-4 sm:grid-cols-2">
-      <fieldset><legend className="text-sm font-bold">Función (opcional)</legend>{productFunctions.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm">
+      <fieldset><legend className="text-sm font-bold">Funciones (seleccioná una o varias)</legend>
+        <p className="mt-2 text-xs text-zinc-400">{accessory ? "No aplica habitualmente a accesorios. Dejá sin marcar salvo un caso excepcional; el conector también es opcional." : "Podés marcar Alta y Baja juntas. El conector no determina la función para un vehículo concreto."}</p>
+        {productFunctions.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm">
         <input type="checkbox" checked={value.functions?.includes(option.id) ?? false} onChange={event => setChanges(previous => ({ ...previous, functions: event.target.checked ? [...(value.functions ?? []), option.id] : (value.functions ?? []).filter(item => item !== option.id) }))}/>{option.label}
       </label>)}</fieldset>
-      <fieldset><legend className="text-sm font-bold">Tipo de vehículo</legend>{productVehicleTypes.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm">
+      <fieldset><legend className="text-sm font-bold">Tipo de vehículo{accessory ? " (opcional, selección múltiple)" : " (selección múltiple)"}</legend>
+        {accessory && <>
+          <p className="mt-2 text-xs text-zinc-400">No requiere marca ni modelo. Sin tipos seleccionados, el uso es universal.</p>
+          <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={!value.vehicleTypes?.length} onChange={() => setChanges(previous => ({ ...previous, vehicleTypes: [] }))} />Universal / Todos los vehículos</label>
+        </>}
+        {productVehicleTypes.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm">
         <input type="checkbox" checked={value.vehicleTypes?.includes(option.id) ?? false} onChange={event => setChanges(previous => ({ ...previous, vehicleTypes: event.target.checked ? [...(value.vehicleTypes ?? []), option.id] : (value.vehicleTypes ?? []).filter(item => item !== option.id) }))}/>{option.label}
       </label>)}</fieldset>
     </div>

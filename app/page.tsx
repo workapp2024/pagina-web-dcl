@@ -1,4 +1,3 @@
-import { FeaturedProducts } from "@/components/sections/FeaturedProducts";
 import { FinalCTA } from "@/components/sections/FinalCTA";
 import { Hero } from "@/components/sections/Hero";
 import { NeedCategories } from "@/components/sections/NeedCategories";
@@ -39,7 +38,6 @@ export default async function Home() {
           <PremiumProducts products={premiumProducts} />
           <VehicleSelector />
           <NeedCategories />
-          <FeaturedProducts />
           <WhyUs />
           <Promotions />
           <DclMusic stations={stations} />

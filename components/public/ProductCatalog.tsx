@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import type { Product } from "@/lib/site-data";
-import { productCategories, legacyProductCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
+import { commercialCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
 import { categoryParam, filterCatalogProducts, parseProductFilters, productCatalogHref, productFilterEventProperties, productFilterLabels, type CatalogFilters } from "@/lib/product-filters";
 
 const control = "mt-2 min-h-12 w-full min-w-0 rounded-xl border border-white/15 bg-zinc-950 px-3 text-base text-white";
@@ -32,8 +32,8 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
         <label className="min-w-0 text-sm text-zinc-300">Categoría
           <select name="categoria" defaultValue={filters.classification.category ? categoryParam(filters.classification.category) : ""} className={control}>
             <option value="">Todas las categorías</option>
-            {productCategories.map(option => <option key={option.id} value={option.slug}>{option.label}</option>)}
-            {legacyProductCategories.filter(category => products.some(product => product.category === category) || filters.classification.category === category).map(category => <option key={category} value={category}>{category} (anterior)</option>)}
+            {commercialCategories.map(option => <option key={option.id} value={option.slug}>{option.label}</option>)}
+            {filters.classification.category && !commercialCategories.some(option => option.id === filters.classification.category) && <option value={categoryParam(filters.classification.category)}>{filters.classification.category} (anterior)</option>}
           </select>
         </label>
         <label className="min-w-0 text-sm text-zinc-300">Función
@@ -49,7 +49,9 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
         <Link href="/productos" onClick={clear} className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-5 text-sm text-white">Limpiar filtros</Link>
       </div>
       <p className="text-xs leading-5 text-zinc-400">Estos filtros muestran clasificación comercial; no confirman compatibilidad con marca, modelo o año.</p>
-      <Link href={productCatalogHref(filters.classification).replace(/^\/productos/, "/vehiculos")} className="inline-flex min-h-11 items-center text-sm text-red-300 underline">Confirmar compatibilidad técnica</Link>
+      {filters.classification.category === "Accesorios"
+        ? <p className="text-sm text-zinc-300">Elegí Todos los vehículos o un tipo. Los accesorios universales se incluyen en cada tipo; no necesitás marca ni modelo.</p>
+        : <Link href={productCatalogHref(filters.classification).replace(/^\/productos/, "/vehiculos")} className="inline-flex min-h-11 items-center text-sm text-red-300 underline">Confirmar compatibilidad técnica</Link>}
     </form>
     <div className="mb-5" aria-live="polite">
       <h2 className="break-words text-xl font-bold text-white">{filters.invalid ? "Revisá los filtros del enlace" : context || "Catálogo completo"}</h2>

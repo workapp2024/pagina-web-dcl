@@ -1,4 +1,4 @@
-import { normalizeVehicleTypes, normalizeProductFunctions } from "@/lib/product-taxonomy";
+import { normalizeVehicleTypes, normalizeCommercialClassification } from "@/lib/product-taxonomy";
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
 import { isSupabaseConfigured } from "./test-connection";
@@ -47,9 +47,8 @@ function mapProductRow(row: PublicProductRow, includePrivateFields = false): Pro
     price: Number(row.price),
     previousPrice: row.previous_price !== null ? Number(row.previous_price) : undefined,
     image: sanitizeStoredImageUrl(row.image_url),
-    category: row.category,
+    ...normalizeCommercialClassification(row.category, row.functions ?? []),
     vehicleTypes: normalizeVehicleTypes(row.vehicle_types ?? []),
-    functions: normalizeProductFunctions(row.functions ?? []),
     featured: row.featured,
     active: row.active,
     showInCatalog: row.show_in_catalog ?? true,

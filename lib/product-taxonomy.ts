@@ -2,8 +2,7 @@
 export const productCategories = [
   { id: "General", label: "Sin clasificar", slug: "general" },
   { id: "Iluminación frontal", label: "Iluminación frontal", slug: "iluminacion-frontal" },
-  { id: "Antiniebla", label: "Antiniebla", slug: "antiniebla" },
-  { id: "Auxiliar", label: "Auxiliar", slug: "auxiliar" },
+  { id: "Auxiliar", label: "Iluminación auxiliar", slug: "auxiliar" },
   { id: "Accesorios", label: "Accesorios", slug: "accesorios" },
 ] as const;
 export const legacyProductCategories = ["Ópticas", "Opticas delanteras"] as const;
@@ -40,6 +39,21 @@ function selection<T extends string>(value: unknown, options: readonly { id: T }
 export function normalizeVehicleTypes(value: unknown): ProductVehicleType[] { return selection(value, productVehicleTypes, "tipos de vehículo"); }
 export function normalizeProductFunctions(value: unknown): ProductFunction[] { return selection(value, productFunctions, "funciones"); }
 
+// Read legacy fog categories through the same contract until the data migration runs.
+export function normalizeCommercialClassification(category: string, functions: readonly string[] = []) {
+  return {
+    category: category === "Antiniebla" ? "Auxiliar" : category,
+    functions: normalizeProductFunctions(category === "Antiniebla" ? [...functions, "fog"] : functions),
+  };
+}
+
+export function accessoryVehicleLabel(product: { category: string; vehicleTypes?: readonly string[] }) {
+  if (product.category !== "Accesorios") return undefined;
+  const destinations = productVehicleTypes.filter(option => product.vehicleTypes?.includes(option.id));
+  return !destinations.length || destinations.length === productVehicleTypes.length
+    ? "Uso universal" : `Para ${destinations.map(option => option.label).join(" · ")}`;
+}
+
 export function buildProductClassificationPatch(value: unknown, existingCategory?: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Clasificación no válida.");
   const entries = Object.entries(value);
@@ -62,8 +76,10 @@ export type ProductClassificationFilters = { category?: string; vehicleType?: Pr
 const connectorKey = (value: string) => value.replace(/[^a-z0-9]/gi, "").toLowerCase();
 // Commercial relevance only; never asserts exact vehicle fitment or stock availability.
 export function matchesProductClassification(product: ClassifiedProduct, filters: ProductClassificationFilters): boolean {
-  return (!filters.category || product.category === filters.category)
-    && (!filters.vehicleType || Boolean(product.vehicleTypes?.includes(filters.vehicleType)))
-    && (!filters.function || Boolean(product.functions?.includes(filters.function)))
+  const classification = normalizeCommercialClassification(product.category, product.functions);
+  const universal = product.category === "Accesorios" && !product.vehicleTypes?.length;
+  return (!filters.category || classification.category === filters.category)
+    && (!filters.vehicleType || universal || Boolean(product.vehicleTypes?.includes(filters.vehicleType)))
+    && (!filters.function || classification.functions.includes(filters.function))
     && (!filters.connectorType || (Boolean(connectorKey(filters.connectorType)) && Boolean(product.connectorType) && connectorKey(product.connectorType!) === connectorKey(filters.connectorType)));
 }

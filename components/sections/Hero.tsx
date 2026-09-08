@@ -1,6 +1,7 @@
 "use client";
 
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
+import Link from "next/link";
 
 import { ManagedImage } from "@/components/ui/ManagedImage";
 
@@ -37,12 +38,12 @@ export function Hero() {
             >
               {content.siteSettings.heroPrimaryCta}
             </a>
-            <a
-              href="#productos"
+            <Link
+              href="/productos"
               className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.14em] text-white transition hover:border-red-500/70 hover:text-red-300"
             >
               {content.siteSettings.heroSecondaryCta}
-            </a>
+            </Link>
           </div>
         </div>
 

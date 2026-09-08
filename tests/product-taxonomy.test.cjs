@@ -7,9 +7,11 @@ const taxonomy = load('lib/product-taxonomy.ts', {}, { Error });
 const plain = value => JSON.parse(JSON.stringify(value));
 const patch = taxonomy.buildProductClassificationPatch;
 
-test('actual migrated PostgreSQL constraints accept the contract and reject unknown values in an ephemeral database', async () => {
-  const db = await require('./database.cjs')();
+test('classification PostgreSQL constraints accept the contract and reject unknown values in an isolated database', async () => {
+  const db = new (require('@electric-sql/pglite').PGlite)();
   try {
+    await db.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE TABLE products(id TEXT PRIMARY KEY, name TEXT, slug TEXT);');
+    await db.exec(fs.readFileSync('supabase/migrations/20260906020000_product_classification.sql', 'utf8'));
     await db.query("INSERT INTO products(id,name,slug) VALUES('taxonomy-test','Test','taxonomy-test')");
     for (const values of [[], ['auto'], ['auto', 'camioneta'], ['auto', 'camioneta', 'moto', 'camion'], null]) {
       await db.query('UPDATE products SET vehicle_types=$1::text[] WHERE id=$2', [values, 'taxonomy-test']);

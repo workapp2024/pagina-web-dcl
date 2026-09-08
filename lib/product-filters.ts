@@ -25,12 +25,13 @@ export function parseProductFilters(params: CatalogParams): CatalogFilters {
   if (category) {
     const option = productCategories.find(option => option.slug === category || option.id === category);
     if (option) classification.category = option.id;
+    else if (category === "antiniebla" || category === "Antiniebla") classification.function = "fog";
     else if (legacyProductCategories.some(value => value === category)) classification.category = category;
     else invalid = true;
   }
   if (fn) {
     const option = productFunctions.find(option => option.id === fn);
-    if (option) classification.function = option.id; else invalid = true;
+    if (option && (!classification.function || classification.function === option.id)) classification.function = option.id; else invalid = true;
   }
   if (connector) {
     if (/^[a-z0-9][a-z0-9 -]{0,29}$/i.test(connector)) classification.connectorType = connector;
@@ -55,7 +56,9 @@ export function filterCatalogProducts(products: Product[], filters: CatalogFilte
   const needle = filters.query.toLowerCase();
   return products.filter(product => product.active && product.showInCatalog
     && matchesProductClassification(product, filters.classification)
-    && (!needle || [product.name, product.description, product.category, product.connectorType].some(value => value?.toLowerCase().includes(needle))));
+    && (!needle || [product.name, product.description, product.category, product.connectorType,
+      ...productFunctions.filter(option => product.functions?.includes(option.id)).map(option => option.label)
+    ].some(value => value?.toLowerCase().includes(needle))));
 }
 
 export function productFilterLabels(filters: ProductClassificationFilters) {

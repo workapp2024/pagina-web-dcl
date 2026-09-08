@@ -1,6 +1,7 @@
 import { ManagedImage } from "@/components/ui/ManagedImage";
 import { AddToCartButton } from "@/components/store/AddToCartButton";
 import { whatsappUrl } from "@/lib/whatsapp";
+import { accessoryVehicleLabel } from "@/lib/product-taxonomy";
 
 type ProductCardProps = {
   id: string;
@@ -11,10 +12,12 @@ type ProductCardProps = {
   ctaText: string;
   price: number;
   category: string;
+  vehicleTypes?: readonly string[];
   previousPrice?: number;
 };
 
-export function ProductCard({ id, name, description, image, href, ctaText, price, category, previousPrice }: ProductCardProps) {
+export function ProductCard({ id, name, description, image, href, ctaText, price, category, vehicleTypes, previousPrice }: ProductCardProps) {
+  const destination = accessoryVehicleLabel({ category, vehicleTypes });
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/3">
       <div className="relative flex h-64 w-full items-center justify-center overflow-hidden bg-zinc-950/60 p-4">
@@ -28,6 +31,7 @@ export function ProductCard({ id, name, description, image, href, ctaText, price
       <div className="flex flex-1 flex-col p-5">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-400">DCL</p>
         <h3 className="mt-3 text-2xl font-black uppercase tracking-[-0.05em] text-white">{name}</h3>
+        {destination && <p className="mt-2 text-sm font-semibold text-red-300">{destination}</p>}
         <p className="mt-3 text-sm leading-6 text-zinc-300">{description}</p>
 
         <div className="mt-4 flex items-baseline gap-3">
