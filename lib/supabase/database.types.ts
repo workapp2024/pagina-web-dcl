@@ -6,9 +6,29 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+// Premium only needs these two tables. Reuse their column definitions without
+// changing the legacy clients: their other tables lack SDK relationship metadata.
+// Neither of these tables has outgoing foreign keys in the SQL migrations.
+export type PremiumDatabase = {
+  public: {
+    Tables: {
+      premium_settings: Database["public"]["Tables"]["premium_settings"];
+      products: Database["public"]["Tables"]["products"] & { Relationships: [] };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+  };
+};
+
 export interface Database {
   public: {
     Tables: {
+      premium_settings: {
+        Row: { id: number; product_ids: string[]; revision: number };
+        Insert: { id?: number; product_ids?: string[]; revision?: number };
+        Update: { product_ids?: string[]; revision?: number };
+        Relationships: [];
+      };
       products: {
         Row: {
           id: string;

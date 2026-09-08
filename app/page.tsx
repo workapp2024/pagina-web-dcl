@@ -17,12 +17,16 @@ import { DEFAULT_RADIO_STATION } from "@/lib/radio-stations";
 import { getPublicRadioStations } from "@/lib/supabase/radio-stations";
 import { EventOnMount } from "@/components/analytics/EventOnMount";
 import { analyticsEvents } from "@/lib/analytics";
+import { getPremiumProductIds } from "@/lib/supabase/premium";
+import { resolvePremiumProducts } from "@/lib/premium";
+import { PremiumProducts } from "@/components/sections/PremiumProducts";
 
 // Se revalida periódicamente para reflejar altas/bajas de productos hechas desde el panel sin necesidad de un nuevo deploy.
 export const revalidate = 60;
 
 export default async function Home() {
-  const [products, gallery, remoteStations] = await Promise.all([getSupabaseProducts(), getPublicGallery(16), getPublicRadioStations()]);
+  const [products, gallery, remoteStations, premiumIds] = await Promise.all([getSupabaseProducts(), getPublicGallery(16), getPublicRadioStations(), getPremiumProductIds()]);
+  const premiumProducts = resolvePremiumProducts(premiumIds, products ?? []);
   const stations = remoteStations.length ? remoteStations : [DEFAULT_RADIO_STATION];
 
   return (
@@ -32,6 +36,7 @@ export default async function Home() {
 
         <main>
           <Hero />
+          <PremiumProducts products={premiumProducts} />
           <VehicleSelector />
           <NeedCategories />
           <FeaturedProducts />
