@@ -1,3 +1,4 @@
+import { validateAdditionalProductImages } from "@/lib/product-images";
 import { NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
@@ -76,6 +77,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Datos de producto no válidos." }, { status: 400 });
     }
 
+    let additionalImages: string[] | undefined;
+    try {
+      if (product.images !== undefined) additionalImages = validateAdditionalProductImages(product.images, product.image);
+    } catch (error) {
+      return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Imágenes no válidas." }, { status: 400 });
+    }
     const supabase = createAdminServerClient();
     const existing = await supabase.from("products").select("id,category").eq("id", product.id).maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
@@ -106,6 +113,7 @@ export async function POST(request: Request) {
           : null,
       ...(!current ? classification : {}),
       image_url: product.image || "",
+      ...(additionalImages === undefined ? {} : { additional_image_urls: additionalImages }),
       cta_text: product.ctaText || "VER PRODUCTO",
       featured: Boolean(product.featured),
       active: Boolean(product.active),
@@ -136,6 +144,7 @@ export async function POST(request: Request) {
 
     if (error) {
       console.warn("Error al persistir producto en Supabase:", error.message);
+      if (/additional_image_urls/.test(error.message)) return NextResponse.json({ ok: false, message: "Aplicá la migración de imágenes adicionales antes de guardar las imágenes del producto." }, { status: 503 });
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 

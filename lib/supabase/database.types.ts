@@ -41,6 +41,7 @@ export interface Database {
           vehicle_types: string[] | null;
           functions: string[] | null;
           image_url: string;
+          additional_image_urls: string[];
           cta_text: string;
           featured: boolean;
           active: boolean;
@@ -73,6 +74,7 @@ export interface Database {
           vehicle_types?: string[] | null;
           functions?: string[] | null;
           image_url?: string;
+          additional_image_urls?: string[];
           cta_text?: string;
           featured?: boolean;
           active?: boolean;
@@ -105,6 +107,7 @@ export interface Database {
           vehicle_types?: string[] | null;
           functions?: string[] | null;
           image_url?: string;
+          additional_image_urls?: string[];
           cta_text?: string;
           featured?: boolean;
           active?: boolean;

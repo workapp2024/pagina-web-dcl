@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ProductEditorDialog } from "@/components/admin/ProductEditorDialog";
 import { ProductClassificationEditor } from "@/components/admin/ProductClassificationEditor";
 
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
@@ -53,12 +54,14 @@ function ImagePicker({
   storageKey,
   onChange,
   fit = "contain",
+  onBusyChange,
 }: {
   source: string;
   label: string;
   storageKey: string;
   onChange: (source: string) => void;
   fit?: "contain" | "cover";
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const [isSaving, setIsSaving] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -75,6 +78,7 @@ function ImagePicker({
     }
 
     setIsSaving(true);
+    onBusyChange?.(true);
     setUploadStatus("Subiendo a Supabase Storage...");
 
     const category: StorageCategory = storageKey.startsWith("product")
@@ -108,6 +112,7 @@ function ImagePicker({
       window.alert(message);
     } finally {
       setIsSaving(false);
+      onBusyChange?.(false);
       setTimeout(() => setUploadStatus(null), 4000);
     }
   }
@@ -138,6 +143,14 @@ function ImagePicker({
 
 export function AdminProductsManager() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [search, setSearch] = useState("");
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [newProduct, setNewProduct] = useState<Product | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [classificationPending, setClassificationPending] = useState(false);
+  const [classificationSaving, setClassificationSaving] = useState(false);
+  const saving = useRef(false);
+  const [dirty, setDirty] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, PricingDraft>>({});
@@ -164,12 +177,15 @@ export function AdminProductsManager() {
   }, []);
 
   const saveProductToSupabase = async (productToSave: Product): Promise<boolean> => {
+    if (saving.current || uploading || classificationSaving) return false;
+    saving.current = true;
     setProductStatuses((prev) => ({
       ...prev,
       [productToSave.id]: { status: "saving", message: "Guardando en Supabase..." },
     }));
 
     const result = await upsertSupabaseProduct(productToSave);
+    saving.current = false;
 
     if (result.success) {
       setProductStatuses((prev) => ({
@@ -194,11 +210,9 @@ export function AdminProductsManager() {
   };
 
   const updateProduct = (productId: string, changes: Partial<Product>) => {
-    setProducts((previous) =>
-      previous.map((product) =>
-        product.id === productId ? { ...product, ...changes } : product,
-      ),
-    );
+    setDirty(true);
+    setNewProduct(previous => previous?.id === productId ? { ...previous, ...changes } : previous);
+    setEditingProduct(previous => previous?.id === productId ? { ...previous, ...changes } : previous);
   };
 
   const updatePricingDraft = (productId: string, field: keyof PricingDraft, value: string) => {
@@ -251,7 +265,7 @@ export function AdminProductsManager() {
     if (salePrice !== undefined) updatePricingDraft(product.id, "price", String(salePrice));
   };
 
-  const addProduct = async () => {
+  const addProduct = () => {
     const timestamp = Date.now();
     const productName = "Nuevo producto";
     const slug = `${slugifyProductName(productName) || "producto"}-${timestamp}`;
@@ -262,7 +276,7 @@ export function AdminProductsManager() {
       description: "Descripción del producto.",
       price: 0,
       previousPrice: undefined,
-      image: "https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=900&q=80",
+      image: "",
       images: [],
       category: "General",
       featured: false,
@@ -273,9 +287,11 @@ export function AdminProductsManager() {
       ctaText: "VER PRODUCTO",
     };
 
-    setProducts((previous) => [...previous, nextProduct]);
-
-    await saveProductToSupabase(nextProduct);
+    setPricingDrafts({});
+    setNewProduct(nextProduct);
+    setEditingProduct(null);
+    setDirty(false);
+    setClassificationPending(false);
   };
 
   const removeProduct = async (product: Product) => {
@@ -285,7 +301,26 @@ export function AdminProductsManager() {
 
     // Remover del estado local para la vista
     setProducts((previous) => previous.filter((item) => item.id !== product.id));
+    setEditingProduct(null); setDirty(false);
   };
+
+  const closeEditor = () => {
+    if (saving.current || uploading || classificationSaving) return;
+    if ((dirty || classificationPending) && !window.confirm("¿Cerrar el editor? Los cambios sin guardar no se publicarán.")) return;
+    setEditingProduct(null); setNewProduct(null); setDirty(false); setClassificationPending(false);
+  };
+  const finishSave = async (product: Product) => {
+    if (classificationPending) {
+      setProductStatuses(previous => ({ ...previous, [product.id]: { status: "error", message: "Guardá primero los cambios de Clasificación con su botón Guardar clasificación." } }));
+      return;
+    }
+    if (!(await saveProductToSupabase(product))) return;
+    setProducts(previous => previous.some(item => item.id === product.id) ? previous.map(item => item.id === product.id ? product : item) : [product, ...previous]);
+    if (newProduct) setSearch("");
+    setEditingProduct(null); setNewProduct(null); setDirty(false);
+  };
+  const selectedProduct = newProduct ?? editingProduct;
+  const visibleProducts = products.filter(product => product.name.toLocaleLowerCase("es").includes(search.trim().toLocaleLowerCase("es")));
 
   return (
     <div className="space-y-6">
@@ -310,27 +345,20 @@ export function AdminProductsManager() {
 
       {isLoadingProducts ? <p className="text-sm text-zinc-400">Cargando productos administrativos...</p> : null}
 
-      {products.map((product) => {
+      <label className="block text-sm text-zinc-300">Buscar producto…<input type="search" placeholder="Buscar producto…" value={search} onChange={event => setSearch(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-zinc-950 px-4 text-base" /></label>
+      <div className="space-y-3">{visibleProducts.map(product => <article key={product.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-zinc-950 p-4">
+        <div className="min-w-0"><h2 className="break-words font-bold text-white">{product.name}</h2><p className="mt-1 text-sm text-zinc-300">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(product.price)} · Stock: {product.stock ?? 0} · {product.active ? "Activo" : "Inactivo"}</p></div>
+        <button type="button" onClick={() => { setEditingProduct({ ...product }); setPricingDrafts({}); setDirty(false); setClassificationPending(false); }} className="min-h-11 rounded-full border border-red-500/50 px-5 text-sm font-bold text-red-300">Editar</button>
+      </article>)}</div>
+      {!isLoadingProducts && !visibleProducts.length && <p className="text-sm text-zinc-400">No se encontraron productos.</p>}
+      {(selectedProduct ? [selectedProduct] : []).map((product) => {
         const statusInfo = productStatuses[product.id];
 
         return (
-          <SectionCard key={product.id} title={product.name} description="Actualizá los datos visibles en la web pública.">
-            <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
-              <div>
-                <ImagePicker
-                  source={product.image}
-                  label="Cambiar imagen"
-                  storageKey={`product-${product.id}`}
-                  onChange={(image) => {
-                    updateProduct(product.id, { image });
-                    saveProductToSupabase({ ...product, image });
-                  }}
-                />
-                <div className="mt-3 text-xs uppercase tracking-[0.18em] text-zinc-400">Imagen Principal</div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+          <ProductEditorDialog key={product.id} title={newProduct ? "Nuevo producto" : `Editar ${product.name}`} onClose={closeEditor} busy={uploading || classificationSaving || statusInfo?.status === "saving"}>
+            <fieldset disabled={uploading || classificationSaving || statusInfo?.status === "saving"} className="min-w-0 space-y-4">
+<details open className="rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer py-2 text-lg font-bold">Información general</summary><div className="mt-4 space-y-4"><div className="grid gap-4 sm:grid-cols-3"><div><p className="mb-2 text-sm font-bold">Imagen principal</p><ImagePicker source={product.image} label="Subir / reemplazar principal" storageKey={`product-${product.id}`} onBusyChange={setUploading} onChange={image => updateProduct(product.id, { image, ...(product.images ? { images: product.images.filter(source => source !== image) } : {}) })} /></div>
+{[0, 1].map(index => <div key={index}><p className="mb-2 text-sm font-bold">Imagen adicional {index + 1}</p><ImagePicker source={product.images?.[index] ?? ""} label="Subir / reemplazar adicional" storageKey={`product-${product.id}-additional-${index}`} onBusyChange={setUploading} onChange={source => { const images = [...(product.images ?? [])]; images[index] = source; updateProduct(product.id, { images: images.filter(Boolean) }); }} />{product.images?.[index] && <button type="button" onClick={() => updateProduct(product.id, { images: product.images!.filter((_, position) => position !== index) })} className="mt-3 min-h-11 text-sm text-red-300">Eliminar adicional {index + 1}</button>}</div>)}</div>                <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm text-zinc-300">
                     <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Nombre</span>
                     <input
@@ -346,7 +374,7 @@ export function AdminProductsManager() {
                   </label>
                 </div>
 
-                <ProductClassificationEditor product={product} onSaved={classification => updateProduct(product.id, classification)} />
+
 
                 <label className="block text-sm text-zinc-300">
                   <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Descripción</span>
@@ -401,7 +429,9 @@ export function AdminProductsManager() {
                   </label>
                 </div>
 
-                <label className="block max-w-xs text-sm text-zinc-300">
+</div></details>
+<details className="rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer py-2 text-lg font-bold">Clasificación</summary><div className="mt-4 space-y-4"><ProductClassificationEditor product={product} onPendingChange={setClassificationPending} onBusyChange={setClassificationSaving} onSaved={classification => { updateProduct(product.id, classification); setProducts(previous => previous.map(item => item.id === product.id ? { ...item, ...classification } : item)); }} onDraftChange={newProduct ? classification => updateProduct(product.id, classification) : undefined} /></div></details>
+<details className="rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer py-2 text-lg font-bold">Especificaciones técnicas</summary><div className="mt-4 space-y-4">                <label className="block max-w-xs text-sm text-zinc-300">
                   <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Garantía predeterminada (días)</span>
                   <input type="number" min={1} max={3650} value={product.warrantyDays ?? ""} onChange={(event) => updateProduct(product.id, { warrantyDays: event.target.value ? Number(event.target.value) : undefined })} className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white" />
                   <span className="mt-1 block text-[11px] text-zinc-500">Se propone automáticamente al registrar una venta; puede cambiarse o desactivarse allí.</span>
@@ -494,7 +524,8 @@ export function AdminProductsManager() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+</div></details>
+<details className="rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer py-2 text-lg font-bold">Gestión interna</summary><div className="mt-4 space-y-4">                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">
                     Gestión privada
                   </p>
@@ -550,15 +581,16 @@ export function AdminProductsManager() {
                   </div>
                 </div>
 
+</div></details>
                 <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => saveProductToSupabase(product)}
+                      onClick={() => void finishSave(product)}
                       disabled={statusInfo?.status === "saving"}
                       className="rounded-full bg-red-600 px-5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500 disabled:opacity-50"
                     >
-                      {statusInfo?.status === "saving" ? "Guardando..." : "Guardar en Supabase"}
+                      {statusInfo?.status === "saving" ? "Guardando..." : "Guardar producto"}
                     </button>
                     {statusInfo?.message ? (
                       <span
@@ -574,15 +606,14 @@ export function AdminProductsManager() {
 
                   <button
                     type="button"
-                    onClick={() => removeProduct(product)}
+                    onClick={async () => { if (newProduct) { closeEditor(); return; } await removeProduct(product); }}
                     className="rounded-full border border-red-500/40 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-red-300 hover:bg-red-600/10"
                   >
-                    Eliminar producto
+                    {newProduct ? "Cancelar" : "Eliminar producto"}
                   </button>
                 </div>
-              </div>
-            </div>
-          </SectionCard>
+            </fieldset>
+          </ProductEditorDialog>
         );
       })}
     </div>

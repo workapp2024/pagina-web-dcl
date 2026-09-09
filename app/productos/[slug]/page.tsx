@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
-import { ManagedImage } from "@/components/ui/ManagedImage";
+import { ProductImageGallery } from "@/components/public/ProductImageGallery";
 import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
 import { getSupabaseProducts } from "@/lib/supabase/products";
 import { whatsappUrl } from "@/lib/whatsapp";
@@ -80,9 +80,7 @@ export default async function ProductoDetallePage({ params, searchParams }: Prod
             </Link>
 
             <div className="grid gap-10 lg:grid-cols-[1fr_1.1fr]">
-              <div className="flex h-80 items-center justify-center overflow-hidden rounded-[1.75rem] border border-white/10 bg-zinc-950/60 p-6 lg:h-[480px]">
-                <ManagedImage source={product.image} alt={product.name} className="max-h-full max-w-full object-contain" />
-              </div>
+              <ProductImageGallery key={product.id} image={product.image} images={product.images} name={product.name} />
 
               <div className="flex flex-col">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-400">{product.category}</p>
