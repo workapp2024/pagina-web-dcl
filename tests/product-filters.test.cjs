@@ -69,6 +69,7 @@ test('canonical URLs round trip all filters, remain shareable and clear to the f
 });
 
 const mocks = {
+  '@/components/public/ConnectorField': load('components/public/ConnectorField.tsx'),
   'next/link': ({ children, ...props }) => React.createElement('a', props, children),
   '@/lib/product-taxonomy': taxonomy, '@/lib/product-filters': filtersModule,
   '@/lib/analytics': { analyticsEvents: {}, capture: () => {} },
@@ -100,7 +101,7 @@ test('both Home entries link to the same URL contract and share taxonomy options
   const { NeedCategories } = load('components/sections/NeedCategories.tsx', mocks);
   const vehicles = renderToStaticMarkup(React.createElement(VehicleCategories));
   const needs = renderToStaticMarkup(React.createElement(NeedCategories));
-  for (const option of taxonomy.productVehicleTypes) assert.ok(vehicles.includes(`href="/productos?vehiculo=${option.id}"`));
+  for (const option of taxonomy.productVehicleTypes) assert.ok(vehicles.includes(`href="/vehiculos?vehiculo=${option.id}"`));
   for (const need of taxonomy.productNeeds) assert.ok(needs.includes(`href="${href(need.filters)}"`));
   assert.ok(!vehicles.includes('id="vehiculos"'));
 });

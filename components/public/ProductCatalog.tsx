@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ProductCard } from "@/components/ui/ProductCard";
+import { ConnectorField } from "@/components/public/ConnectorField";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import type { Product } from "@/lib/site-data";
 import { commercialCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
@@ -43,7 +44,7 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
           </select>
         </label>
       </div>
-      <label className="block text-sm text-zinc-300">Conector (si lo conocés)<input name="conector" list="catalog-connectors" defaultValue={filters.classification.connectorType ?? ""} placeholder="H1, H4, H7, H11, 9005…" maxLength={30} className={control} /><datalist id="catalog-connectors">{[...new Set(products.map(product => product.connectorType).filter(Boolean))].sort().map(connector => <option key={connector} value={connector} />)}</datalist></label>
+      <ConnectorField products={products} id="catalog-connectors" defaultValue={filters.classification.connectorType} />
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" className="min-h-12 rounded-full bg-red-600 px-5 text-sm font-bold text-white">Aplicar filtros</button>
         <Link href="/productos" onClick={clear} className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-5 text-sm text-white">Limpiar filtros</Link>
