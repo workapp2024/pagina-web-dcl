@@ -4,6 +4,10 @@ import { legacyProductCategories, matchesProductClassification, productCategorie
 export type CatalogParams = Record<string, string | string[] | undefined>;
 export type CatalogFilters = { classification: ProductClassificationFilters; query: string; invalid: boolean };
 
+export function hasCatalogContext(filters: CatalogFilters) {
+  return !filters.invalid && Boolean(filters.query || Object.keys(filters.classification).length);
+}
+
 // Stored labels and old category links remain valid; new links use stable slugs.
 export function categoryParam(category: string) {
   return productCategories.find(option => option.id === category)?.slug ?? category;

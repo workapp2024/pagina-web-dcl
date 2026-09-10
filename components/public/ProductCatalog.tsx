@@ -6,15 +6,21 @@ import { ConnectorField } from "@/components/public/ConnectorField";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import type { Product } from "@/lib/site-data";
 import { commercialCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
-import { categoryParam, filterCatalogProducts, parseProductFilters, productFilterEventProperties, productFilterLabels, type CatalogFilters } from "@/lib/product-filters";
+import { categoryParam, filterCatalogProducts, hasCatalogContext, parseProductFilters, productFilterEventProperties, productFilterLabels, type CatalogFilters } from "@/lib/product-filters";
 
 const control = "mt-2 min-h-12 w-full min-w-0 rounded-xl border border-white/15 bg-zinc-950 px-3 text-base text-white";
 
 export function ProductCatalog({ products, filters }: { products: Product[]; filters: CatalogFilters }) {
   const visible = filterCatalogProducts(products, filters);
   const context = productFilterLabels(filters.classification);
+  const guided = hasCatalogContext(filters);
+  const vehicle = productVehicleTypes.find(option => option.id === filters.classification.vehicleType)?.label;
+  const summary = [context, filters.query].filter(Boolean).join(" · ");
+  const title = filters.classification.category && vehicle
+    ? `${filters.classification.category} para ${vehicle}`
+    : `Resultados para ${filters.classification.connectorType || filters.query || context}`;
   const clear = () => capture(analyticsEvents.productFiltersCleared, productFilterEventProperties(filters.classification));
-  return <>
+  const filterForm =
     <form key={JSON.stringify(filters)} action="/productos" method="get" className="mb-7 space-y-4 rounded-2xl border border-white/10 p-4 sm:p-5" onSubmit={event => {
       const values = Object.fromEntries(new FormData(event.currentTarget).entries()) as Record<string, string>;
       const next = parseProductFilters(values);
@@ -53,9 +59,21 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
       {filters.classification.category === "Accesorios"
         ? <p className="text-sm text-zinc-300">Elegí Todos los vehículos o un tipo. Los accesorios universales se incluyen en cada tipo; no necesitás marca ni modelo.</p>
         : <Link href="/vehiculos" className="inline-flex min-h-11 items-center text-sm text-red-300 underline">No sé el conector: buscar por vehículo</Link>}
-    </form>
+    </form>;
+  return <>
+    {guided && <div className="mb-3 min-w-0">
+      <h2 className="break-words text-xl font-bold text-white">{title}</h2>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-3">
+        <Link href="/productos" onClick={clear} aria-label={`Quitar búsqueda: ${summary}`} className="inline-flex min-h-12 max-w-full items-center gap-3 rounded-full border border-white/20 px-4 text-sm text-white"><span className="min-w-0 break-words">{summary}</span><span aria-hidden="true">×</span></Link>
+        <Link href="/productos" onClick={clear} className="inline-flex min-h-12 items-center text-sm text-red-300 underline">Ver todos los productos</Link>
+      </div>
+    </div>}
+    {guided ? <details key={JSON.stringify(filters)} className="mb-4 min-w-0">
+      <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-red-300">Más filtros</summary>
+      {filterForm}
+    </details> : filterForm}
     <div className="mb-5" aria-live="polite">
-      <h2 className="break-words text-xl font-bold text-white">{filters.invalid ? "Revisá los filtros del enlace" : context || "Catálogo completo"}</h2>
+      {!guided && <h2 className="break-words text-xl font-bold text-white">{filters.invalid ? "Revisá los filtros del enlace" : "Catálogo completo"}</h2>}
       <p className="mt-2 text-sm text-zinc-400">{visible.length} producto(s){filters.query ? " para tu búsqueda" : ""}</p>
     </div>
     {visible.length ? <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{visible.map(product => <ProductCard key={product.id} {...product} />)}</div> :

@@ -93,6 +93,38 @@ test('catalog renders URL-backed accessible controls, context, legacy options an
   assert.ok(render({ vehiculo: 'unknown' }).includes('filtros no válidos'));
 });
 
+test('guided results collapse the existing filters, expose context and clear to the full catalog', () => {
+  const { ProductCatalog } = load('components/public/ProductCatalog.tsx', mocks);
+  const render = (params, items = products) => renderToStaticMarkup(React.createElement(ProductCatalog, { products: items, filters: parse(params) }));
+  const free = render({});
+  assert.ok(!free.includes('<details'));
+  assert.ok(free.includes('name="vehiculo"'));
+  for (const conector of ['H7', 'H4']) {
+    const html = render({ conector });
+    assert.ok(html.includes(`Resultados para ${conector}`));
+    assert.match(html, /<details[^>]*>/);
+    assert.doesNotMatch(html, /<details[^>]*\bopen/);
+    assert.match(html, /<summary[^>]*>Más filtros<\/summary>/);
+    assert.ok(html.indexOf('<details') < html.indexOf('<form'));
+    assert.ok(html.indexOf('</form>') < html.indexOf('</details>'));
+    assert.ok(html.includes(`aria-label="Quitar búsqueda: Conector ${conector}"`));
+    assert.ok(html.includes('Ver todos los productos'));
+    assert.ok(html.includes(`value="${conector}"`));
+    const expected = conector === 'H4' ? 'dual' : 'moto';
+    assert.ok(html.includes(`data-product="${expected}"`));
+  }
+  const accessories = [product('universal', { category: 'Accesorios' }), product('auto', { category: 'Accesorios', vehicleTypes: ['auto'] }), product('moto-only', { category: 'Accesorios', vehicleTypes: ['moto'] })];
+  const accessoryHtml = render({ vehiculo: 'auto', categoria: 'accesorios' }, accessories);
+  assert.ok(accessoryHtml.includes('Accesorios para Auto'));
+  for (const id of ['universal', 'auto']) assert.ok(accessoryHtml.includes(`data-product="${id}"`));
+  assert.ok(!accessoryHtml.includes('data-product="moto-only"'));
+  assert.doesNotMatch(accessoryHtml, /<details[^>]*\bopen/);
+  const empty = render({ conector: 'H99' });
+  assert.ok(empty.includes('No encontramos productos'));
+  assert.ok(empty.includes('Más filtros')); assert.ok(empty.includes('Ver todos los productos'));
+  assert.ok(!render({ vehiculo: 'invalid' }).includes('<details'));
+});
+
 test('both Home entries link to the same URL contract and share taxonomy options', () => {
   const { VehicleCategories } = load('components/sections/VehicleCategories.tsx', { ...mocks,
     '@/components/providers/SiteContentProvider': { useSiteContent: () => ({ content: { vehicleCategories: [] } }) },

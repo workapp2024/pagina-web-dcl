@@ -59,6 +59,13 @@ export function VehicleFinder({ initialType = "" }: { initialType?: string } = {
   }
 
   return <div className="space-y-5">
+    {matches !== null && <div className="min-w-0">
+      <h3 className="break-words text-xl font-bold">{brandName} {modelName} {year}{position ? ` · ${vehiclePositions.find(item => item.key === position)?.label}` : " · Todas las posiciones"}</h3>
+      {matches.length > 0 && <p className="mt-2 break-words text-sm text-zinc-300">Conector compatible: {[...new Set(matches.map(match => match.connector))].join(" · ")}</p>}
+      <Link href="/productos" className="mt-2 inline-flex min-h-12 max-w-full items-center gap-3 rounded-full border border-white/20 px-4 text-sm text-red-300" aria-label="Quitar contexto y ver todos los productos"><span>Quitar búsqueda</span><span aria-hidden="true">×</span></Link>
+    </div>}
+    <details key={matches === null ? "search" : "results"} open={matches === null} className="min-w-0">
+      <summary className={matches === null ? "hidden" : "min-h-12 cursor-pointer py-3 text-sm font-semibold text-red-300"}>Modificar búsqueda</summary>
     <form onSubmit={event => { event.preventDefault(); void search(); }} className="rounded-[1.75rem] border border-white/10 bg-zinc-950/60 p-5 sm:p-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {!initialType && <label className="min-w-0 space-y-2 text-sm">Tipo de vehículo<select required value={type} className={control} onChange={event => { invalidate(); setType(event.target.value); setBrands([]); setBrandName(""); setModels([]); setModelName(""); setYear(""); setPosition(""); }}><option value="">Seleccioná</option>{VEHICLE_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>}
@@ -70,6 +77,7 @@ export function VehicleFinder({ initialType = "" }: { initialType?: string } = {
       <p className="mt-3 text-xs text-zinc-400">Elegí una sugerencia o escribí tu marca/modelo si no aparece. Solo confirmamos productos con compatibilidad cargada para el año y la posición.</p>
       {/^\d{4}$/.test(year) && <button type="submit" disabled={searching || !type || !brandName.trim() || !modelName.trim() || !/^\d{4}$/.test(year)} className="mt-5 min-h-12 rounded-full bg-red-600 px-8 text-sm font-bold disabled:opacity-40">{searching ? "Buscando…" : "Buscar"}</button>}
     </form>
+    </details>
     {matches !== null && <div aria-live="polite">
       <h3 className="mb-3 text-lg font-black">{matches.length ? "Productos compatibles" : "No encontramos esta referencia todavía."}</h3>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{matches.map(({ product, row, position: selectedPosition, connector }) => {

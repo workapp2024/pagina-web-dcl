@@ -94,8 +94,14 @@ test('progressive fitment fields reuse selected type, clear dependent values and
   position.props.onChange({ target: { value: 'high' } });
   nodes(render()).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} }); await flush();
   assert.deepEqual(calls[1], ['Auto', 'vw', 'bora']);
+  assert.equal(nodes(render()).find(n => n.type === 'details').props.open, false);
+  assert.ok(text(render()).includes('Volkswagen Bora 2016 · Alta'));
+  assert.ok(text(render()).includes('Conector compatible: H7'));
+  assert.ok(nodes(render()).some(n => n.type === 'summary' && text(n) === 'Modificar búsqueda'));
+  assert.ok(nodes(render()).some(n => n.props?.href === '/productos' && n.props['aria-label'] === 'Quitar contexto y ver todos los productos'));
   assert.ok(nodes(render()).some(n => n.props?.href?.includes('position=high&year=2016')));
   await change(1, 'Desconocido'); assert.equal(inputs()[2].props.value, '');
+  assert.equal(nodes(render()).find(n => n.type === 'details').props.open, true);
   assert.ok(!nodes(render()).some(n => n.type === 'select'));
   await change(2, '2016');
   nodes(render()).find(n => n.type === 'select').props.onChange({ target: { value: 'low' } });
