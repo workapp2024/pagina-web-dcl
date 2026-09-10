@@ -40,6 +40,7 @@ export interface Database {
           category: string;
           vehicle_types: string[] | null;
           functions: string[] | null;
+          integrated_high_low: boolean;
           image_url: string;
           additional_image_urls: string[];
           cta_text: string;
@@ -73,6 +74,7 @@ export interface Database {
           category?: string;
           vehicle_types?: string[] | null;
           functions?: string[] | null;
+          integrated_high_low?: boolean;
           image_url?: string;
           additional_image_urls?: string[];
           cta_text?: string;
@@ -106,6 +108,7 @@ export interface Database {
           category?: string;
           vehicle_types?: string[] | null;
           functions?: string[] | null;
+          integrated_high_low?: boolean;
           image_url?: string;
           additional_image_urls?: string[];
           cta_text?: string;

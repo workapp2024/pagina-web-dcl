@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { Product } from "@/lib/site-data";
 import { isProductCategory, productCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
 
-type Classification = Pick<Product, "category" | "vehicleTypes" | "functions">;
+type Classification = Pick<Product, "category" | "vehicleTypes" | "functions" | "integratedHighLow">;
 export function ProductClassificationEditor({ product, onSaved, onDraftChange, onPendingChange, onBusyChange }: { product: Product; onSaved: (value: Classification) => void; onDraftChange?: (value: Classification) => void; onPendingChange?: (pending: boolean) => void; onBusyChange?: (busy: boolean) => void }) {
   const [changes, setChanges] = useState<Partial<Classification>>({});
   const [busy, setBusy] = useState(false);
@@ -12,7 +12,7 @@ export function ProductClassificationEditor({ product, onSaved, onDraftChange, o
   function change(patch: Partial<Classification>) {
     setChanges(previous => ({ ...previous, ...patch }));
     if (!onDraftChange) onPendingChange?.(true);
-    if (onDraftChange) onDraftChange({ category: value.category, vehicleTypes: value.vehicleTypes, functions: value.functions, ...patch });
+    if (onDraftChange) onDraftChange({ category: value.category, vehicleTypes: value.vehicleTypes, functions: value.functions, integratedHighLow: value.integratedHighLow, ...patch });
   }
   const accessory = value.category === "Accesorios";
   const pending = (!accessory && !value.vehicleTypes?.length) || value.category === "General" || !isProductCategory(value.category);
@@ -23,7 +23,7 @@ export function ProductClassificationEditor({ product, onSaved, onDraftChange, o
       const response = await fetch("/api/admin/products", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: product.id, classification: changes }) });
       const body = await response.json();
       if (!response.ok || !body.ok) throw new Error(body.message || body.error || "No se pudo guardar.");
-      onSaved({ category: body.data.category, vehicleTypes: body.data.vehicle_types ?? [], functions: body.data.functions ?? [] });
+      onSaved({ category: body.data.category, vehicleTypes: body.data.vehicle_types ?? [], functions: body.data.functions ?? [], integratedHighLow: body.data.integrated_high_low === true });
       setChanges({}); onPendingChange?.(false); setMessage("Clasificación guardada.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar."); }
     finally { setBusy(false); onBusyChange?.(false); }
@@ -38,11 +38,13 @@ export function ProductClassificationEditor({ product, onSaved, onDraftChange, o
       </select>
     </label>
     <div className="mt-4 grid gap-4 sm:grid-cols-2">
-      <fieldset><legend className="text-sm font-bold">Funciones (seleccioná una o varias)</legend>
-        <p className="mt-2 text-xs text-zinc-400">{accessory ? "No aplica habitualmente a accesorios. Dejá sin marcar salvo un caso excepcional; el conector también es opcional." : "Podés marcar Alta y Baja juntas. El conector no determina la función para un vehículo concreto."}</p>
+      <fieldset><legend className="text-sm font-bold">Características de la lámpara</legend>
+        <p className="mt-2 text-xs text-zinc-400">{accessory ? "No aplica habitualmente a accesorios. Dejá sin marcar salvo un caso excepcional; el conector también es opcional." : "Alta y Baja se resuelven por compatibilidad del vehículo. Marcá la característica integrada solo si la lámpara realiza ambas."}</p>
         {productFunctions.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm">
         <input type="checkbox" checked={value.functions?.includes(option.id) ?? false} onChange={event => change({ functions: event.target.checked ? [...(value.functions ?? []), option.id] : (value.functions ?? []).filter(item => item !== option.id) })}/>{option.label}
-      </label>)}</fieldset>
+      </label>)}
+        <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={value.integratedHighLow ?? false} onChange={event => change({ integratedHighLow: event.target.checked })} />Alta y baja integradas</label>
+      </fieldset>
       <fieldset><legend className="text-sm font-bold">Tipo de vehículo{accessory ? " (opcional, selección múltiple)" : " (selección múltiple)"}</legend>
         {accessory && <>
           <p className="mt-2 text-xs text-zinc-400">No requiere marca ni modelo. Sin tipos seleccionados, el uso es universal.</p>

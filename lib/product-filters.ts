@@ -54,8 +54,10 @@ export function productCatalogHref(filters: ProductClassificationFilters = {}, q
 export function filterCatalogProducts(products: Product[], filters: CatalogFilters) {
   if (filters.invalid) return [];
   const needle = filters.query.toLowerCase();
+  const connectorSearch = products.some(product => product.connectorType?.toLowerCase() === needle) ? filters.query : undefined;
   return products.filter(product => product.active && product.showInCatalog
     && matchesProductClassification(product, filters.classification)
+    && (!connectorSearch || matchesProductClassification(product, { connectorType: connectorSearch }))
     && (!needle || [product.name, product.description, product.category, product.connectorType,
       ...productFunctions.filter(option => product.functions?.includes(option.id)).map(option => option.label)
     ].some(value => value?.toLowerCase().includes(needle))));

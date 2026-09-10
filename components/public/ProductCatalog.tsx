@@ -5,7 +5,7 @@ import { ProductCard } from "@/components/ui/ProductCard";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import type { Product } from "@/lib/site-data";
 import { commercialCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
-import { categoryParam, filterCatalogProducts, parseProductFilters, productCatalogHref, productFilterEventProperties, productFilterLabels, type CatalogFilters } from "@/lib/product-filters";
+import { categoryParam, filterCatalogProducts, parseProductFilters, productFilterEventProperties, productFilterLabels, type CatalogFilters } from "@/lib/product-filters";
 
 const control = "mt-2 min-h-12 w-full min-w-0 rounded-xl border border-white/15 bg-zinc-950 px-3 text-base text-white";
 
@@ -36,14 +36,14 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
             {filters.classification.category && !commercialCategories.some(option => option.id === filters.classification.category) && <option value={categoryParam(filters.classification.category)}>{filters.classification.category} (anterior)</option>}
           </select>
         </label>
-        <label className="min-w-0 text-sm text-zinc-300">Función
+        <label className="min-w-0 text-sm text-zinc-300">Característica
           <select name="funcion" defaultValue={filters.classification.function ?? ""} className={control}>
-            <option value="">Todas las funciones</option>
+            <option value="">Todas las características</option>
             {productFunctions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </label>
       </div>
-      {filters.classification.connectorType && <input type="hidden" name="conector" value={filters.classification.connectorType} />}
+      <label className="block text-sm text-zinc-300">Conector (si lo conocés)<input name="conector" list="catalog-connectors" defaultValue={filters.classification.connectorType ?? ""} placeholder="H1, H4, H7, H11, 9005…" maxLength={30} className={control} /><datalist id="catalog-connectors">{[...new Set(products.map(product => product.connectorType).filter(Boolean))].sort().map(connector => <option key={connector} value={connector} />)}</datalist></label>
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" className="min-h-12 rounded-full bg-red-600 px-5 text-sm font-bold text-white">Aplicar filtros</button>
         <Link href="/productos" onClick={clear} className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-5 text-sm text-white">Limpiar filtros</Link>
@@ -51,7 +51,7 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
       <p className="text-xs leading-5 text-zinc-400">Estos filtros muestran clasificación comercial; no confirman compatibilidad con marca, modelo o año.</p>
       {filters.classification.category === "Accesorios"
         ? <p className="text-sm text-zinc-300">Elegí Todos los vehículos o un tipo. Los accesorios universales se incluyen en cada tipo; no necesitás marca ni modelo.</p>
-        : <Link href={productCatalogHref(filters.classification).replace(/^\/productos/, "/vehiculos")} className="inline-flex min-h-11 items-center text-sm text-red-300 underline">Confirmar compatibilidad técnica</Link>}
+        : <Link href="/vehiculos" className="inline-flex min-h-11 items-center text-sm text-red-300 underline">No sé el conector: buscar por vehículo</Link>}
     </form>
     <div className="mb-5" aria-live="polite">
       <h2 className="break-words text-xl font-bold text-white">{filters.invalid ? "Revisá los filtros del enlace" : context || "Catálogo completo"}</h2>

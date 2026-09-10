@@ -10,8 +10,8 @@ const { parseProductFilters: parse, filterCatalogProducts: filter, productCatalo
 const plain = value => JSON.parse(JSON.stringify(value));
 const product = (id, fields = {}) => ({ id, name: id, description: '', category: 'Iluminación frontal', active: true, showInCatalog: true, vehicleTypes: [], functions: [], ...fields });
 const products = [
-  product('dual', { vehicleTypes: ['auto', 'camioneta'], functions: ['high', 'low'], connectorType: 'H4', featured: true, order: 7 }),
-  product('moto', { vehicleTypes: ['moto'], functions: ['low'], connectorType: 'H7' }),
+  product('dual', { vehicleTypes: ['auto', 'camioneta'], functions: ['fog'], integratedHighLow: true, connectorType: 'H4', featured: true, order: 7 }),
+  product('moto', { vehicleTypes: ['moto'], functions: [], connectorType: 'H7' }),
   product('truck', { vehicleTypes: ['camion'], category: 'Auxiliar' }),
   product('legacy', { category: 'Ópticas', vehicleTypes: undefined, functions: undefined }),
   product('general', { category: 'General' }),
@@ -28,11 +28,11 @@ test('general catalog preserves all active/visible products and their ordering w
   assert.equal(products[0].featured, true);
 });
 
-test('each vehicle and high/low filters match explicit multi-valued classification only', () => {
+test('vehicle filters match explicit types while high/low free filters fail closed', () => {
   for (const [vehiculo, expected] of [['auto', ['dual']], ['camioneta', ['dual']], ['moto', ['moto']], ['camion', ['truck']]]) assert.deepEqual(ids({ vehiculo }), expected);
-  assert.deepEqual(ids({ funcion: 'high' }), ['dual']);
-  assert.deepEqual(ids({ funcion: 'low' }), ['dual', 'moto']);
-  assert.deepEqual(ids({ funcion: 'fog' }), []);
+  assert.deepEqual(ids({ funcion: 'high' }), []);
+  assert.deepEqual(ids({ funcion: 'low' }), []);
+  assert.deepEqual(ids({ funcion: 'fog' }), ['dual']);
 });
 
 test('category, connector, search and multiple filters intersect; no compatibility is inferred', () => {
@@ -41,8 +41,8 @@ test('category, connector, search and multiple filters intersect; no compatibili
   assert.deepEqual(ids({ categoria: 'Ópticas' }), ['legacy']);
   assert.deepEqual(ids({ categoria: 'general' }), ['general']);
   assert.deepEqual(ids({ vehiculo: 'auto', categoria: 'iluminacion-frontal' }), ['dual']);
-  assert.deepEqual(ids({ vehiculo: 'camioneta', funcion: 'low' }), ['dual']);
-  assert.deepEqual(ids({ vehiculo: 'auto', categoria: 'iluminacion-frontal', funcion: 'high', conector: 'h4', q: 'DUAL' }), ['dual']);
+  assert.deepEqual(ids({ vehiculo: 'camioneta', funcion: 'fog' }), ['dual']);
+  assert.deepEqual(ids({ vehiculo: 'auto', categoria: 'iluminacion-frontal', funcion: 'fog', conector: 'h4', q: 'DUAL' }), ['dual']);
   assert.deepEqual(ids({ vehiculo: 'moto', funcion: 'high' }), []);
   assert.deepEqual(ids({ conector: 'H4' }), ['dual']);
   assert.deepEqual(ids({ vehiculo: 'camion', funcion: 'low' }), []);
@@ -58,9 +58,9 @@ test('invalid or duplicate recognized params fail closed, and unrelated params d
 });
 
 test('canonical URLs round trip all filters, remain shareable and clear to the full catalog', () => {
-  const classification = { vehicleType: 'auto', category: 'Iluminación frontal', function: 'low', connectorType: 'H4' };
+  const classification = { vehicleType: 'auto', category: 'Iluminación frontal', function: 'fog', connectorType: 'H4' };
   const url = href(classification, 'LED blanco');
-  assert.ok(url.startsWith('/productos?vehiculo=auto&categoria=iluminacion-frontal&funcion=low'));
+  assert.ok(url.startsWith('/productos?vehiculo=auto&categoria=iluminacion-frontal&funcion=fog'));
   const params = Object.fromEntries(new URL(url, 'https://test.invalid').searchParams);
   assert.deepEqual(plain(parse(params).classification), classification);
   assert.equal(parse(params).query, 'LED blanco');
@@ -77,15 +77,15 @@ const mocks = {
 test('catalog renders URL-backed accessible controls, context, legacy options and a recoverable empty state', () => {
   const { ProductCatalog } = load('components/public/ProductCatalog.tsx', mocks);
   const render = params => renderToStaticMarkup(React.createElement(ProductCatalog, { products, filters: parse(params) }));
-  const html = render({ vehiculo: 'auto', funcion: 'low', conector: 'H4' });
+  const html = render({ vehiculo: 'auto', funcion: 'fog', conector: 'H4' });
   assert.match(html, /action="\/productos"/);
   assert.match(html, /method="get"/);
   for (const name of ['vehiculo', 'categoria', 'funcion', 'q', 'conector']) assert.ok(html.includes(`name="${name}"`));
-  assert.ok(html.includes('Auto · Baja · Conector H4'));
+  assert.ok(html.includes('Auto · Antiniebla · Conector H4'));
   assert.ok(html.includes('data-product="dual"'));
   assert.ok(!html.includes('data-product="legacy"'));
   assert.ok(html.includes('no confirman compatibilidad'));
-  const empty = render({ vehiculo: 'camion', funcion: 'high' });
+  const empty = render({ vehiculo: 'camion', funcion: 'fog' });
   assert.ok(empty.includes('No encontramos productos clasificados'));
   assert.ok(empty.includes('Ver catálogo completo'));
   assert.ok(empty.includes('href="/productos"'));
@@ -108,10 +108,10 @@ test('both Home entries link to the same URL contract and share taxonomy options
 test('commercial analytics allow only controlled classification and exclude free text, URLs and personal data', () => {
   const { sanitizeStoreEvent } = load('lib/store/analytics-privacy.ts', { '@/lib/product-filters': filtersModule });
   for (const event of ['home_vehicle_selected', 'home_need_selected', 'product_filter_applied', 'product_filters_cleared']) {
-    const safe = sanitizeStoreEvent(event, { vehicle_type: 'auto', category: 'iluminacion-frontal', function: 'low', q: 'secret', name: 'Name', phone: '123', product_id: 'id', $current_url: 'https://private.invalid', conector: 'H4' });
+    const safe = sanitizeStoreEvent(event, { vehicle_type: 'auto', category: 'iluminacion-frontal', function: 'fog', q: 'secret', name: 'Name', phone: '123', product_id: 'id', $current_url: 'https://private.invalid', conector: 'H4' });
     assert.equal(safe.vehicle_type, 'auto');
     assert.equal(safe.category, 'iluminacion-frontal');
-    assert.equal(safe.function, 'low');
+    assert.equal(safe.function, 'fog');
     for (const key of ['q', 'name', 'phone', 'product_id', '$current_url', 'conector']) assert.equal(Object.hasOwn(safe, key), false);
     const invalid = sanitizeStoreEvent(event, { vehicle_type: 'personal data', function: 'xenon', category: 'unknown' });
     for (const key of ['vehicle_type', 'category', 'function']) assert.equal(Object.hasOwn(invalid, key), false);

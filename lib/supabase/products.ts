@@ -18,6 +18,7 @@ const PUBLIC_PRODUCT_COLUMNS = [
   "category",
   "vehicle_types",
   "functions",
+  "integrated_high_low",
   "image_url",
   "additional_image_urls",
   "cta_text",
@@ -49,6 +50,7 @@ function mapProductRow(row: PublicProductRow, includePrivateFields = false): Pro
     previousPrice: row.previous_price !== null ? Number(row.previous_price) : undefined,
     image: sanitizeStoredImageUrl(row.image_url),
     ...(Array.isArray(row.additional_image_urls) ? { images: row.additional_image_urls.map(sanitizeStoredImageUrl).filter(Boolean).slice(0, 2) } : {}),
+    integratedHighLow: row.integrated_high_low === true,
     ...normalizeCommercialClassification(row.category, row.functions ?? []),
     vehicleTypes: normalizeVehicleTypes(row.vehicle_types ?? []),
     featured: row.featured,
@@ -99,16 +101,14 @@ export async function getSupabaseProducts(): Promise<Product[] | null> {
       .eq("show_in_catalog", true)
       .order("sort_order", { ascending: true });
 
-    if (error && /additional_image_urls/i.test(error.message) && ['42703', 'PGRST204'].includes(error.code)) {
-      const columns = PUBLIC_PRODUCT_COLUMNS.filter(column => column !== "additional_image_urls").join(",");
-      const legacy = await client.from("products").select(columns).eq("active", true).eq("show_in_catalog", true).order("sort_order", { ascending: true });
-      data = legacy.data as typeof data;
-      error = legacy.error;
-    }
-    if (error && /vehicle_types|functions/i.test(error.message) && ['42703', 'PGRST204'].includes(error.code)) {
-      // Read compatibility before the migration, still honoring catalog visibility.
-      const columns = PUBLIC_PRODUCT_COLUMNS.filter(column => column !== "vehicle_types" && column !== "functions" && column !== "additional_image_urls").join(",");
-      const legacy = await client.from("products").select(columns).eq("active", true).eq("show_in_catalog", true).order("sort_order", { ascending: true });
+    // Retry only missing optional product columns while the local migration is pending.
+    const omitted = new Set<string>();
+    for (let attempt = 0; attempt < 4 && error && ['42703', 'PGRST204'].includes(error.code); attempt++) {
+      const missing = ['integrated_high_low', 'additional_image_urls', 'vehicle_types', 'functions'].find(column => error!.message.includes(column) && !omitted.has(column));
+      if (!missing) break;
+      omitted.add(missing);
+      const columns = PUBLIC_PRODUCT_COLUMNS.filter(column => !omitted.has(column)).join(',');
+      const legacy = await client.from('products').select(columns).eq('active', true).eq('show_in_catalog', true).order('sort_order', { ascending: true });
       data = legacy.data as typeof data;
       error = legacy.error;
     }

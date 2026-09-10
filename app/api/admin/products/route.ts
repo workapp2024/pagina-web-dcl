@@ -93,6 +93,7 @@ export async function POST(request: Request) {
         category: product.category || "General",
         ...(product.vehicleTypes === undefined ? {} : { vehicleTypes: product.vehicleTypes }),
         ...(product.functions === undefined ? {} : { functions: product.functions }),
+        ...(product.integratedHighLow === undefined ? {} : { integratedHighLow: product.integratedHighLow }),
       }, current?.category);
     } catch (error) {
       return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Clasificación no válida." }, { status: 400 });
@@ -175,9 +176,9 @@ export async function PATCH(request: Request) {
     try { patch = buildProductClassificationPatch(body.classification, current.category); }
     catch (error) { return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Clasificación no válida." }, { status: 400 }); }
     const { data, error } = await db.from("products").update(patch as never).eq("id", body.id)
-      .eq("category", current.category).select("id,category,vehicle_types,functions").maybeSingle();
+      .eq("category", current.category).select("id,category,vehicle_types,functions,integrated_high_low").maybeSingle();
     if (error) {
-      const message = /vehicle_types|functions/.test(error.message)
+      const message = /vehicle_types|functions|integrated_high_low/.test(error.message)
         ? "La clasificación no pudo guardarse. Verificá que la migración de clasificación esté aplicada."
         : "No se pudo guardar la clasificación.";
       return NextResponse.json({ ok: false, message }, { status: 500 });

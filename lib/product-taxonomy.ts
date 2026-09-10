@@ -11,15 +11,13 @@ export const productVehicleTypes = [
   { id: "moto", label: "Moto" }, { id: "camion", label: "Camión" },
 ] as const;
 export const productFunctions = [
-  { id: "high", label: "Alta" }, { id: "low", label: "Baja" }, { id: "fog", label: "Antiniebla" },
+  { id: "fog", label: "Antiniebla" },
 ] as const;
 export type ProductVehicleType = (typeof productVehicleTypes)[number]["id"];
 export type ProductFunction = (typeof productFunctions)[number]["id"];
 
 export const commercialCategories = productCategories.filter(option => option.id !== "General");
 export const productNeeds: { id: string; label: string; filters: ProductClassificationFilters }[] = [
-  { id: "high", label: "Luces altas", filters: { function: "high" } },
-  { id: "low", label: "Luces bajas", filters: { function: "low" } },
   { id: "fog", label: "Antinieblas", filters: { function: "fog" } },
   ...commercialCategories.filter(option => option.id === "Auxiliar" || option.id === "Accesorios")
     .map(option => ({ id: option.slug, label: option.id === "Auxiliar" ? "Auxiliares" : option.label, filters: { category: option.id } })),
@@ -43,7 +41,7 @@ export function normalizeProductFunctions(value: unknown): ProductFunction[] { r
 export function normalizeCommercialClassification(category: string, functions: readonly string[] = []) {
   return {
     category: category === "Antiniebla" ? "Auxiliar" : category,
-    functions: normalizeProductFunctions(category === "Antiniebla" ? [...functions, "fog"] : functions),
+    functions: normalizeProductFunctions((category === "Antiniebla" ? [...functions, "fog"] : functions).filter(value => value !== "high" && value !== "low")),
   };
 }
 
@@ -57,8 +55,8 @@ export function accessoryVehicleLabel(product: { category: string; vehicleTypes?
 export function buildProductClassificationPatch(value: unknown, existingCategory?: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Clasificación no válida.");
   const entries = Object.entries(value);
-  if (!entries.length || entries.some(([key]) => !["category", "vehicleTypes", "functions"].includes(key))) throw new Error("Enviá únicamente campos de clasificación.");
-  const patch: { category?: string; vehicle_types?: ProductVehicleType[]; functions?: ProductFunction[] } = {};
+  if (!entries.length || entries.some(([key]) => !["category", "vehicleTypes", "functions", "integratedHighLow"].includes(key))) throw new Error("Enviá únicamente campos de clasificación.");
+  const patch: { category?: string; vehicle_types?: ProductVehicleType[]; functions?: ProductFunction[]; integrated_high_low?: boolean } = {};
   for (const [key, field] of entries) {
     if (key === "category") {
       // An existing legacy category may be retained, never assigned to another product.
@@ -66,6 +64,10 @@ export function buildProductClassificationPatch(value: unknown, existingCategory
       patch.category = field as string;
     }
     if (key === "vehicleTypes") patch.vehicle_types = normalizeVehicleTypes(field);
+    if (key === "integratedHighLow") {
+      if (typeof field !== "boolean") throw new Error("Alta y baja integradas debe ser Sí o No.");
+      patch.integrated_high_low = field;
+    }
     if (key === "functions") patch.functions = normalizeProductFunctions(field);
   }
   return patch;

@@ -35,7 +35,7 @@ test('controlled categories, legacy retention, optional functions and canonical 
     assert.throws(() => patch({ category: id }));
   }
   assert.deepEqual(plain(patch({ category: 'Accesorios', functions: [], vehicleTypes: [] })), { category: 'Accesorios', functions: [], vehicle_types: [] });
-  assert.deepEqual(plain(patch({ vehicleTypes: ['camioneta', 'auto', 'auto'], functions: ['low', 'high', 'low'] })), { vehicle_types: ['auto', 'camioneta'], functions: ['high', 'low'] });
+  assert.deepEqual(plain(patch({ vehicleTypes: ['camioneta', 'auto', 'auto'], functions: ['fog', 'fog'] })), { vehicle_types: ['auto', 'camioneta'], functions: ['fog'] });
   assert.equal(taxonomy.normalizeVehicleTypes(['auto', 'camioneta', 'moto', 'camion']).length, 4);
   for (const value of [{ category: 'inventada' }, { vehicleTypes: ['avion'] }, { functions: ['xenon'] }, { functions: null }, { vehicleTypes: 'auto' }, { stock: 0 }, {}, []]) assert.throws(() => patch(value));
 });
@@ -44,9 +44,9 @@ test('shared filters combine independent dimensions without treating unclassifie
   const old = { category: 'General' };
   assert.equal(taxonomy.matchesProductClassification(old, {}), true);
   assert.equal(taxonomy.matchesProductClassification(old, { vehicleType: 'auto' }), false);
-  const product = { category: 'Iluminación frontal', vehicleTypes: ['auto', 'camioneta'], functions: ['high', 'low'], connectorType: 'H4' };
-  assert.equal(taxonomy.matchesProductClassification(product, { category: product.category, vehicleType: 'camioneta', function: 'low', connectorType: 'h4' }), true);
-  for (const filters of [{ vehicleType: 'moto' }, { function: 'fog' }, { category: 'Auxiliar' }, { connectorType: 'H7' }, { connectorType: '---' }]) assert.equal(taxonomy.matchesProductClassification(product, filters), false);
+  const product = { category: 'Iluminación frontal', vehicleTypes: ['auto', 'camioneta'], functions: ['fog'], connectorType: 'H4' };
+  assert.equal(taxonomy.matchesProductClassification(product, { category: product.category, vehicleType: 'camioneta', function: 'fog', connectorType: 'h4' }), true);
+  for (const filters of [{ vehicleType: 'moto' }, { function: 'low' }, { category: 'Auxiliar' }, { connectorType: 'H7' }, { connectorType: '---' }]) assert.equal(taxonomy.matchesProductClassification(product, filters), false);
 });
 
 function apiHarness({ current = { id: 'p1', category: 'General' }, authenticated = true, result = {}, error = null } = {}) {
@@ -77,6 +77,21 @@ test('PATCH writes only changed classification, preserving all unrelated product
   assert.deepEqual(writes, [{ method: 'update', value: { vehicle_types: ['auto', 'camioneta'] } }]);
 });
 
+test('integrated beams persist through classification PATCH and new-product creation only', async () => {
+  for (const integratedHighLow of [true, false]) {
+    const { api, writes } = apiHarness();
+    assert.equal((await api.PATCH(request({ id: 'p1', classification: { integratedHighLow } }))).status, 200);
+    assert.deepEqual(writes[0].value, { integrated_high_low: integratedHighLow });
+  }
+  const product = { id: 'p1', name: 'H4', category: 'Iluminación frontal', connectorType: 'H4', integratedHighLow: true, functions: [] };
+  const fresh = apiHarness({ current: null });
+  assert.equal((await fresh.api.POST(request({ product }))).status, 200);
+  assert.equal(fresh.writes[0].value.integrated_high_low, true);
+  const existing = apiHarness();
+  assert.equal((await existing.api.POST(request({ product }))).status, 200);
+  assert.equal(Object.hasOwn(existing.writes[0].value, 'integrated_high_low'), false);
+});
+
 test('PATCH rejects invalid values and unauthorized requests without writes; missing/concurrent rows are not inserted', async () => {
   for (const classification of [{ category: 'bad' }, { vehicleTypes: ['avion'] }, { functions: ['xenon'] }, { image: '' }, { stock: 0 }]) {
     const { api, writes } = apiHarness();
@@ -96,9 +111,9 @@ test('ordinary existing-product saves cannot roll back classification; new produ
   assert.equal((await existing.api.POST(request({ product }))).status, 200);
   for (const field of ['category', 'vehicle_types', 'functions', 'stock']) assert.equal(Object.hasOwn(existing.writes[0].value, field), false);
   const fresh = apiHarness({ current: null });
-  assert.equal((await fresh.api.POST(request({ product: { ...product, vehicleTypes: ['auto', 'camioneta'], functions: ['high', 'low'] } }))).status, 200);
+  assert.equal((await fresh.api.POST(request({ product: { ...product, vehicleTypes: ['auto', 'camioneta'], functions: ['fog'] } }))).status, 200);
   assert.equal(fresh.writes[0].method, 'insert');
-  assert.deepEqual(fresh.writes[0].value.functions, ['high', 'low']);
+  assert.deepEqual(fresh.writes[0].value.functions, ['fog']);
   const invalid = apiHarness({ current: null });
   assert.equal((await invalid.api.POST(request({ product: { ...product, functions: ['xenon'] } }))).status, 400);
   assert.equal(invalid.writes.length, 0);
@@ -107,7 +122,7 @@ test('ordinary existing-product saves cannot roll back classification; new produ
 test('public mapping and pre-migration fallback preserve visibility filters and exclude private fields', async () => {
   for (const missing of [false, true]) {
     const queries = [];
-    const row = { id: 'p1', category: 'General', vehicle_types: missing ? undefined : ['auto', 'camioneta'], functions: missing ? null : ['high', 'low'], cost_price: 100, stock: 9, connector_type: 'H4' };
+    const row = { id: 'p1', category: 'General', vehicle_types: missing ? undefined : ['auto', 'camioneta'], functions: missing ? null : ['fog'], cost_price: 100, stock: 9, connector_type: 'H4' };
     const db = { from: () => {
       const query = { filters: [] }; queries.push(query);
       const chain = { select: columns => { query.columns = columns; return chain; }, eq: (...args) => { query.filters.push(args); return chain; }, order: async () => missing && queries.length === 1 ? { data: null, error: { code: '42703', message: 'column vehicle_types does not exist' } } : { data: [row], error: null } }; return chain;
@@ -117,7 +132,7 @@ test('public mapping and pre-migration fallback preserve visibility filters and 
     });
     const products = await productsModule.getSupabaseProducts();
     assert.deepEqual(plain(products[0].vehicleTypes), missing ? [] : ['auto', 'camioneta']);
-    assert.deepEqual(plain(products[0].functions), missing ? [] : ['high', 'low']);
+    assert.deepEqual(plain(products[0].functions), missing ? [] : ['fog']);
     assert.equal(products[0].connectorType, 'H4');
     assert.equal(Object.hasOwn(products[0], 'stock'), false);
     assert.equal(Object.hasOwn(products[0], 'costPrice'), false);
@@ -135,20 +150,20 @@ test('Admin loads legacy and multiple selections and sends only the edited class
   const { ProductClassificationEditor } = load('components/admin/ProductClassificationEditor.tsx', {
     react: { ...React, useState: initial => { const index = cursor++; if (!(index in states)) states[index] = initial; return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; } },
     '@/lib/product-taxonomy': taxonomy,
-  }, { fetch: async (url, options) => { sent = { url, ...options, body: JSON.parse(options.body) }; return Response.json({ ok: true, data: { category: 'Ópticas', vehicle_types: ['auto', 'camioneta'], functions: ['high'] } }); }, Error });
-  const render = () => { cursor = 0; return ProductClassificationEditor({ product: { id: 'p1', category: 'Ópticas', vehicleTypes: ['auto', 'camioneta'], functions: ['high', 'low'], image: 'keep.jpg', stock: 7 }, onSaved: value => { saved = value; } }); };
+  }, { fetch: async (url, options) => { sent = { url, ...options, body: JSON.parse(options.body) }; return Response.json({ ok: true, data: { category: 'Ópticas', vehicle_types: ['auto', 'camioneta'], functions: [] } }); }, Error });
+  const render = () => { cursor = 0; return ProductClassificationEditor({ product: { id: 'p1', category: 'Ópticas', vehicleTypes: ['auto', 'camioneta'], functions: ['fog'], image: 'keep.jpg', stock: 7 }, onSaved: value => { saved = value; } }); };
   const nodes = tree => !tree || typeof tree !== 'object' ? [] : Array.isArray(tree) ? tree.flatMap(nodes) : [tree, ...nodes(tree.props?.children)];
   let tree = nodes(render());
   assert.ok(tree.some(node => node.type === 'option' && node.props.value === 'Ópticas'));
   const checkboxes = tree.filter(node => node.type === 'input');
-  assert.deepEqual(checkboxes.map(node => node.props.checked), [true, true, false, true, true, false, false]);
-  checkboxes[1].props.onChange({ target: { checked: false } });
+  assert.deepEqual(checkboxes.map(node => node.props.checked), [true, false, true, true, false, false]);
+  checkboxes[0].props.onChange({ target: { checked: false } });
   tree = nodes(render());
   tree.find(node => node.type === 'button').props.onClick();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(sent.method, 'PATCH');
-  assert.deepEqual(sent.body, { id: 'p1', classification: { functions: ['high'] } });
-  assert.deepEqual(plain(saved.functions), ['high']);
+  assert.deepEqual(sent.body, { id: 'p1', classification: { functions: [] } });
+  assert.deepEqual(plain(saved.functions), []);
 });
 
 test('migration statically agrees with shared domains and contains no data rewrite or inventory changes', () => {

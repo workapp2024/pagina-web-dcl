@@ -13,6 +13,7 @@ export type Product = {
   category: string;
   vehicleTypes?: ProductVehicleType[];
   functions?: ProductFunction[];
+  integratedHighLow?: boolean;
   featured: boolean;
   active: boolean;
   showInCatalog: boolean;

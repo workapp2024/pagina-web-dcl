@@ -10,18 +10,13 @@ const filters = load('lib/product-filters.ts', { '@/lib/product-taxonomy': taxon
 const plain = value => JSON.parse(JSON.stringify(value));
 const product = (id, vehicleTypes = [], category = 'Accesorios') => ({ id, name: id, category, vehicleTypes, functions: [], active: true, showInCatalog: true, price: 100, image: '/original.webp', href: `/productos/${id}`, ctaText: 'Ver producto', description: '' });
 
-test('three commercial categories, independent functions and legacy fog links', () => {
+test('three commercial categories retain fog but reject general high/low classification', () => {
   assert.deepEqual(plain(taxonomy.commercialCategories.map(x => x.label)), ['Iluminación frontal', 'Iluminación auxiliar', 'Accesorios']);
-  assert.deepEqual(plain(taxonomy.productFunctions.map(x => x.id)), ['high', 'low', 'fog']);
-  assert.throws(() => taxonomy.buildProductClassificationPatch({ category: 'Antiniebla' }));
-  const legacy = taxonomy.normalizeCommercialClassification('Antiniebla', ['high']);
-  assert.deepEqual(plain(legacy), { category: 'Auxiliar', functions: ['high', 'fog'] });
+  assert.deepEqual(plain(taxonomy.productFunctions.map(x => x.id)), ['fog']);
+  for (const functions of [['high'], ['low'], ['high', 'low']]) assert.throws(() => taxonomy.buildProductClassificationPatch({ functions }));
+  assert.deepEqual(plain(taxonomy.normalizeCommercialClassification('Antiniebla', ['high'])), { category: 'Auxiliar', functions: ['fog'] });
   assert.deepEqual(plain(filters.parseProductFilters({ categoria: 'antiniebla' }).classification), { function: 'fog' });
-  assert.equal(filters.parseProductFilters({ categoria: 'antiniebla', funcion: 'low' }).invalid, true);
-  const dual = { ...product('S6 H4', ['auto'], 'Iluminación frontal'), connectorType: 'H4', functions: ['high', 'low'] };
-  for (const funcion of ['high', 'low']) assert.equal(filters.filterCatalogProducts([dual], filters.parseProductFilters({ funcion })).length, 1);
-  for (const q of ['Alta', 'Baja']) assert.equal(filters.filterCatalogProducts([dual], filters.parseProductFilters({ q })).length, 1);
-  assert.equal(taxonomy.matchesProductClassification({ ...dual, functions: [], connectorType: 'H7' }, { function: 'low' }), false);
+  for (const funcion of ['high', 'low']) assert.equal(filters.parseProductFilters({ funcion }).invalid, true);
 });
 
 test('accessories include universal and matching multi-vehicle products without treating lighting as universal', () => {
@@ -62,7 +57,7 @@ test('Admin saves and reloads optional accessory vehicle selections and independ
   }, { fetch: async (_url, options) => {
     sent = JSON.parse(options.body);
     const patch = taxonomy.buildProductClassificationPatch(sent.classification, savedProduct.category);
-    return Response.json({ ok: true, data: { category: savedProduct.category, vehicle_types: patch.vehicle_types ?? savedProduct.vehicleTypes, functions: patch.functions ?? savedProduct.functions } });
+    return Response.json({ ok: true, data: { category: savedProduct.category, vehicle_types: patch.vehicle_types ?? savedProduct.vehicleTypes, functions: patch.functions ?? savedProduct.functions, integrated_high_low: patch.integrated_high_low ?? savedProduct.integratedHighLow } });
   } });
   const render = () => { cursor = 0; return ProductClassificationEditor({ product: savedProduct, onSaved: value => { savedProduct = { ...savedProduct, ...value }; } }); };
   const nodes = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(nodes) : [node, ...nodes(node.props?.children)];
@@ -70,17 +65,17 @@ test('Admin saves and reloads optional accessory vehicle selections and independ
   const check = (label, checked) => nodes(render()).find(n => n.type === 'label' && text(n) === label).props.children[0].props.onChange({ target: { checked } });
   assert.ok(text(render()).includes('Universal / Todos los vehículos'));
   assert.ok(!text(render()).includes('Sin clasificar o pendiente'));
-  for (const label of ['Auto', 'Camioneta', 'Camión', 'Alta', 'Baja']) check(label, true);
+  for (const label of ['Auto', 'Camioneta', 'Camión', 'Antiniebla', 'Alta y baja integradas']) check(label, true);
   nodes(render()).find(n => n.type === 'button').props.onClick();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(sent.classification, { vehicleTypes: ['auto', 'camioneta', 'camion'], functions: ['high', 'low'] });
+  assert.deepEqual(sent.classification, { vehicleTypes: ['auto', 'camioneta', 'camion'], functions: ['fog'], integratedHighLow: true });
   states.length = 0;
   assert.equal(nodes(render()).filter(n => n.type === 'input' && n.props.checked).length, 5);
   check('Universal / Todos los vehículos', true);
   nodes(render()).find(n => n.type === 'button').props.onClick();
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(sent.classification, { vehicleTypes: [] });
-  assert.deepEqual(savedProduct.functions, ['high', 'low']);
+  assert.deepEqual(savedProduct.functions, ['fog']);
 });
 
 test('H7 fitment uses the selected vehicle position, never a global function mapping', () => {

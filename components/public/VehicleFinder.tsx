@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -7,23 +6,83 @@ import { ManagedImage } from "@/components/ui/ManagedImage";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { ProductPurchaseActions } from "@/components/store/ProductPurchaseActions";
 import { analyticsEvents, capture } from "@/lib/analytics";
-import { getPublicVehicleBrands,getPublicVehicleModels,getPublicVehicleTypes,searchPublicVehicleCompatibilities,VEHICLE_TYPES,type VehicleBrand,type VehicleCompatibilityFull,type VehicleModel } from "@/lib/supabase/vehicle-compatibility";
-import type { Product } from "@/lib/site-data";
+import { getPublicVehicleBrands, getPublicVehicleModels, searchPublicVehicleCompatibilities, VEHICLE_TYPES, type VehicleBrand, type VehicleModel } from "@/lib/supabase/vehicle-compatibility";
+import { vehiclePositions, vehicleProductMatches, vehicleReferenceLinks } from "@/lib/vehicle-product-search";
 
-const positions=[{key:"low",label:"Baja",get:(r:VehicleCompatibilityFull)=>r.connectorLow},{key:"high",label:"Alta",get:(r:VehicleCompatibilityFull)=>r.combinedHighLow?r.connectorLow:r.connectorHigh},{key:"fog",label:"Antiniebla",get:(r:VehicleCompatibilityFull)=>r.connectorFog},{key:"aux",label:"Auxiliar",get:(r:VehicleCompatibilityFull)=>r.connectorAux}];
-const connectorsFor=(row:VehicleCompatibilityFull)=>Array.from(new Set(positions.map(pos=>pos.get(row)).filter((x):x is string=>Boolean(x))));
-const range=(row:VehicleCompatibilityFull)=>row.yearTo?`${row.yearFrom}–${row.yearTo}`:`Desde ${row.yearFrom}`;
-const normalize=(value:string)=>value.replace(/[^a-z0-9]/gi,"").toLowerCase();
+const control = "min-h-12 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 text-white disabled:opacity-40";
+const sameName = (a: string, b: string) => a.trim().toLocaleLowerCase("es") === b.trim().toLocaleLowerCase("es");
 
-function Products({products,results,year}:{products:Product[];results:VehicleCompatibilityFull[];year:string}){
-  const matches=results.flatMap(row=>positions.flatMap(position=>{const connector=position.get(row);if(!connector)return[];return products.filter(product=>product.active&&product.showInCatalog&&product.connectorType&&normalize(product.connectorType)===normalize(connector)).map(product=>({product,row,position,connector}))}));
-  const unique=[...new Map(matches.map(match=>[`${match.product.id}-${match.row.id}-${match.position.key}`,match])).values()];
-  const resultKey=JSON.stringify([year,unique.map(({product,row,position})=>[product.id,row.id,position.key]).sort()]);
-  const lastResult=useRef("");
-  useEffect(()=>{if(unique.length&&lastResult.current!==resultKey){lastResult.current=resultKey;capture(analyticsEvents.fitmentResultViewed,{result_count:unique.length})}},[resultKey,unique.length]);
-  if(!unique.length)return null;
-  return <div><h3 className="mb-3 text-lg font-black uppercase">{year ? "Productos compatibles" : "Productos para el rango del modelo"}</h3><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{unique.map(({product,row,position,connector})=>{const href=`${product.href}?fitment=${encodeURIComponent(row.id)}&position=${position.key}${year?`&year=${encodeURIComponent(year)}`:""}`,cartProduct={id:product.id,name:product.name,price:product.price,image:product.image,href,category:product.category};return <article key={`${product.id}-${row.id}-${position.key}`} className="rounded-2xl border border-white/10 bg-white/5 p-3"><Link href={href} className="flex gap-3"><div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-black p-2"><ManagedImage source={product.image} alt={product.name} className="max-h-full max-w-full object-contain"/></div><div><b>{product.name}</b><small className="mt-1 block text-zinc-400">{row.brandName} {row.modelName}{year?` ${year}`:""}</small><small className="block text-amber-200">{!year && `${range(row)}. Indicá el año para confirmar.`}</small><small className="block text-zinc-400">{position.label} · {connector}</small><span className="mt-2 block text-xs font-bold text-red-300">Ver producto →</span></div></Link><div className="mt-3"><ProductPurchaseActions product={cartProduct} compact/></div></article>})}</div></div>
+export function VehicleFinder() {
+  const { content } = useSiteContent();
+  const [type, setType] = useState("");
+  const [brands, setBrands] = useState<VehicleBrand[]>([]);
+  const [brandName, setBrandName] = useState("");
+  const [models, setModels] = useState<VehicleModel[]>([]);
+  const [modelName, setModelName] = useState("");
+  const [year, setYear] = useState("");
+  const [position, setPosition] = useState("");
+  const [matches, setMatches] = useState<ReturnType<typeof vehicleProductMatches> | null>(null);
+  const [searching, setSearching] = useState(false);
+  const request = useRef(0);
+  const brand = brands.find(item => sameName(item.name, brandName));
+  const model = models.find(item => sameName(item.name, modelName));
+  const context = { type, brand: brandName, model: modelName, year, position };
+  const references = vehicleReferenceLinks(context);
+  function invalidate() { request.current++; setMatches(null); setSearching(false); }
+
+  useEffect(() => {
+    let current = true;
+    if (type) getPublicVehicleBrands(type).then(rows => { if (current) setBrands(rows ?? []); });
+    return () => { current = false; };
+  }, [type]);
+  useEffect(() => {
+    let current = true;
+    if (brand) getPublicVehicleModels(brand.id, type).then(rows => { if (current) setModels(rows ?? []); });
+    return () => { current = false; };
+  }, [brand, type]);
+
+  async function search() {
+    if (!type || !brandName.trim() || !modelName.trim() || !/^\d{4}$/.test(year)) return;
+    const version = ++request.current;
+    setSearching(true); setMatches(null);
+    capture(analyticsEvents.vehicleSearchStarted);
+    try {
+      const rows = brand && model ? await searchPublicVehicleCompatibilities(type, brand.id, model.id) : [];
+      if (version !== request.current) return;
+      const found = vehicleProductMatches(content.products, rows ?? [], year, position);
+      setMatches(found);
+      const props = { vehicle_type: type, brand: brandName, model: modelName, year_provided: true, result_count: found.length };
+      capture(found.length ? analyticsEvents.vehicleSearchCompleted : analyticsEvents.vehicleSearchNoResults, props);
+      if (found.length) capture(analyticsEvents.fitmentResultViewed, { result_count: found.length });
+    } catch { if (version === request.current) setMatches([]); }
+    finally { if (version === request.current) setSearching(false); }
+  }
+
+  return <div className="space-y-5">
+    <form onSubmit={event => { event.preventDefault(); void search(); }} className="rounded-[1.75rem] border border-white/10 bg-zinc-950/60 p-5 sm:p-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="space-y-2 text-sm">Tipo de vehículo<select required value={type} className={control} onChange={event => { invalidate(); setType(event.target.value); setBrands([]); setBrandName(""); setModels([]); setModelName(""); setYear(""); setPosition(""); }}><option value="">Seleccioná</option>{VEHICLE_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>
+        <label className="space-y-2 text-sm">Marca<input required disabled={!type} list="fitment-brands" maxLength={80} value={brandName} className={control} onChange={event => { invalidate(); setBrandName(event.target.value); setModels([]); setModelName(""); setYear(""); setPosition(""); }} /><datalist id="fitment-brands">{brands.map(item => <option key={item.id} value={item.name} />)}</datalist></label>
+        <label className="space-y-2 text-sm">Modelo<input required disabled={!brandName.trim()} list="fitment-models" maxLength={80} value={modelName} className={control} onChange={event => { invalidate(); setModelName(event.target.value); setYear(""); setPosition(""); }} /><datalist id="fitment-models">{models.map(item => <option key={item.id} value={item.name} />)}</datalist></label>
+        <label className="space-y-2 text-sm">Año<input required disabled={!modelName.trim()} inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={year} className={control} onChange={event => { invalidate(); setYear(event.target.value); setPosition(""); }} /></label>
+        <label className="space-y-2 text-sm">Posición<select disabled={!type || !brandName.trim() || !modelName.trim() || !/^\d{4}$/.test(year)} value={position} className={control} onChange={event => { invalidate(); setPosition(event.target.value); }}><option value="">Todas las posiciones</option>{type && brandName.trim() && modelName.trim() && /^\d{4}$/.test(year) && vehiclePositions.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+      </div>
+      <p className="mt-3 text-xs text-zinc-400">Elegí una sugerencia o escribí tu marca/modelo si no aparece. Solo confirmamos productos con compatibilidad cargada para el año y la posición.</p>
+      <button type="submit" disabled={searching || !type || !brandName.trim() || !modelName.trim() || !/^\d{4}$/.test(year)} className="mt-5 min-h-12 rounded-full bg-red-600 px-8 text-sm font-bold disabled:opacity-40">{searching ? "Buscando…" : "Buscar"}</button>
+      <Link href="/productos" className="ml-4 inline-flex min-h-12 items-center text-sm text-red-300 underline">Ya sé el conector</Link>
+    </form>
+    {matches !== null && <div aria-live="polite">
+      <h3 className="mb-3 text-lg font-black">{matches.length ? "Productos compatibles" : "No encontramos productos con compatibilidad confirmada"}</h3>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{matches.map(({ product, row, position: selectedPosition, connector }) => {
+        const href = product.href + '?fitment=' + encodeURIComponent(row.id) + '&position=' + selectedPosition.key + '&year=' + encodeURIComponent(year);
+        const cartProduct = { id: product.id, name: product.name, price: product.price, image: product.image, href, category: product.category };
+        return <article key={product.id + '-' + row.id + '-' + selectedPosition.key} className="rounded-2xl border border-white/10 bg-white/5 p-3"><Link href={href} className="flex gap-3"><div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-black p-2"><ManagedImage source={product.image} alt={product.name} className="max-h-full max-w-full object-contain" /></div><div><b>{product.name}</b><small className="mt-1 block text-zinc-400">{row.brandName} {row.modelName} {year}</small><small className="block text-zinc-400">{selectedPosition.label} · {connector}</small><span className="mt-2 block text-xs font-bold text-red-300">Ver producto →</span></div></Link><div className="mt-3"><ProductPurchaseActions product={cartProduct} compact /></div></article>;
+      })}</div>
+    </div>}
+    <div className="rounded-2xl border border-white/10 p-5 text-center">
+      <p className="font-bold">¿No encontraste tu vehículo o tenés dudas?</p>
+      <p className="mt-2 text-sm text-zinc-400">Una referencia externa no confirma compatibilidad; consultanos antes de comprar.</p>
+      <div className="mt-4 flex flex-wrap justify-center gap-3"><a href={references.google} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-5 text-sm font-bold">Buscar referencia en Google</a><WhatsAppButton source="vehicle_search" message={references.whatsappMessage} label="Consultar por WhatsApp" className="min-h-12" /></div>
+    </div>
+  </div>;
 }
-
-export function VehicleFinder(){const{content}=useSiteContent();const[types,setTypes]=useState<string[]>([...VEHICLE_TYPES]),[type,setType]=useState(""),[brands,setBrands]=useState<VehicleBrand[]>([]),[brand,setBrand]=useState(""),[models,setModels]=useState<VehicleModel[]>([]),[model,setModel]=useState(""),[year,setYear]=useState(""),[years,setYears]=useState<number[]>([]),[results,setResults]=useState<VehicleCompatibilityFull[]|null>(null),[searching,setSearching]=useState(false);useEffect(()=>{getPublicVehicleTypes().then(x=>x?.length&&setTypes(x))},[]);useEffect(()=>{setBrand("");setModel("");setYear("");setBrands([]);setModels([]);setYears([]);setResults(null);if(type)getPublicVehicleBrands(type).then(x=>setBrands(x||[]))},[type]);useEffect(()=>{setModel("");setYear("");setModels([]);setYears([]);setResults(null);if(brand)getPublicVehicleModels(brand,type).then(x=>setModels(x||[]))},[brand,type]);useEffect(()=>{setResults(null);setYear("");setYears([]);if(model)searchPublicVehicleCompatibilities(type,brand,model).then(rows=>{const now=new Date().getFullYear()+1,set=new Set<number>();(rows||[]).forEach(r=>{for(let y=r.yearFrom;y<=Math.min(r.yearTo||now,now);y++)set.add(y)});setYears([...set].sort((a,b)=>b-a))})},[model,type,brand]);async function search(){if(!type)return;setSearching(true);capture(analyticsEvents.vehicleSearchStarted);const rows=await searchPublicVehicleCompatibilities(type,brand||undefined,model||undefined),selectedYear=year?Number(year):null,filtered=(rows||[]).filter(r=>selectedYear===null||(selectedYear>=r.yearFrom&&(r.yearTo===null||selectedYear<=r.yearTo)));setResults(filtered);setSearching(false);const props={vehicle_type:type,brand:brands.find(x=>x.id===brand)?.name||"",model:models.find(x=>x.id===model)?.name||"",year_provided:Boolean(year),result_count:filtered.length};capture(filtered.length?analyticsEvents.vehicleSearchCompleted:analyticsEvents.vehicleSearchNoResults,props)}return <div className="space-y-5"><div className="rounded-[1.75rem] border border-white/10 bg-zinc-950/60 p-5 sm:p-6"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Select label="Tipo de vehículo" value={type} onChange={setType} options={types.map(x=>[x,x])}/><Select label="Marca (opcional)" value={brand} onChange={setBrand} disabled={!type} options={brands.map(x=>[x.id,x.name])}/><Select label="Modelo (opcional)" value={model} onChange={setModel} disabled={!brand} options={models.map(x=>[x.id,x.name])}/><Select label="Año (opcional)" value={year} onChange={value=>{setYear(value);setResults(null)}} disabled={!model||!years.length} options={years.map(x=>[String(x),String(x)])}/></div><button type="button" disabled={!type||searching} onClick={search} className="mt-5 min-h-12 rounded-full bg-red-600 px-8 text-xs font-bold uppercase text-white disabled:opacity-40">{searching?"Buscando…":"Buscar"}</button>{results&&<div className="mt-7 space-y-5"><div><h3 className="text-lg font-black uppercase">Compatibilidades encontradas</h3><p className="text-sm text-zinc-400">{results.length} resultado(s). Completá más campos para refinar.</p></div>{results.map(r=><article key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4"><b>{r.vehicleType} · {r.brandName} {r.modelName}</b><p className="text-sm text-zinc-400">{range(r)}{r.version?` · ${r.version}`:""}</p><p className="mt-2 text-xs text-red-200">{connectorsFor(r).join(" · ")}</p></article>)}<Products products={content.products} results={results} year={year}/></div>}</div><div className="rounded-2xl border border-white/10 p-5 text-center"><p className="font-bold">¿No encontraste tu vehículo?</p><WhatsAppButton source="vehicle_search" label="Consultar por WhatsApp" className="mt-4 min-h-12"/></div></div>}
-function Select({label,value,onChange,options,disabled}:{label:string;value:string;onChange:(v:string)=>void;options:string[][];disabled?:boolean}){return <label><span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-zinc-400">{label}</span><select value={value} onChange={e=>onChange(e.target.value)} disabled={disabled} className="min-h-12 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 text-white disabled:opacity-40"><option value="">Cualquiera</option>{options.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>}
