@@ -2,6 +2,7 @@ import { ManagedImage } from "@/components/ui/ManagedImage";
 import { AddToCartButton } from "@/components/store/AddToCartButton";
 import { whatsappUrl } from "@/lib/whatsapp";
 import { accessoryVehicleLabel } from "@/lib/product-taxonomy";
+import { CommercialWhatsAppLink } from "@/components/analytics/CommercialWhatsAppLink";
 
 type ProductCardProps = {
   id: string;
@@ -47,14 +48,14 @@ export function ProductCard({ id, name, description, image, href, ctaText, price
             {ctaText}
           </a>
           <AddToCartButton product={{ id, name, price, image, href, category }} />
-          <a
+          <CommercialWhatsAppLink source="product"
             href={whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${name}.`)}
             target="_blank"
             rel="noreferrer"
             className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border border-white/15 bg-transparent px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-white whitespace-nowrap transition hover:border-red-500/70 hover:text-red-300"
           >
             CONSULTAR
-          </a>
+          </CommercialWhatsAppLink>
         </div>
       </div>
     </article>

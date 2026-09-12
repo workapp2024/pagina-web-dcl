@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import { sanitizeStoreEvent } from "@/lib/store/analytics-privacy";
+import { analyticsEnvironment } from "@/lib/analytics-environment";
 
 const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -20,6 +21,7 @@ if (token && host) {
       const path = window.location.pathname;
       if (path.startsWith("/admin") || path.startsWith("/api/admin") || ((path.startsWith("/checkout") || window.location.search) && event.event === "$snapshot")) return null;
       event.properties = sanitizeStoreEvent(event.event, event.properties);
+      event.properties.environment = analyticsEnvironment(window.location.hostname, process.env.NEXT_PUBLIC_ANALYTICS_ENVIRONMENT, process.env.NODE_ENV);
       return event;
     },
   });

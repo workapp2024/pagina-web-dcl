@@ -69,6 +69,7 @@ test('canonical URLs round trip all filters, remain shareable and clear to the f
 });
 
 const mocks = {
+  '@/components/analytics/EventOnMount': { EventOnMount: () => null },
   '@/components/public/ConnectorField': load('components/public/ConnectorField.tsx'),
   'next/link': ({ children, ...props }) => React.createElement('a', props, children),
   '@/lib/product-taxonomy': taxonomy, '@/lib/product-filters': filtersModule,

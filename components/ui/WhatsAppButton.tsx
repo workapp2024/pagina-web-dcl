@@ -1,9 +1,9 @@
 "use client";
 
 import { whatsappUrl } from "@/lib/whatsapp";
-import { analyticsEvents, capture } from "@/lib/analytics";
+import { CommercialWhatsAppLink } from "@/components/analytics/CommercialWhatsAppLink";
 
-type WhatsAppButtonProps = { label?: string; className?: string; floating?: boolean; message?: string; source?: "header"|"floating"|"footer"|"product"|"vehicle_search"|"promotion"|"cart"|"other" };
+type WhatsAppButtonProps = { label?: string; className?: string; floating?: boolean; message?: string; source?: "general"|"header"|"floating"|"footer"|"product"|"vehicle_search"|"promotion"|"cart"|"other" };
 
 function WhatsAppIcon() {
   return (
@@ -17,12 +17,11 @@ export function WhatsAppButton({ label = "WhatsApp", className = "", floating = 
   const whatsappHref = whatsappUrl(message || "Hola DCL Cree LED, quiero consultar por iluminación para mi vehículo.");
 
   return (
-    <a
+    <CommercialWhatsAppLink source={source || (floating ? "floating" : "general")}
       href={whatsappHref}
       target="_blank"
       rel="noreferrer"
       aria-label="Consultar por WhatsApp"
-      onClick={() => capture(analyticsEvents.whatsappClick, { source: source || (floating ? "floating" : "other") })}
       className={[
         "inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-zinc-950 shadow-sm transition duration-200 hover:bg-[#2ee071] hover:shadow-md active:scale-[.98]",
         floating ? "fixed bottom-[max(.75rem,env(safe-area-inset-bottom))] right-3 z-[45] h-[3.25rem] w-[3.25rem] p-0 shadow-[0_10px_28px_rgba(0,0,0,.4)] sm:bottom-[max(1rem,env(safe-area-inset-bottom))] sm:right-5 sm:h-12 sm:w-auto sm:px-4" : "",
@@ -31,6 +30,6 @@ export function WhatsAppButton({ label = "WhatsApp", className = "", floating = 
     >
       <WhatsAppIcon />
       {floating ? <span className="hidden text-xs sm:inline">Consultanos</span> : <span>{label}</span>}
-    </a>
+    </CommercialWhatsAppLink>
   );
 }

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { ConnectorField } from "@/components/public/ConnectorField";
 import { analyticsEvents, capture } from "@/lib/analytics";
+import { EventOnMount } from "@/components/analytics/EventOnMount";
+import { safeConnector } from "@/lib/analytics-connector";
 import type { Product } from "@/lib/site-data";
 import { commercialCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
 import { categoryParam, filterCatalogProducts, hasCatalogContext, parseProductFilters, productFilterEventProperties, productFilterLabels, type CatalogFilters } from "@/lib/product-filters";
@@ -12,6 +14,7 @@ const control = "mt-2 min-h-12 w-full min-w-0 rounded-xl border border-white/15 
 
 export function ProductCatalog({ products, filters }: { products: Product[]; filters: CatalogFilters }) {
   const visible = filterCatalogProducts(products, filters);
+  const connector = !filters.invalid && safeConnector(filters.classification.connectorType || filters.query);
   const context = productFilterLabels(filters.classification);
   const guided = hasCatalogContext(filters);
   const vehicle = productVehicleTypes.find(option => option.id === filters.classification.vehicleType)?.label;
@@ -61,6 +64,7 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
         : <Link href="/vehiculos" className="inline-flex min-h-11 items-center text-sm text-red-300 underline">No sé el conector: buscar por vehículo</Link>}
     </form>;
   return <>
+    {connector && <EventOnMount key={JSON.stringify(filters)} event={analyticsEvents.connectorSearch} properties={{ connector, has_results: visible.length > 0, result_count: visible.length }} />}
     {guided && <div className="mb-3 min-w-0">
       <h2 className="break-words text-xl font-bold text-white">{title}</h2>
       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-3">

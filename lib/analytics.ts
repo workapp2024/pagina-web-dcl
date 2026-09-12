@@ -13,6 +13,7 @@ export const analyticsEvents = {
   promotionClick: "promotion_click", dclMusicOpen: "dcl_music_open", radioPlay: "radio_play",
   radioPause: "radio_pause", radioStationSelected: "radio_station_selected", galleryView: "gallery_view",
   catalogSearch: "catalog_search",
+  connectorSearch: "connector_search", vehicleSearchError: "vehicle_search_error",
   paymentMethodSelected: "payment_method_selected", mercadopagoCheckoutOpened: "mercadopago_checkout_opened",
   transferInstructionsViewed: "manual_transfer_instructions_viewed", qrPaymentOpened: "qr_payment_opened",
   paymentResultViewed: "payment_result_viewed", deliveryWhatsappClicked: "delivery_whatsapp_clicked",

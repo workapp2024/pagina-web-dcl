@@ -24,41 +24,48 @@ export function VehicleFinder({ initialType = "" }: { initialType?: string } = {
   const [matches, setMatches] = useState<ReturnType<typeof vehicleProductMatches> | null>(null);
   const [searching, setSearching] = useState(false);
   const request = useRef(0);
+  const lookupFailed = useRef({ brands: false, models: false });
+  const [searchError, setSearchError] = useState(false);
   const brand = brands.find(item => sameName(item.name, brandName));
   const model = models.find(item => sameName(item.name, modelName));
   const context = { type, brand: brandName, model: modelName, year, position };
   const references = vehicleReferenceLinks(context);
-  function invalidate() { request.current++; setMatches(null); setSearching(false); }
+  function invalidate() { request.current++; setMatches(null); setSearching(false); setSearchError(false); }
 
   useEffect(() => {
     let current = true;
-    if (type) getPublicVehicleBrands(type).then(rows => { if (current) setBrands(rows ?? []); });
+    lookupFailed.current.brands = Boolean(type);
+    if (type) getPublicVehicleBrands(type).then(rows => { if (current) { lookupFailed.current.brands = rows === null; setBrands(rows ?? []); } }).catch(() => { if (current) lookupFailed.current.brands = true; });
     return () => { current = false; };
   }, [type]);
   useEffect(() => {
     let current = true;
-    if (brand) getPublicVehicleModels(brand.id, type).then(rows => { if (current) setModels(rows ?? []); });
+    lookupFailed.current.models = Boolean(brand);
+    if (brand) getPublicVehicleModels(brand.id, type).then(rows => { if (current) { lookupFailed.current.models = rows === null; setModels(rows ?? []); } }).catch(() => { if (current) lookupFailed.current.models = true; });
     return () => { current = false; };
   }, [brand, type]);
 
   async function search() {
     if (!type || !brandName.trim() || !modelName.trim() || !/^\d{4}$/.test(year)) return;
     const version = ++request.current;
-    setSearching(true); setMatches(null);
+    setSearching(true); setMatches(null); setSearchError(false);
     capture(analyticsEvents.vehicleSearchStarted);
     try {
+      if (lookupFailed.current.brands || lookupFailed.current.models) throw new Error("Vehicle lookup unavailable");
       const rows = brand && model ? await searchPublicVehicleCompatibilities(type, brand.id, model.id) : [];
       if (version !== request.current) return;
-      const found = vehicleProductMatches(content.products, rows ?? [], year, position);
+      if (rows === null) throw new Error("Compatibility lookup unavailable");
+      const found = vehicleProductMatches(content.products, rows, year, position);
       setMatches(found);
       const props = { vehicle_type: type, brand: brandName, model: modelName, year_provided: true, result_count: found.length };
       capture(found.length ? analyticsEvents.vehicleSearchCompleted : analyticsEvents.vehicleSearchNoResults, props);
       if (found.length) capture(analyticsEvents.fitmentResultViewed, { result_count: found.length });
-    } catch { if (version === request.current) setMatches([]); }
+    } catch { if (version === request.current) { setMatches(null); setSearchError(true); capture(analyticsEvents.vehicleSearchError); } }
     finally { if (version === request.current) setSearching(false); }
   }
 
   return <div className="space-y-5">
+    {searchError && <p role="alert" className="text-sm text-amber-300">No pudimos consultar las compatibilidades. Volvé a intentar; esto no significa que tu vehículo no tenga resultados.</p>}
     {matches !== null && <div className="min-w-0">
       <h3 className="break-words text-xl font-bold">{brandName} {modelName} {year}{position ? ` · ${vehiclePositions.find(item => item.key === position)?.label}` : " · Todas las posiciones"}</h3>
       {matches.length > 0 && <p className="mt-2 break-words text-sm text-zinc-300">Conector compatible: {[...new Set(matches.map(match => match.connector))].join(" · ")}</p>}

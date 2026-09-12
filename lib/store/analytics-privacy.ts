@@ -1,7 +1,8 @@
 import { parseProductFilters, productFilterEventProperties } from "@/lib/product-filters";
+import { safeConnector } from "@/lib/analytics-connector";
 
 const commercialEvents = new Set(["home_vehicle_selected", "home_need_selected", "product_filter_applied", "product_filters_cleared"]);
-const scopedEvents = new Set(["product_viewed", "fitment_result_viewed", "add_to_cart", "buy_now_clicked", "manual_transfer_instructions_viewed", "manual_transfer_marked_sent"]);
+const scopedEvents = new Set(["connector_search", "vehicle_search_error", "product_viewed", "fitment_result_viewed", "add_to_cart", "buy_now_clicked", "manual_transfer_instructions_viewed", "manual_transfer_marked_sent"]);
 
 export function sanitizeStoreEvent(event: string, properties: Record<string, unknown>) {
   if (commercialEvents.has(event)) {
@@ -18,6 +19,11 @@ export function sanitizeStoreEvent(event: string, properties: Record<string, unk
     return Object.fromEntries(Object.entries(properties).filter(([key]) => !/url|referrer|query|search|\$set/i.test(key)));
   }
   const safe: Record<string, unknown> = { $geoip_disable: true, $process_person_profile: false, $ip: null };
+  if (event === "connector_search") {
+    const connector = safeConnector(properties.connector);
+    if (connector) safe.connector = connector;
+    if (typeof properties.has_results === "boolean") safe.has_results = properties.has_results;
+  }
   // Keep SDK transport/pseudonymous IDs, never URLs, referrers, form fields,
   // person updates, arbitrary strings or order/customer identifiers.
   for (const key of ["token", "distinct_id", "$device_id", "$session_id", "$window_id", "$insert_id", "$lib", "$lib_version"]) {
