@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import { whatsappUrl } from "@/lib/whatsapp";
+import { operationalLabels, paymentLabels as paymentStatusLabels, type OperationalStatus } from "@/lib/store/order-operations";
 
 type PaymentResult = "approved" | "pending" | "rejected" | "review";
-type OrderStatus = { result: PaymentResult; paymentReceived?: boolean; status: string; paymentMethod: string; total: number; currency: string; reference: string };
+type OrderStatus = { result: PaymentResult; paymentReceived?: boolean; status: string; paymentMethod: string; total: number; currency: string; reference: string; operationalStatus: OperationalStatus; paymentStatus: string | null };
 const paymentLabels: Record<string, string> = { card: "Tarjeta", mercadopago: "Mercado Pago", transfer: "Transferencia" };
 
 function money(value: number, currency: string) {
@@ -66,11 +67,11 @@ export function CheckoutResult({ orderId }: { orderId: string }) {
 
   if (order.result === "rejected") return <ResultShell symbol="×" tone="rejected" eyebrow="Operación no confirmada" title="No pudimos confirmar el pago" description="El pago fue rechazado o no pudo completarse. Podés volver al checkout sin que eso cree otro pedido automáticamente."><OrderSummary order={order} /><div className="mt-7 grid gap-3"><Link href="/checkout" className="result-primary">Intentar nuevamente</Link><a href={whatsappUrl(supportMessage)} target="_blank" rel="noopener noreferrer" className="result-secondary">Consultar por WhatsApp</a></div></ResultShell>;
 
-  return <ResultShell symbol="…" tone="pending" eyebrow="Validación en curso" title="Pago pendiente" description="Mercado Pago todavía está procesando la operación. Vamos a actualizar el estado automáticamente."><OrderSummary order={order} /><p className="mt-5 text-xs leading-5 text-zinc-500">Esta pantalla sólo mostrará la aprobación cuando el servidor la haya validado. Podés dejarla abierta mientras actualizamos el estado.</p><div className="mt-7 grid gap-3"><Link href="/" className="result-primary">Volver al inicio</Link><a href={whatsappUrl(supportMessage)} target="_blank" rel="noopener noreferrer" className="result-secondary">Consultar por WhatsApp</a></div></ResultShell>;
+  return <ResultShell symbol="…" tone="pending" eyebrow="Validación en curso" title="Pago pendiente" description={order.paymentMethod === "transfer" ? "Tu transferencia está pendiente de verificación por DCL." : "Mercado Pago todavía está procesando la operación. Vamos a consultar el estado automáticamente."}><OrderSummary order={order} /><p className="mt-5 text-xs leading-5 text-zinc-500">Esta pantalla sólo mostrará la aprobación cuando el servidor la haya validado. Podés dejarla abierta mientras actualizamos el estado.</p><div className="mt-7 grid gap-3"><Link href="/" className="result-primary">Volver al inicio</Link><a href={whatsappUrl(supportMessage)} target="_blank" rel="noopener noreferrer" className="result-secondary">Consultar por WhatsApp</a></div></ResultShell>;
 }
 
 function OrderSummary({ order }: { order: OrderStatus }) {
-  return <dl className="mt-7 divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/25 px-4 text-left"><SummaryRow label="Pedido" value={order.reference} /><SummaryRow label="Total" value={money(order.total, order.currency)} /><SummaryRow label="Medio de pago" value={paymentLabels[order.paymentMethod] || "Pago online"} /></dl>;
+  return <dl className="mt-7 divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/25 px-4 text-left"><SummaryRow label="Número de pedido" value={order.reference} /><SummaryRow label="Pedido" value={operationalLabels[order.operationalStatus] || "Sin información"} /><SummaryRow label="Pago" value={paymentStatusLabels[order.paymentStatus || ""] || "Sin información"} /><SummaryRow label="Total" value={money(order.total, order.currency)} /><SummaryRow label="Medio de pago" value={paymentLabels[order.paymentMethod] || "Pago online"} /></dl>;
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {

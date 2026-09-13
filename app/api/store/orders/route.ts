@@ -8,7 +8,7 @@ import { normalizeOrderItems } from "@/lib/store/order-input";
 const PAYMENT_METHODS = new Set(["mercadopago", "card", "transfer"]);
 type RpcError = { code?: string; message?: string; details?: string; hint?: string };
 type RpcResult = { data: string | null; error: RpcError | null };
-type TotalQuery = { data: { total: number | string } | null; error: unknown };
+type TotalQuery = { data: { total: number | string; order_number: string } | null; error: unknown };
 
 export async function POST(request: Request) {
   const limited = rateLimit(request, "public-order", { limit: 10, windowMs: 60 * 1000 });
@@ -65,9 +65,9 @@ export async function POST(request: Request) {
       if (reason === "PRICE_ERROR") return apiError("PRICE_ERROR", "No se pudo validar el precio de un producto.", 409);
       return apiError("ORDER_CREATION_ERROR", "No se pudo crear el pedido. Intentá nuevamente.", 500);
     }
-    const totalQuery = await db.from("orders").select("total").eq("id", result.data).single() as unknown as TotalQuery;
+    const totalQuery = await db.from("orders").select("total,order_number").eq("id", result.data).single() as unknown as TotalQuery;
     if (totalQuery.error || !totalQuery.data) return apiError("INTERNAL_ERROR", "No se pudo preparar el pedido.", 500);
-    return NextResponse.json({ ok: true, orderId: result.data, total: Number(totalQuery.data.total || 0), publicKey: process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || null });
+    return NextResponse.json({ ok: true, orderId: result.data, orderNumber: totalQuery.data.order_number, total: Number(totalQuery.data.total || 0), publicKey: process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || null });
   } catch (error) {
     return apiInternalError("create_public_order", error);
   }

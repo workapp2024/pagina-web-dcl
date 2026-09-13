@@ -8,17 +8,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const {id}=await params;if(!isUuid(id))return NextResponse.json({ok:false},{status:400});
   const db=createAdminServerClient();
   const [{data:order},{data:transaction}]=await Promise.all([
-    db.from("orders").select("status,payment_method,total,currency").eq("id",id).single(),
+    db.from("orders").select("status,payment_method,total,currency,order_number,operational_status").eq("id",id).single(),
     db.from("payment_transactions").select("status").eq("order_id",id).order("created_at",{ascending:false}).limit(1).maybeSingle(),
   ]) as unknown as [
-    {data:{status:string;payment_method:string;total:number|string;currency:string}|null},
+    {data:{status:string;payment_method:string;total:number|string;currency:string;order_number:string;operational_status:string}|null},
     {data:{status:string}|null},
   ];
   if(!order)return NextResponse.json({ok:false},{status:404});
   const review=order.status==="stock_unavailable" || (transaction?.status==="approved" && !["paid","completed"].includes(order.status));
   const approved=["paid","completed"].includes(order.status) && transaction?.status==="approved";
   const rejected=["rejected","cancelled","stock_unavailable"].includes(order.status)||["rejected","cancelled","error"].includes(transaction?.status||"");
-  return NextResponse.json({ok:true,result:review?"review":rejected?"rejected":approved?"approved":"pending",paymentReceived:transaction?.status==="approved",status:order.status,paymentMethod:order.payment_method,total:Number(order.total),currency:order.currency,reference:id.slice(0,8).toUpperCase()},{headers:{"Cache-Control":"no-store"}});
+  return NextResponse.json({ok:true,result:review?"review":rejected?"rejected":approved?"approved":"pending",paymentReceived:transaction?.status==="approved",status:order.status,paymentMethod:order.payment_method,total:Number(order.total),currency:order.currency,reference:order.order_number,operationalStatus:order.operational_status,paymentStatus:transaction?.status??null},{headers:{"Cache-Control":"no-store"}});
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

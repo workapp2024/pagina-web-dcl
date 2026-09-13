@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
+import { isOperationalStatus } from "@/lib/store/order-operations";
 
 async function guard(){if(!(await isAdminAuthenticated()))return NextResponse.json({ok:false,error:"No autorizado."},{status:401});if(!isServiceRoleConfigured())return NextResponse.json({ok:false,error:"Falta SUPABASE_SERVICE_ROLE_KEY."},{status:500});return null}
 function periodStart(period: string) {
@@ -20,12 +21,13 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const page = Number(params.get("page") || 1), limit = Number(params.get("limit") || 50);
     const status = params.get("status") || "all", period = params.get("period") || "month";
+    const operational = params.get("operational") || "all";
     const q = boundedString(params.get("q"), 80);
     if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
       !["all", "attention", "pending", "transfer", "paid", "delivery", "completed", "cancelled"].includes(status) ||
-      !["all", "today", "week", "month"].includes(period) || q === null) return apiError("BAD_REQUEST", "Filtros invalidos.", 400);
+      !["all", "today", "week", "month"].includes(period) || (operational !== "all" && !isOperationalStatus(operational)) || q === null) return apiError("BAD_REQUEST", "Filtros invalidos.", 400);
     const db = createAdminServerClient();
-    const result = await db.rpc("list_admin_orders" as never, { p_q: q, p_status: status, p_since: periodStart(period), p_page: page, p_limit: limit } as never) as unknown as { data: { data: unknown[]; pagination: { total: number; page: number; limit: number } } | null; error: { message: string } | null };
+    const result = await db.rpc("list_admin_operational_orders" as never, { p_q: q, p_status: status, p_since: periodStart(period), p_page: page, p_limit: limit, p_operational: operational } as never) as unknown as { data: { data: unknown[]; pagination: { total: number; page: number; limit: number } } | null; error: { message: string } | null };
     if (result.error || !result.data) throw new Error(result.error?.message || "No se pudieron consultar los pedidos.");
     return NextResponse.json({ ok: true, ...result.data }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return apiInternalError("admin_orders_list", error); }
