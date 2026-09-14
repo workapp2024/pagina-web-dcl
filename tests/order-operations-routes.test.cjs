@@ -47,7 +47,7 @@ test('admin list forwards commercial search and operational filter to the new RP
     '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ rpc: async (name, args) => { calls.push({ name, args: plain(args) }); return { data: { data: [], pagination: { total: 0 } }, error: null }; } }) },
   });
   assert.equal((await GET(new Request('https://test.invalid?q=DCL-000123&status=all&period=all&operational=ready'))).status, 200);
-  assert.deepEqual(calls[0], { name: 'list_admin_operational_orders', args: { p_q: 'DCL-000123', p_status: 'all', p_since: null, p_page: 1, p_limit: 50, p_operational: 'ready' } });
+  assert.deepEqual(calls[0], { name: 'list_admin_operational_orders', args: { p_q: 'DCL-000123', p_status: 'all', p_since: null, p_page: 1, p_limit: 50, p_operational: 'ready', p_archived: false } });
   assert.equal((await GET(new Request('https://test.invalid?operational=paid'))).status, 400);
   assert.equal(calls.length, 1);
 });
