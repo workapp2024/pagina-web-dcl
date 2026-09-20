@@ -191,9 +191,9 @@ export interface Database {
         Update: { id?: string; movement_type?: string; amount?: number; occurred_at?: string; description?: string; sale_id?: string | null; account_id?: string | null; period_id?: string | null; transfer_id?: string | null; idempotency_key?: string | null; created_at?: string };
       };
       customers: {
-        Row: { id: string; full_name: string; phone: string | null; email: string | null; document_number: string | null; notes: string; created_at: string; updated_at: string };
-        Insert: { id?: string; full_name: string; phone?: string | null; email?: string | null; document_number?: string | null; notes?: string; created_at?: string; updated_at?: string };
-        Update: { id?: string; full_name?: string; phone?: string | null; email?: string | null; document_number?: string | null; notes?: string; created_at?: string; updated_at?: string };
+        Row: { id: string; full_name: string; phone: string | null; email: string | null; document_number: string | null; notes: string; created_at: string; updated_at: string; archived_at: string | null };
+        Insert: { id?: string; full_name: string; phone?: string | null; email?: string | null; document_number?: string | null; notes?: string; created_at?: string; updated_at?: string; archived_at?: string | null };
+        Update: { id?: string; full_name?: string; phone?: string | null; email?: string | null; document_number?: string | null; notes?: string; created_at?: string; updated_at?: string; archived_at?: string | null };
       };
       customer_vehicles: {
         Row: { id: string; customer_id: string; vehicle_model_id: string | null; brand_name: string; model_name: string; year: number | null; plate: string | null; notes: string; created_at: string; updated_at: string };
