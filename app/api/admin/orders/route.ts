@@ -30,7 +30,24 @@ export async function GET(request: Request) {
     const db = createAdminServerClient();
     const result = await db.rpc("list_admin_operational_orders" as never, { p_q: q, p_status: view === "archived" ? "all" : status, p_since: periodStart(period), p_page: page, p_limit: limit, p_operational: view === "archived" ? "all" : operational, p_archived: view === "archived" } as never) as unknown as { data: { data: unknown[]; pagination: { total: number; page: number; limit: number } } | null; error: { message: string } | null };
     if (result.error || !result.data) throw new Error(result.error?.message || "No se pudieron consultar los pedidos.");
-    return NextResponse.json({ ok: true, ...result.data }, { headers: { "Cache-Control": "no-store" } });
+    const rows = result.data.data as { id: string; payment?: Record<string, unknown> | null }[];
+    const ids = rows.map(row => row.id);
+    if (!ids.length) return NextResponse.json({ ok: true, ...result.data }, { headers: { "Cache-Control": "no-store" } });
+    const [payments, resolutions] = await Promise.all([
+      db.from("payment_transactions" as never).select("id,order_id,provider,status,sale_id,external_order_id,external_payment_id,created_at").in("order_id", ids).order("created_at", { ascending: false }).order("id", { ascending: false }),
+      db.from("order_resolutions" as never).select("id,order_id,resolution_type,external_reference,note,source,actor,created_at").in("order_id", ids).order("created_at", { ascending: false }),
+    ]);
+    if (payments.error || resolutions.error) throw new Error(payments.error?.message || resolutions.error?.message);
+    type Payment = { order_id: string; provider: string; status: string; sale_id: string | null; external_order_id: string | null; external_payment_id: string | null };
+    type Resolution = { id: string; order_id: string; resolution_type: string; external_reference: string | null; note: string; source: string; actor: string; created_at: string };
+    const paymentByOrder = new Map<string, Payment>();
+    for (const payment of (payments.data || []) as Payment[]) if (!paymentByOrder.has(payment.order_id)) paymentByOrder.set(payment.order_id, payment);
+    const resolutionsByOrder = new Map<string, Resolution[]>();
+    for (const entry of (resolutions.data || []) as Resolution[]) resolutionsByOrder.set(entry.order_id, [...(resolutionsByOrder.get(entry.order_id) || []), entry]);
+    return NextResponse.json({ ok: true, ...result.data, data: rows.map(row => ({ ...row,
+      payment: paymentByOrder.has(row.id) ? { ...row.payment, ...paymentByOrder.get(row.id) } : row.payment,
+      resolutions: resolutionsByOrder.get(row.id) || [],
+    })) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return apiInternalError("admin_orders_list", error); }
 }
 

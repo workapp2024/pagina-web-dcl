@@ -7,7 +7,10 @@ export type CustomerHistory = { customer: Customer; vehicles: CustomerVehicle[];
 export type SalesBootstrap = { customers: Customer[]; summary: SalesSummary };
 export type SalesSummary = { total: number; operations: number; products: number; newCustomers: number };
 export type GeneralSale = { id: string; createdAt: string; status: string; total: number; customer: Customer; vehicle?: CustomerVehicle; itemCount: number; paymentMethod?: string };
-export type SaleDetail = CustomerSale & { customer: Customer; inventoryMovements: Array<{ id: string; productId: string; quantityDelta: number; reason: string; createdAt: string }> };
+export type SaleDetail = CustomerSale & { customer: Customer; orderId: string | null; inventoryMovements: Array<{ id: string; productId: string; quantityDelta: number; reason: string; createdAt: string }> };
+export function canCancelIndependentSale(sale: Pick<SaleDetail, "status" | "orderId">) {
+  return sale.status === "completed" && !sale.orderId;
+}
 
 async function request<T>(url: string, init?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
   try { const response = await fetch(url, init); const body = await response.json().catch(() => ({})); return response.ok && body.ok ? { success: true, data: body.data as T } : { success: false, error: body.error || body.message || "No se pudo completar la operación." }; }

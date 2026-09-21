@@ -105,7 +105,7 @@ test('Admin renders separate order/payment, submits the expected transition and 
   const render = () => { cursor = 0; refCursor = 0; return OrdersManager(); };
   const button = label => nodes(render()).find(n => n.type === 'button' && text(n) === label);
   button('Actualizar pedidos').props.onClick(); await settle();
-  assert.match(text(render()), /DCL-000123/); assert.match(text(render()), /Pedido: Recibido/); assert.match(text(render()), /Pago: Aprobado/);
+  assert.match(text(render()), /DCL-000123/); assert.match(text(render()), /Operativo: Recibido/); assert.match(text(render()), /Pago: Aprobado/);
   nodes(render()).find(n => n.type === 'button' && text(n).includes('Cliente de prueba')).props.onClick();
   assert.match(text(render()), /Historial operativo/);
   assert.equal(button('Registrar cancelación operativa'), undefined);

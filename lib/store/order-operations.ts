@@ -22,7 +22,7 @@ export const technicalOrderLabels: Record<string, string> = {
   pending_payment: "Pendiente de pago", pending_manual_verification: "Transferencia a verificar",
   paid: "Pago registrado", completed: "Venta registrada (no acredita entrega)",
   stock_unavailable: "Incidencia de stock / reserva", cancelled: "Cancelación registrada",
-  rejected: "Rechazo registrado",
+  rejected: "Rechazo registrado", refunded: "Reembolsado", refund_required: "Reembolso externo pendiente",
 };
 
 export type OperationalOrder = {
