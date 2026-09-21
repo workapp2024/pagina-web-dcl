@@ -1,8 +1,9 @@
 ﻿import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { getAnalyticsSummary, type AnalyticsResult } from "@/lib/posthog-admin";
+import { getAnalyticsSummary, type AnalyticsResult, type DetailKind } from "@/lib/posthog-admin";
 import { analyticsDates } from "@/lib/analytics-dates";
+import { AnalyticsDetails } from "@/components/admin/AnalyticsDetails";
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
   if (!(await isAdminAuthenticated())) redirect("/admin/login");
@@ -16,12 +17,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   } catch (error) { dateError = error instanceof Error ? error.message : "Rango de fechas inválido."; }
   const data = result?.status === "ok" ? result.data : null;
   const total = (event: string) => data?.totals[event] ?? 0;
-  const metrics: [string, number | null][] = data ? [
-    ["Visitantes", data.visitors], ["Sesiones", data.sessions], ["Páginas vistas", total("page_view")],
-    ["Productos vistos", total("product_viewed")], ["Agregados al carrito", total("add_to_cart")],
-    ["Búsquedas por vehículo", total("vehicle_search_started")], ["Búsquedas por conector", total("connector_search")],
-    ["Vehículo sin resultados", total("vehicle_search_no_results")], ["Conector sin resultados", data.connectorNoResults],
-    ["Checkout iniciado (entrada)", total("checkout_started")], ["Clics comerciales a WhatsApp", total("whatsapp_click")],
+  const metrics: { kind: DetailKind; value: number | null }[] = data ? [
+    { kind: "visitors", value: data.visitors }, { kind: "sessions", value: data.sessions }, { kind: "pages", value: total("page_view") },
+    { kind: "products", value: total("product_viewed") }, { kind: "cart", value: total("add_to_cart") },
+    { kind: "vehicles", value: total("vehicle_search_completed") + total("vehicle_search_no_results") },
+    { kind: "connectors", value: total("connector_search") },
+    { kind: "checkout", value: total("checkout_started") }, { kind: "whatsapp", value: total("whatsapp_click") },
   ] : [];
   const project = process.env.POSTHOG_PROJECT_ID;
   const ui = process.env.POSTHOG_UI_HOST || "https://eu.posthog.com";
@@ -40,9 +41,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     {data && <>
       <p className="text-sm text-zinc-400">Eventos comerciales históricos sin entorno en este rango: <b>{data.legacyEvents}</b>. Se conservan, pero no se suman a producción porque pueden incluir pruebas. El enlace a PostHog abre el proyecto completo.</p>
       {!data.productionEvents ? <p className="rounded-2xl border border-white/10 p-5 text-sm text-zinc-300">Métricas no disponibles: la consulta no encontró eventos comerciales etiquetados como producción en este rango. Esto no demuestra ausencia de clientes; verificá la captura y el entorno del despliegue.</p> : <>
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{metrics.map(([label, value]) => <article key={label} className="rounded-2xl border border-white/10 bg-white/5 p-4"><small className="uppercase text-zinc-400">{label}</small><b className="mt-2 block text-3xl">{value === null ? "No disponible" : value}</b></article>)}</section>
-        <p className="text-sm text-zinc-400">Visitantes y sesiones se calculan sobre páginas vistas con identificación completa; visitantes aproxima navegadores, no personas verificadas. Los demás valores cuentan eventos, no productos únicos ni conversiones. Checkout cuenta entradas a la página, incluso repetidas. Conectores cuenta resultados mostrados de búsquedas reconocidas, no texto libre.</p>
-        <p className="text-sm text-zinc-400">Errores técnicos de búsqueda por vehículo: <b>{total("vehicle_search_error")}</b>. No se incluyen en búsquedas sin resultados.</p>
+        <AnalyticsDetails key={`${period}:${params.from ?? ""}:${params.to ?? ""}`} metrics={metrics} period={period} from={params.from} to={params.to} replayUrl={project ? `${ui}/project/${project}/replay/home` : undefined} />
+        <p className="text-sm text-zinc-400">Visitantes y sesiones se calculan sobre páginas vistas con identificación completa; visitantes aproxima navegadores, no personas verificadas. Los demás valores cuentan eventos, no productos únicos ni conversiones. Checkout cuenta entradas a la página, incluso repetidas. Conectores cuenta búsquedas reconocidas, no texto libre.</p>
+        <p className="text-sm text-zinc-400">Vehículo sin resultados: <b>{total("vehicle_search_no_results")}</b>. Conector sin resultados: <b>{data.connectorNoResults}</b>. Errores técnicos de búsqueda por vehículo: <b>{total("vehicle_search_error")}</b>.</p>
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{([ ["Páginas", data.pages], ["Productos", data.products], ["Marcas buscadas", data.brands], ["Modelos buscados", data.models] ] as [string, [string, number][]][]).map(([title, rows]) => <article key={title} className="rounded-2xl border border-white/10 p-5"><h2 className="font-black">{title}</h2><div className="mt-3 space-y-2">{rows.length ? rows.map(([name, count]) => <div key={name} className="flex justify-between gap-3 text-sm"><span className="truncate text-zinc-300">{name}</span><b>{count}</b></div>) : <p className="text-sm text-zinc-400">Sin datos para este rango.</p>}</div></article>)}</section>
       </>}
     </>}

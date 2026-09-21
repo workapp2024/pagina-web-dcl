@@ -168,14 +168,15 @@ test('commercial WhatsApp link preserves href, presentation and source', () => {
 });
 
 test('Admin renders distinct unavailable/error/zero states and no misleading funnel', async () => {
+  const analyticsComponent = { '@/components/admin/AnalyticsDetails': { AnalyticsDetails: ({ metrics }) => require('react').createElement('div', null, metrics.map(metric => `${metric.kind}: ${metric.value ?? 'No disponible'}`).join(' ')) } };
   for (const [result, expected] of [[{ status: 'not_configured' }, 'Analytics no configurado'], [{ status: 'error', message: 'PostHog respondió HTTP 403.' }, 'Error consultando PostHog'], [{ status: 'ok', data: { totals: {}, productionEvents: 0, legacyEvents: 9 } }, 'Métricas no disponibles']]) {
-    const Page = load('app/admin/analitica/page.tsx', { '@/lib/admin-auth': { isAdminAuthenticated: async () => true }, '@/lib/posthog-admin': { getAnalyticsSummary: async () => result } }).default;
+    const Page = load('app/admin/analitica/page.tsx', { ...analyticsComponent, '@/lib/admin-auth': { isAdminAuthenticated: async () => true }, '@/lib/posthog-admin': { getAnalyticsSummary: async () => result } }).default;
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
     assert.ok(html.includes(expected)); assert.ok(!html.includes('Productos vistos')); assert.ok(!html.includes('Funnel'));
   }
   const data = { totals: { page_view: 1 }, visitors: 1, sessions: null, productionEvents: 1, legacyEvents: 0, connectorNoResults: 0, pages: [], products: [], brands: [], models: [] };
-  const Page = load('app/admin/analitica/page.tsx', { '@/lib/admin-auth': { isAdminAuthenticated: async () => true }, '@/lib/posthog-admin': { getAnalyticsSummary: async () => ({ status: 'ok', data }) } }).default;
+  const Page = load('app/admin/analitica/page.tsx', { ...analyticsComponent, '@/lib/admin-auth': { isAdminAuthenticated: async () => true }, '@/lib/posthog-admin': { getAnalyticsSummary: async () => ({ status: 'ok', data }) } }).default;
   const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
-  for (const label of ['Visitantes', 'Sesiones', 'Páginas vistas', 'Productos vistos', 'No disponible']) assert.ok(html.includes(label));
-  assert.match(html, /Productos vistos<\/small><b[^>]*>0<\/b>/);
+  for (const kind of ['visitors', 'sessions', 'pages', 'products', 'cart', 'vehicles', 'connectors', 'checkout', 'whatsapp', 'No disponible']) assert.ok(html.includes(kind));
+  assert.match(html, /products: 0/);
 });
