@@ -48,7 +48,7 @@ export function ProductCard({ id, name, description, image, href, ctaText, price
             {ctaText}
           </a>
           <AddToCartButton product={{ id, name, price, image, href, category }} />
-          <CommercialWhatsAppLink source="product"
+          <CommercialWhatsAppLink source="product" analyticsContext={{ product_id: id }}
             href={whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${name}.`)}
             target="_blank"
             rel="noreferrer"

@@ -20,8 +20,9 @@ export function PublicAnalytics() {
     capture(analyticsEvents.pageView, { path: pathname });
     if (pathname === "/checkout") {
       try {
-        const lines = JSON.parse(localStorage.getItem("dcl-public-cart-v1") || "[]") as { quantity?: number; price?: number }[];
-        capture(analyticsEvents.checkoutStarted, { item_count: lines.reduce((sum, item) => sum + Number(item.quantity || 0), 0), cart_total: lines.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.price || 0), 0) });
+        const lines = JSON.parse(localStorage.getItem("dcl-public-cart-v1") || "[]") as { id?: string; quantity?: number; price?: number }[];
+        const productIds = [...new Set(lines.map(item => item.id).filter((id): id is string => typeof id === "string"))];
+        capture(analyticsEvents.checkoutStarted, { item_count: lines.reduce((sum, item) => sum + Number(item.quantity || 0), 0), cart_total: lines.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.price || 0), 0), product_ids: productIds });
       } catch { capture(analyticsEvents.checkoutStarted, { item_count: 0, cart_total: 0 }); }
     }
   }, [pathname, searchParams]);

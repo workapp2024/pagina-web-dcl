@@ -60,5 +60,6 @@ function DetailTable({ detail }: { detail: AnalyticsDetail }) {
     {detail.stats && <div className="mt-4 flex flex-wrap gap-6">{detail.stats.map(([name, value]) => <p key={name} className="text-sm text-zinc-300">{name}: <b className="text-white">{value}</b></p>)}</div>}
     {detail.note && <p className="mt-3 text-sm text-zinc-400">{detail.note}</p>}
     {!detail.rows.length ? <p className="mt-4 text-sm text-zinc-400">Sin datos para este rango.</p> : <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[460px] text-left text-sm"><thead><tr className="border-b border-white/15 text-zinc-400">{detail.columns.map(column => <th key={column} scope="col" className="px-2 py-2 font-medium">{column}</th>)}</tr></thead><tbody>{detail.rows.map((row, index) => <tr key={`${row.label}-${index}`} className="border-b border-white/10"><th scope="row" className="px-2 py-2 font-medium">{row.label}{row.productId && <small className="ml-2 text-zinc-500">{row.productId}</small>}</th>{row.values.map((value, cell) => <td key={cell} className="px-2 py-2">{value === null ? "No disponible" : value}</td>)}</tr>)}</tbody></table></div>}
+    {detail.secondary && <><h3 className="mt-6 font-semibold">{detail.secondary.title}</h3><DetailTable detail={detail.secondary} /></>}
   </>;
 }

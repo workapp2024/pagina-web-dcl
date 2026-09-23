@@ -113,6 +113,35 @@ test('Vercel preview overrides manual production; unknown builds default preview
   }
 });
 
+test('commercial enrichment is event-scoped, bounded, and strips PII', () => {
+  const sanitize = load('lib/store/analytics-privacy.ts').sanitizeStoreEvent;
+  const pii = { phone: '123', email: 'a@b.com', name: 'A', customer_name: 'B', document: '1', address: 'X', message: 'secret', whatsapp_message: 'secret' };
+  assert.deepEqual(plain(sanitize('product_viewed', { product_id: 'h7', product_slug: 'h7', category: 'Accesorios', unknown: 'x', ...pii })), { $geoip_disable: true, $process_person_profile: false, $ip: null, product_id: 'h7', product_slug: 'h7', category: 'Accesorios' });
+  assert.deepEqual(plain(sanitize('add_to_cart', { product_id: 'h7', category: 'Accesorios', quantity: 1, ...pii })), { $geoip_disable: true, $process_person_profile: false, $ip: null, product_id: 'h7', category: 'Accesorios', quantity: 1 });
+  const vehicle = plain(sanitize('vehicle_search_completed', { vehicle_type: 'Auto', brand: 'Fiat', model: 'Cronos', year: 2020, position: 'low', year_provided: true, result_count: 4, has_results: false, ...pii }));
+  assert.deepEqual(vehicle, { $geoip_disable: true, $process_person_profile: false, $ip: null, vehicle_type: 'Auto', brand: 'Fiat', model: 'Cronos', year: 2020, position: 'low', has_results: true, result_count: 4, year_provided: true });
+  assert.equal(sanitize('vehicle_search_no_results', { vehicle_type: 'Auto' }).has_results, false);
+  assert.equal(sanitize('connector_search', { connector: 'H7', has_results: true, result_count: 3 }).result_count, 3);
+  assert.deepEqual(plain(sanitize('whatsapp_click', { source: 'product', product_id: 'h7', promotion_id: 'no', ...pii })), { $geoip_disable: true, $process_person_profile: false, $ip: null, source: 'product', product_id: 'h7' });
+  assert.deepEqual(plain(sanitize('whatsapp_click', { source: 'vehicle_search', vehicle_type: 'Auto', brand: 'Fiat', model: 'Cronos', year: 2020, position: 'fog', has_results: false, product_id: 'no', ...pii })), { $geoip_disable: true, $process_person_profile: false, $ip: null, source: 'vehicle_search', vehicle_type: 'Auto', brand: 'Fiat', model: 'Cronos', year: 2020, position: 'fog', has_results: false });
+  const checkout = plain(sanitize('checkout_started', { item_count: 3, cart_total: 100, product_ids: ['h7', 'h4'], product_quantities: [2, 1], ...pii }));
+  assert.deepEqual(checkout, { $geoip_disable: true, $process_person_profile: false, $ip: null, item_count: 3, cart_total: 100, product_ids: ['h7', 'h4'] });
+  for (const product_ids of [['h7', 'h7'], ['ok', 'bad id'], Array.from({ length: 31 }, (_, index) => `p${index}`), { arbitrary: true }]) assert.equal(sanitize('checkout_started', { product_ids }).product_ids, undefined);
+  assert.doesNotMatch(JSON.stringify([vehicle, checkout]), /phone|email|customer_name|document|address|message|secret/);
+});
+
+test('all enriched events reject PII, unknown fields and incorrect property types', () => {
+  const sanitize = load('lib/store/analytics-privacy.ts').sanitizeStoreEvent;
+  const forbidden = { phone: '123', email: 'x@y.test', name: 'X', customer_name: 'X', document: '123', address: 'X', message: 'X', whatsapp_message: 'X', unknown: {}, product_name: 'X' };
+  for (const event of ['product_viewed', 'add_to_cart', 'vehicle_search_completed', 'vehicle_search_no_results', 'vehicle_search_error', 'connector_search', 'whatsapp_click', 'checkout_started']) {
+    const safe = sanitize(event, { ...forbidden, source: 'vehicle_search', category: {}, year: '2020', position: 'unknown', result_count: 1.5, product_id: {}, product_ids: [1], quantity: 2 });
+    for (const key of [...Object.keys(forbidden), 'category', 'year', 'position', 'result_count', 'product_id', 'product_ids', 'quantity']) assert.equal(safe[key], undefined, `${event}: ${key}`);
+  }
+  for (const value of [-1, 1.5, '2', null, Infinity, NaN, {}]) assert.equal(sanitize('connector_search', { result_count: value }).result_count, undefined);
+  for (const ids of [null, 'h7', [null], [[]], new Array(2)]) assert.equal(sanitize('checkout_started', { product_ids: ids }).product_ids, undefined);
+  assert.equal(sanitize('vehicle_search_error', { has_results: false, result_count: 0 }).has_results, undefined);
+});
+
 test('H7 catalog result creates identifiable connector event, with no free text or PII', () => {
   const { parseProductFilters } = load('lib/product-filters.ts');
   const EventOnMount = () => null;
@@ -130,16 +159,16 @@ test('H7 catalog result creates identifiable connector event, with no free text 
   for (const key of ['phone', 'email', '$current_url']) assert.equal(safe[key], undefined);
 });
 
-async function vehicleRun(rows, reject = false, lookupFailure = false) {
+async function vehicleRun(rows, reject = false, lookupFailure = false, found = [], names = ['Marca', 'Modelo']) {
   const events = []; let cursor = 0;
-  const seed = ['Auto', [{ id: 'brand', name: 'Marca' }], 'Marca', [{ id: 'model', name: 'Modelo' }], 'Modelo', '2016', 'low'];
+  const seed = ['Auto', [{ id: 'brand', name: 'Marca' }], names[0], [{ id: 'model', name: 'Modelo' }], names[1], '2016', 'low'];
   const { VehicleFinder } = load('components/public/VehicleFinder.tsx', {
     react: { useState: initial => [cursor < seed.length ? seed[cursor++] : (cursor++, initial), () => {}], useRef: initial => ({ current: initial }), useEffect: fn => { if (lookupFailure) fn(); } },
     '@/components/providers/SiteContentProvider': { useSiteContent: () => ({ content: { products: [] } }) },
     '@/components/ui/ManagedImage': {}, '@/components/ui/WhatsAppButton': {}, '@/components/store/ProductPurchaseActions': {},
-    '@/lib/analytics': { analyticsEvents: { vehicleSearchStarted: 'vehicle_search_started', vehicleSearchNoResults: 'vehicle_search_no_results', vehicleSearchError: 'vehicle_search_error', vehicleSearchCompleted: 'vehicle_search_completed', fitmentResultViewed: 'fitment_result_viewed' }, capture: event => events.push(event) },
+    '@/lib/analytics': { analyticsEvents: { vehicleSearchStarted: 'vehicle_search_started', vehicleSearchNoResults: 'vehicle_search_no_results', vehicleSearchError: 'vehicle_search_error', vehicleSearchCompleted: 'vehicle_search_completed', fitmentResultViewed: 'fitment_result_viewed' }, capture: (...args) => events.push(args) },
     '@/lib/supabase/vehicle-compatibility': { VEHICLE_TYPES: ['Auto'], getPublicVehicleBrands: async () => null, getPublicVehicleModels: async () => [], searchPublicVehicleCompatibilities: async () => { if (reject) throw new Error('private backend details'); return rows; } },
-    '@/lib/vehicle-product-search': { vehicleReferenceLinks: () => ({}), vehiclePositions: [], vehicleProductMatches: () => [] },
+    '@/lib/vehicle-product-search': { vehicleReferenceLinks: () => ({}), vehiclePositions: [], vehicleProductMatches: () => found },
   });
   const tree = VehicleFinder();
   await new Promise(resolve => setImmediate(resolve));
@@ -149,8 +178,19 @@ async function vehicleRun(rows, reject = false, lookupFailure = false) {
 }
 
 test('valid empty vehicle response differs from null and rejected technical errors', async () => {
-  assert.deepEqual(await vehicleRun([]), ['vehicle_search_started', 'vehicle_search_no_results']);
-  for (const args of [[null], [[], true], [[], false, true]]) assert.deepEqual(await vehicleRun(...args), ['vehicle_search_started', 'vehicle_search_error']);
+  const empty = plain(await vehicleRun([]));
+  assert.equal(empty[0][0], 'vehicle_search_started');
+  assert.deepEqual(empty[1], ['vehicle_search_no_results', { vehicle_type: 'Auto', brand: 'Marca', model: 'Modelo', year_provided: true, year: 2016, position: 'low', result_count: 0, has_results: false }]);
+  for (const args of [[null], [[], true], [[], false, true]]) assert.deepEqual(plain(await vehicleRun(...args)).map(event => event[0]), ['vehicle_search_started', 'vehicle_search_error']);
+});
+
+test('vehicle emitter keeps selected year and position for results and omits unmatched free text', async () => {
+  const completed = plain(await vehicleRun([], false, false, [{}]));
+  assert.deepEqual(completed[1], ['vehicle_search_completed', { vehicle_type: 'Auto', brand: 'Marca', model: 'Modelo', year_provided: true, year: 2016, position: 'low', result_count: 1, has_results: true }]);
+  const unmatched = plain(await vehicleRun([], false, false, [], ['Nombre privado', 'Texto privado']));
+  assert.equal(unmatched[1][1].brand, undefined);
+  assert.equal(unmatched[1][1].model, undefined);
+  assert.doesNotMatch(JSON.stringify(unmatched), /privado/);
 });
 
 test('commercial WhatsApp link preserves href, presentation and source', () => {
@@ -164,7 +204,20 @@ test('commercial WhatsApp link preserves href, presentation and source', () => {
   assert.equal(WhatsAppButton({}).props.source, 'general');
   assert.equal(WhatsAppButton({ source: 'vehicle_search' }).props.source, 'vehicle_search');
   const { ProductCard } = load('components/ui/ProductCard.tsx', { '@/components/ui/ManagedImage': { ManagedImage: () => null }, '@/components/store/AddToCartButton': { AddToCartButton: () => null }, '@/components/analytics/CommercialWhatsAppLink': { CommercialWhatsAppLink } });
-  assert.equal(nodes(ProductCard({ id: 'x', name: 'H7', price: 1, category: 'General' })).find(n => n.type === CommercialWhatsAppLink).props.source, 'product');
+  const productLink = nodes(ProductCard({ id: 'x', name: 'H7', price: 1, category: 'General' })).find(n => n.type === CommercialWhatsAppLink);
+  assert.equal(productLink.props.source, 'product'); assert.deepEqual(plain(productLink.props.analyticsContext), { product_id: 'x' });
+});
+
+test('checkout_started emits unique product IDs without customer data', () => {
+  const events = [];
+  const { PublicAnalytics } = load('components/analytics/PublicAnalytics.tsx', {
+    react: { useEffect: fn => fn() },
+    'next/navigation': { usePathname: () => '/checkout', useSearchParams: () => new URLSearchParams() },
+    'posthog-js': { __loaded: false },
+    '@/lib/analytics': { analyticsEvents: { pageView: 'page_view', checkoutStarted: 'checkout_started' }, capture: (...args) => events.push(args) },
+  }, { localStorage: { getItem: () => JSON.stringify([{ id: 'h7', quantity: 2, price: 10 }, { id: 'h7', quantity: 1, price: 10 }, { id: 'h4', quantity: 1, price: 20 }]) } });
+  PublicAnalytics();
+  assert.deepEqual(plain(events[1]), ['checkout_started', { item_count: 4, cart_total: 50, product_ids: ['h7', 'h4'] }]);
 });
 
 test('Admin renders distinct unavailable/error/zero states and no misleading funnel', async () => {

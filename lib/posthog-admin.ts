@@ -23,7 +23,7 @@ const measuredEvents = `'page_view',${productEvents},'add_to_cart','cart_view','
 export const detailKinds = ["visitors", "sessions", "pages", "products", "cart", "vehicles", "connectors", "checkout", "whatsapp"] as const;
 export type DetailKind = typeof detailKinds[number];
 export type DetailRow = { label: string; values: (string | number | null)[]; productId?: string };
-export type AnalyticsDetail = { title: string; columns: string[]; rows: DetailRow[]; note?: string; stats?: [string, string | number][] };
+export type AnalyticsDetail = { title: string; columns: string[]; rows: DetailRow[]; note?: string; stats?: [string, string | number][]; secondary?: AnalyticsDetail };
 export type DetailResult = { status: "ok"; data: AnalyticsDetail } | { status: "error"; message: string } | { status: "not_configured" };
 
 const dateFilter = "timestamp >= toDateTime({from}, 'UTC') AND timestamp < toDateTime({to}, 'UTC')";
@@ -115,6 +115,7 @@ export async function getAnalyticsDetail(kind: DetailKind, from: number, to: num
     let note: string | undefined;
     let stats: [string, string | number][] | undefined;
     let rows: DetailRow[] = [];
+    let secondary: AnalyticsDetail | undefined;
     if (kind === "visitors" || kind === "sessions") {
       title = kind === "visitors" ? "Visitantes por día" : "Sesiones por día";
       columns = ["Día", "Visitantes aprox.", "Sesiones", "Páginas vistas"];
@@ -155,24 +156,37 @@ export async function getAnalyticsDetail(kind: DetailKind, from: number, to: num
       title = kind === "vehicles" ? "Búsquedas por vehículo" : "Búsquedas por conector";
       columns = [kind === "vehicles" ? "Vehículo" : "Conector", "Búsquedas", "Con resultados", "Sin resultados"];
       const vehicle = kind === "vehicles";
-      const dimensions = vehicle ? "toString(properties['vehicle_type']), toString(properties['brand']), toString(properties['model'])" : "toString(properties['connector'])";
+      const dimensions = vehicle ? "toString(properties['vehicle_type']), toString(properties['brand']), toString(properties['model']), toString(properties['year']), toString(properties['position'])" : "toString(properties['connector'])";
       const events = vehicle ? "event IN ('vehicle_search_completed','vehicle_search_no_results')" : "event = 'connector_search'";
       const success = vehicle ? "event = 'vehicle_search_completed'" : "properties['has_results'] = true";
       const failure = vehicle ? "event = 'vehicle_search_no_results'" : "properties['has_results'] = false";
-      const found = await query(`SELECT ${dimensions}, count(), countIf(${success}), countIf(${failure}) FROM events WHERE ${production} AND ${events} GROUP BY ${dimensions} ORDER BY count() DESC LIMIT 30`);
+      const found = await query(`SELECT ${dimensions}, count(), countIf(${success}), countIf(${failure})${vehicle ? "" : ", countIf(toInt64OrNull(toString(properties['result_count'])) >= 0), ifNull(sumIf(toInt64OrNull(toString(properties['result_count'])), toInt64OrNull(toString(properties['result_count'])) >= 0), 0)"} FROM events WHERE ${production} AND ${events} GROUP BY ${dimensions} ORDER BY count() DESC LIMIT 30`);
       rows = found.map(row => {
-        if (row.length !== (vehicle ? 6 : 4)) throw new Error("PostHog devolvió filas inválidas.");
-        const dimensionsCount = vehicle ? 3 : 1;
-        const parts = row.slice(0, dimensionsCount).map(label);
-        if (vehicle && parts.some(part => !/^[\p{L}\p{N} ._-]{1,80}$/u.test(part))) throw new Error("PostHog devolvió filas inválidas.");
-        if (!vehicle && !/^[A-Z0-9/]{1,20}$/.test(parts[0])) throw new Error("PostHog devolvió filas inválidas.");
-        return { label: parts.join(" → "), values: row.slice(dimensionsCount).map(count) };
+        if (row.length !== (vehicle ? 8 : 6)) throw new Error("PostHog devolvió filas inválidas.");
+        if (vehicle) {
+          const parts = row.slice(0, 3).map(value => value ? label(value) : "Dato no disponible");
+          if (parts.some(part => part !== "Dato no disponible" && !/^[\p{L}\p{N} ._-]{1,80}$/u.test(part))) throw new Error("PostHog devolvió filas inválidas.");
+          const year = row[3] ? label(row[3]) : "Dato no disponible";
+          const position = row[4] ? label(row[4]) : "Dato no disponible";
+          if (year !== "Dato no disponible" && !/^\d{4}$/.test(year)) throw new Error("PostHog devolvió filas inválidas.");
+          if (position !== "Dato no disponible" && !["low", "high", "fog", "aux"].includes(position)) throw new Error("PostHog devolvió filas inválidas.");
+          return { label: `${parts.join(" → ")} · ${year} · ${position}`, values: row.slice(5).map(count) };
+        }
+        const connector = label(row[0]);
+        if (!/^[A-Z0-9/]{1,20}$/.test(connector)) throw new Error("PostHog devolvió filas inválidas.");
+        const [searches, withResults, withoutResults, measured, resultTotal] = row.slice(1).map(count);
+        return { label: connector, values: [searches, withResults, withoutResults, measured === searches ? Math.round(resultTotal / searches * 100) / 100 : null] };
       });
+      if (!vehicle) {
+        columns.push("Resultados promedio");
+        note = "Resultado promedio disponible sólo cuando todas las búsquedas del grupo incluyen result_count válido.";
+      }
     } else if (kind === "checkout") {
       title = "Checkout iniciado"; columns = ["Día", "Entradas"];
-      const [daily, aggregates] = await Promise.all([
+      const [daily, aggregates, products] = await Promise.all([
         query(`SELECT ${day}, count() FROM events WHERE ${production} AND event = 'checkout_started' GROUP BY ${day} ORDER BY ${day} DESC LIMIT 90`),
         query(`SELECT count(), countIf(toFloat64OrNull(toString(properties['item_count'])) IS NOT NULL AND toFloat64OrNull(toString(properties['item_count'])) >= 0), avgIf(toFloat64OrNull(toString(properties['item_count'])), toFloat64OrNull(toString(properties['item_count'])) >= 0), countIf(toFloat64OrNull(toString(properties['cart_total'])) IS NOT NULL AND toFloat64OrNull(toString(properties['cart_total'])) >= 0), avgIf(toFloat64OrNull(toString(properties['cart_total'])), toFloat64OrNull(toString(properties['cart_total'])) >= 0) FROM events WHERE ${production} AND event = 'checkout_started'`),
+        query(`SELECT arrayJoin(properties['product_ids']), count() FROM events WHERE ${production} AND event = 'checkout_started' AND properties['product_ids'] IS NOT NULL GROUP BY arrayJoin(properties['product_ids']) ORDER BY count() DESC LIMIT 30`),
       ]);
       rows = daily.map(row => {
         if (row.length !== 2) throw new Error("PostHog devolvió filas inválidas.");
@@ -184,19 +198,31 @@ export async function getAnalyticsDetail(kind: DetailKind, from: number, to: num
       if (count(total) > 0 && count(validItems) === count(total)) stats.push(["Ítems promedio", decimal(averageItems)]);
       if (count(total) > 0 && count(validTotals) === count(total)) stats.push(["Carrito promedio", decimal(averageTotal)]);
       note = "Entradas al checkout, no pedidos ni ventas. Puede haber entradas repetidas.";
+      secondary = { title: "Productos presentes en entradas a checkout", columns: ["Producto", "Entradas que lo incluyeron"], rows: products.map(row => {
+        if (row.length !== 2) throw new Error("PostHog devolvió filas inválidas.");
+        const productId = label(row[0]);
+        if (!/^[a-zA-Z0-9_-]{1,100}$/.test(productId)) throw new Error("PostHog devolvió filas inválidas.");
+        return { label: "Producto no disponible", productId, values: [count(row[1])] };
+      }), note: "Los eventos anteriores al enriquecimiento no tienen lista de productos. Estas entradas no son ventas." };
     } else {
       title = "Clics comerciales a WhatsApp"; columns = ["Origen", "Clics"];
-      const found = await query(`SELECT toString(properties['source']), toString(properties['promotion_id']), count() FROM events WHERE ${production} AND event = 'whatsapp_click' GROUP BY toString(properties['source']), toString(properties['promotion_id']) ORDER BY count() DESC LIMIT 30`);
+      const dimensions = ["source", "promotion_id", "product_id", "vehicle_type", "brand", "model", "year", "position", "has_results"].map(property => `toString(properties['${property}'])`).join(", ");
+      const found = await query(`SELECT ${dimensions}, count() FROM events WHERE ${production} AND event = 'whatsapp_click' GROUP BY ${dimensions} ORDER BY count() DESC LIMIT 30`);
       rows = found.map(row => {
-        if (row.length !== 3) throw new Error("PostHog devolvió filas inválidas.");
+        if (row.length !== 10) throw new Error("PostHog devolvió filas inválidas.");
         const source = label(row[0]);
         if (!/^[a-z_]{1,40}$/.test(source)) throw new Error("PostHog devolvió filas inválidas.");
         const promotion = row[1] ? label(row[1]) : "";
         if (promotion && !/^[a-zA-Z0-9_-]{1,100}$/.test(promotion)) throw new Error("PostHog devolvió filas inválidas.");
-        return { label: promotion ? `${source} · promoción ${promotion}` : source, values: [count(row[2])] };
+        const productId = source === "product" && row[2] ? label(row[2]) : undefined;
+        if (productId && !/^[a-zA-Z0-9_-]{1,100}$/.test(productId)) throw new Error("PostHog devolvió filas inválidas.");
+        const vehicle = source === "vehicle_search" ? row.slice(3, 8).filter(Boolean).map(label) : [];
+        if (vehicle.some(part => !/^[\p{L}\p{N} ._-]{1,80}$/u.test(part))) throw new Error("PostHog devolvió filas inválidas.");
+        const outcome = source === "vehicle_search" ? row[8] === "true" ? "Con resultados" : row[8] === "false" ? "Sin resultados" : "Resultado no disponible" : "";
+        return { label: [source, source === "promotion" && promotion ? `promoción ${promotion}` : "", vehicle.join(" · "), outcome].filter(Boolean).join(" · "), productId, values: [count(row[9])] };
       });
     }
-    return { status: "ok", data: { title, columns, rows, note, stats } };
+    return { status: "ok", data: { title, columns, rows, note, stats, secondary } };
   } catch (error) {
     return { status: "error", message: safeError(error) };
   }

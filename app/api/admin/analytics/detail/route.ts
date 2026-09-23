@@ -16,14 +16,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ status: "error", message: "Rango de fechas inválido." }, { status: 400 });
   }
   const result = await getAnalyticsDetail(kind as DetailKind, range.from, range.to);
-  if (result.status !== "ok" || (kind !== "products" && kind !== "cart") || !result.data.rows.length) return NextResponse.json(result);
+  if (result.status !== "ok" || !["products", "cart", "checkout", "whatsapp"].includes(kind)) return NextResponse.json(result);
+  const detailRows = [...result.data.rows, ...(result.data.secondary?.rows ?? [])];
+  const ids = [...new Set(detailRows.map(row => row.productId).filter((id): id is string => Boolean(id)))];
+  if (!ids.length) return NextResponse.json(result);
   if (!isServiceRoleConfigured()) return NextResponse.json({ status: "error", message: "Catálogo no configurado." }, { status: 503 });
   try {
-    const ids = result.data.rows.map(row => row.productId).filter((id): id is string => Boolean(id));
     const { data, error } = await createAdminServerClient().from("products").select("id,name").in("id", ids);
     if (error) throw new Error("Catálogo no disponible.");
     const names = new Map(((data ?? []) as { id: string; name: string }[]).map(product => [product.id, product.name]));
-    return NextResponse.json({ status: "ok", data: { ...result.data, rows: result.data.rows.map(row => ({ ...row, label: names.get(row.productId ?? "") || "Producto no disponible" })) } });
+    const resolve = (row: typeof detailRows[number]) => !row.productId ? row : { ...row, label: `${kind === "whatsapp" ? "product · " : ""}${names.get(row.productId) || "Producto no disponible"}` };
+    return NextResponse.json({ status: "ok", data: { ...result.data, rows: result.data.rows.map(resolve), ...(result.data.secondary ? { secondary: { ...result.data.secondary, rows: result.data.secondary.rows.map(resolve) } } : {}) } });
   } catch {
     return NextResponse.json({ status: "error", message: "No se pudo consultar el catálogo." }, { status: 500 });
   }

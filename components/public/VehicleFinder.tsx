@@ -57,7 +57,7 @@ export function VehicleFinder({ initialType = "" }: { initialType?: string } = {
       if (rows === null) throw new Error("Compatibility lookup unavailable");
       const found = vehicleProductMatches(content.products, rows, year, position);
       setMatches(found);
-      const props = { vehicle_type: type, brand: brandName, model: modelName, year_provided: true, result_count: found.length };
+      const props = { vehicle_type: type, brand: brand?.name, model: model?.name, year_provided: true, year: Number(year), position: position || undefined, result_count: found.length, has_results: found.length > 0 };
       capture(found.length ? analyticsEvents.vehicleSearchCompleted : analyticsEvents.vehicleSearchNoResults, props);
       if (found.length) capture(analyticsEvents.fitmentResultViewed, { result_count: found.length });
     } catch { if (version === request.current) { setMatches(null); setSearchError(true); capture(analyticsEvents.vehicleSearchError); } }
@@ -96,7 +96,7 @@ export function VehicleFinder({ initialType = "" }: { initialType?: string } = {
     {matches !== null && matches.length === 0 && <div className="rounded-2xl border border-white/10 p-5 text-center">
       <p className="font-bold">¿No encontraste tu vehículo o tenés dudas?</p>
       <p className="mt-2 text-sm text-zinc-400">Una referencia externa no confirma compatibilidad; consultanos antes de comprar.</p>
-      <div className="mt-4 flex flex-wrap justify-center gap-3"><a href={references.google} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-5 text-sm font-bold">Buscar referencia en Google</a><WhatsAppButton source="vehicle_search" message={references.whatsappMessage} label="Consultar por WhatsApp" className="min-h-12" /></div>
+      <div className="mt-4 flex flex-wrap justify-center gap-3"><a href={references.google} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-5 text-sm font-bold">Buscar referencia en Google</a><WhatsAppButton source="vehicle_search" analyticsContext={{ vehicle_type: type, brand: brand?.name, model: model?.name, year: Number(year), position: position || undefined, has_results: false }} message={references.whatsappMessage} label="Consultar por WhatsApp" className="min-h-12" /></div>
     </div>}
   </div>;
 }

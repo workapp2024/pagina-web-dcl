@@ -2,8 +2,9 @@
 
 import { whatsappUrl } from "@/lib/whatsapp";
 import { CommercialWhatsAppLink } from "@/components/analytics/CommercialWhatsAppLink";
+import type { AnalyticsProperties } from "@/lib/analytics";
 
-type WhatsAppButtonProps = { label?: string; className?: string; floating?: boolean; message?: string; source?: "general"|"header"|"floating"|"footer"|"product"|"vehicle_search"|"promotion"|"cart"|"other" };
+type WhatsAppButtonProps = { label?: string; className?: string; floating?: boolean; message?: string; source?: "general"|"header"|"floating"|"footer"|"product"|"vehicle_search"|"promotion"|"cart"|"other"; analyticsContext?: AnalyticsProperties };
 
 function WhatsAppIcon() {
   return (
@@ -13,11 +14,11 @@ function WhatsAppIcon() {
   );
 }
 
-export function WhatsAppButton({ label = "WhatsApp", className = "", floating = false, message, source }: WhatsAppButtonProps) {
+export function WhatsAppButton({ label = "WhatsApp", className = "", floating = false, message, source, analyticsContext }: WhatsAppButtonProps) {
   const whatsappHref = whatsappUrl(message || "Hola DCL Cree LED, quiero consultar por iluminación para mi vehículo.");
 
   return (
-    <CommercialWhatsAppLink source={source || (floating ? "floating" : "general")}
+    <CommercialWhatsAppLink source={source || (floating ? "floating" : "general")} analyticsContext={analyticsContext}
       href={whatsappHref}
       target="_blank"
       rel="noreferrer"

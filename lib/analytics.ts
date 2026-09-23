@@ -22,7 +22,7 @@ export const analyticsEvents = {
 } as const;
 
 export type AnalyticsEvent = typeof analyticsEvents[keyof typeof analyticsEvents];
-export type AnalyticsProperties = Record<string, string | number | boolean | null | undefined>;
+export type AnalyticsProperties = Record<string, string | number | boolean | string[] | null | undefined>;
 
 export function capture(event: AnalyticsEvent, properties: AnalyticsProperties = {}) {
   if (typeof window === "undefined" || window.location.pathname.startsWith("/admin") || !posthog.__loaded) return;

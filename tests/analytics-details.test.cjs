@@ -60,23 +60,44 @@ test('pages and products preserve counts, incomplete identifiers remain unavaila
 test('vehicle, connector, checkout, and WhatsApp details use only captured properties', async () => {
   const api = detail(async (_, init) => {
     const sql = JSON.parse(init.body).query.query;
-    if (sql.includes('vehicle_search_completed')) return response([['Auto', 'Fiat', 'Cronos', 5, 4, 1]]);
-    if (sql.includes('connector_search')) return response([['H7', 12, 10, 2]]);
+    if (sql.includes('vehicle_search_completed')) return response([['Auto', 'Fiat', 'Cronos', '2020', 'low', 5, 4, 1]]);
+    if (sql.includes('connector_search')) return response([['H7', 12, 10, 2, 12, 24]]);
     if (sql.includes('avgIf(')) return response([[2, 2, 1.5, 2, 15000]]);
+    if (sql.includes('arrayJoin')) return response([['h7', 2]]);
     if (sql.includes('checkout_started')) return response([['2026-09-20', 2]]);
-    return response([['promotion', 'promo_1', 3]]);
+    return response([['promotion', 'promo_1', '', '', '', '', '', '', null, 3]]);
   });
   const vehicle = await api.getAnalyticsDetail('vehicles', 100, 200);
-  assert.equal(vehicle.data.rows[0].label, 'Auto → Fiat → Cronos');
+  assert.match(vehicle.data.rows[0].label, /Fiat.*Cronos.*2020.*low/);
   assert.deepEqual(Array.from(vehicle.data.rows[0].values), [5, 4, 1]);
   const connector = await api.getAnalyticsDetail('connectors', 100, 200);
-  assert.deepEqual(Array.from(connector.data.rows[0].values), [12, 10, 2]);
+  assert.deepEqual(Array.from(connector.data.rows[0].values), [12, 10, 2, 2]);
   const checkout = await api.getAnalyticsDetail('checkout', 100, 200);
   assert.equal(checkout.data.stats[1][1], 1.5);
   assert.equal(checkout.data.stats[2][1], 15000);
+  assert.equal(checkout.data.secondary.rows[0].productId, 'h7');
   const whatsapp = await api.getAnalyticsDetail('whatsapp', 100, 200);
   assert.match(whatsapp.data.rows[0].label, /promoción promo_1/);
   assert.doesNotMatch(JSON.stringify([vehicle, connector, checkout, whatsapp]), /phone|email|message|document/);
+});
+
+test('historical and enriched dimensions coexist without fabricated zeroes', async () => {
+  const api = detail(async (_, init) => {
+    const sql = JSON.parse(init.body).query.query;
+    if (sql.includes('vehicle_search_completed')) return response([['Auto', 'Fiat', 'Cronos', null, null, 2, 1, 1], ['Auto', 'Fiat', 'Cronos', '2020', 'low', 1, 1, 0]]);
+    if (sql.includes('connector_search')) return response([['H7', 3, 2, 1, 1, 4]]);
+    return response([['vehicle_search', null, null, 'Auto', 'Fiat', 'Cronos', '2020', 'low', 'false', 2], ['vehicle_search', null, null, null, null, null, null, null, null, 1], ['product', null, 'h7', null, null, null, null, null, null, 1]]);
+  });
+  const vehicles = await api.getAnalyticsDetail('vehicles', 1, 2);
+  assert.equal(vehicles.status, 'ok');
+  assert.match(vehicles.data.rows[0].label, /Dato no disponible/);
+  assert.match(vehicles.data.rows[1].label, /2020.*low/);
+  const connectors = await api.getAnalyticsDetail('connectors', 1, 2);
+  assert.equal(connectors.data.rows[0].values[3], null);
+  const whatsapp = await api.getAnalyticsDetail('whatsapp', 1, 2);
+  assert.match(whatsapp.data.rows[0].label, /2020.*low.*Sin resultados/);
+  assert.match(whatsapp.data.rows[1].label, /Resultado no disponible/);
+  assert.equal(whatsapp.data.rows[2].productId, 'h7');
 });
 
 test('not configured, errors, and malformed sensitive dimensions never become zero or leak data', async () => {
