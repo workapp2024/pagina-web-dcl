@@ -4,16 +4,20 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getAnalyticsSummary, type AnalyticsResult, type DetailKind } from "@/lib/posthog-admin";
 import { analyticsDates } from "@/lib/analytics-dates";
 import { AnalyticsDetails } from "@/components/admin/AnalyticsDetails";
+import { AnalyticsFunnel } from "@/components/admin/AnalyticsFunnel";
+import { getCommercialFunnel } from "@/lib/posthog-funnel";
+import type { FunnelResult } from "@/lib/analytics-funnel";
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
   if (!(await isAdminAuthenticated())) redirect("/admin/login");
   const params = await searchParams;
   const period = params.period || "30d";
   let result: AnalyticsResult | undefined;
+  let funnel: FunnelResult | undefined;
   let dateError = "";
   try {
     const range = analyticsDates(period, params.from, params.to);
-    result = await getAnalyticsSummary(range.from, range.to);
+    [result, funnel] = await Promise.all([getAnalyticsSummary(range.from, range.to), getCommercialFunnel(range.from, range.to)]);
   } catch (error) { dateError = error instanceof Error ? error.message : "Rango de fechas inválido."; }
   const data = result?.status === "ok" ? result.data : null;
   const total = (event: string) => data?.totals[event] ?? 0;
@@ -43,9 +47,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       {!data.productionEvents ? <p className="rounded-2xl border border-white/10 p-5 text-sm text-zinc-300">Métricas no disponibles: la consulta no encontró eventos comerciales etiquetados como producción en este rango. Esto no demuestra ausencia de clientes; verificá la captura y el entorno del despliegue.</p> : <>
         <AnalyticsDetails key={`${period}:${params.from ?? ""}:${params.to ?? ""}`} metrics={metrics} period={period} from={params.from} to={params.to} replayUrl={project ? `${ui}/project/${project}/replay/home` : undefined} />
         <p className="text-sm text-zinc-400">Visitantes y sesiones se calculan sobre páginas vistas con identificación completa; visitantes aproxima navegadores, no personas verificadas. Los demás valores cuentan eventos, no productos únicos ni conversiones. Checkout cuenta entradas a la página, incluso repetidas. Conectores cuenta búsquedas reconocidas, no texto libre.</p>
+        {funnel && <AnalyticsFunnel result={funnel} />}
         <p className="text-sm text-zinc-400">Vehículo sin resultados: <b>{total("vehicle_search_no_results")}</b>. Conector sin resultados: <b>{data.connectorNoResults}</b>. Errores técnicos de búsqueda por vehículo: <b>{total("vehicle_search_error")}</b>.</p>
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{([ ["Páginas", data.pages], ["Productos", data.products], ["Marcas buscadas", data.brands], ["Modelos buscados", data.models] ] as [string, [string, number][]][]).map(([title, rows]) => <article key={title} className="rounded-2xl border border-white/10 p-5"><h2 className="font-black">{title}</h2><div className="mt-3 space-y-2">{rows.length ? rows.map(([name, count]) => <div key={name} className="flex justify-between gap-3 text-sm"><span className="truncate text-zinc-300">{name}</span><b>{count}</b></div>) : <p className="text-sm text-zinc-400">Sin datos para este rango.</p>}</div></article>)}</section>
       </>}
     </>}
+    {!data?.productionEvents && funnel && <AnalyticsFunnel result={funnel} />}
   </div>;
 }

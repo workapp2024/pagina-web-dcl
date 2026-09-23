@@ -220,12 +220,18 @@ test('checkout_started emits unique product IDs without customer data', () => {
   assert.deepEqual(plain(events[1]), ['checkout_started', { item_count: 4, cart_total: 50, product_ids: ['h7', 'h4'] }]);
 });
 
-test('Admin renders distinct unavailable/error/zero states and no misleading funnel', async () => {
-  const analyticsComponent = { '@/components/admin/AnalyticsDetails': { AnalyticsDetails: ({ metrics }) => require('react').createElement('div', null, metrics.map(metric => `${metric.kind}: ${metric.value ?? 'No disponible'}`).join(' ')) } };
+test('Admin preserves summary unavailable/error/zero states independently of the commercial funnel', async () => {
+  const analyticsComponent = {
+    '@/components/admin/AnalyticsDetails': { AnalyticsDetails: ({ metrics }) => require('react').createElement('div', null, metrics.map(metric => `${metric.kind}: ${metric.value ?? 'No disponible'}`).join(' ')) },
+    '@/components/admin/AnalyticsFunnel': load('components/admin/AnalyticsFunnel.tsx'),
+    '@/lib/posthog-funnel': { getCommercialFunnel: async () => ({ status: 'start_not_configured', startAt: null }) },
+  };
   for (const [result, expected] of [[{ status: 'not_configured' }, 'Analytics no configurado'], [{ status: 'error', message: 'PostHog respondió HTTP 403.' }, 'Error consultando PostHog'], [{ status: 'ok', data: { totals: {}, productionEvents: 0, legacyEvents: 9 } }, 'Métricas no disponibles']]) {
     const Page = load('app/admin/analitica/page.tsx', { ...analyticsComponent, '@/lib/admin-auth': { isAdminAuthenticated: async () => true }, '@/lib/posthog-admin': { getAnalyticsSummary: async () => result } }).default;
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
-    assert.ok(html.includes(expected)); assert.ok(!html.includes('Productos vistos')); assert.ok(!html.includes('Funnel'));
+    assert.ok(html.includes(expected)); assert.ok(!html.includes('Productos vistos'));
+    assert.equal((html.match(/id="commercial-funnel-title"/g) || []).length, 1);
+    assert.match(html, /Fecha de inicio de analítica comercial no configurada/);
   }
   const data = { totals: { page_view: 1 }, visitors: 1, sessions: null, productionEvents: 1, legacyEvents: 0, connectorNoResults: 0, pages: [], products: [], brands: [], models: [] };
   const Page = load('app/admin/analitica/page.tsx', { ...analyticsComponent, '@/lib/admin-auth': { isAdminAuthenticated: async () => true }, '@/lib/posthog-admin': { getAnalyticsSummary: async () => ({ status: 'ok', data }) } }).default;
