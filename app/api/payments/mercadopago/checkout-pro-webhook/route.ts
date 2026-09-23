@@ -1,3 +1,5 @@
+import { commercialAnalyticsEnvironment } from "@/lib/commercial-analytics-config";
+import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { InvalidWebhookSignatureError, WebhookSignatureValidator } from "mercadopago";
 import { NextRequest, NextResponse } from "next/server";
 import { isUuid } from "@/lib/api";
@@ -71,6 +73,7 @@ export async function POST(request: NextRequest) {
       ? "rejected"
       : "pending";
   const result = await db.rpc("complete_mercadopago_order", {
+    p_analytics_environment: commercialAnalyticsEnvironment(),
     p_order: orderId,
     p_external_order: transaction.external_order_id,
     p_payment: String(payment.id),
@@ -83,6 +86,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 
+  scheduleAnalyticsFlush();
   developmentLog("processed", { paymentId, orderId, status: mappedStatus, saleCreated: Boolean(result.data) });
   return NextResponse.json({ ok: true });
 }

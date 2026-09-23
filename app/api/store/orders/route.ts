@@ -1,8 +1,11 @@
+import { commercialAnalyticsEnvironment } from "@/lib/commercial-analytics-config";
+import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { NextResponse } from "next/server";
 
 import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
 import { rateLimit } from "@/lib/rate-limit";
 import { createAdminServerClient } from "@/lib/supabase/server";
+import { sanitizeAnalyticsContext } from "@/lib/store/analytics-context";
 import { normalizeOrderItems } from "@/lib/store/order-input";
 
 const PAYMENT_METHODS = new Set(["mercadopago", "card", "transfer"]);
@@ -51,6 +54,7 @@ export async function POST(request: Request) {
     const result = await db.rpc("create_public_order", {
       p_name: name, p_phone: phone, p_email: email, p_fulfillment: fulfillment, p_address: address,
       p_notes: notes, p_method: paymentMethod, p_items: normalizedItems, p_key: idempotencyKey,
+      p_analytics_context: sanitizeAnalyticsContext(body.analytics_context), p_analytics_environment: commercialAnalyticsEnvironment(),
     } as never) as unknown as RpcResult;
     if (result.error || !result.data) {
       const diagnostic = { stage: "create_public_order", code: result.error?.code, message: result.error?.message, details: result.error?.details, hint: result.error?.hint };
@@ -65,6 +69,7 @@ export async function POST(request: Request) {
       if (reason === "PRICE_ERROR") return apiError("PRICE_ERROR", "No se pudo validar el precio de un producto.", 409);
       return apiError("ORDER_CREATION_ERROR", "No se pudo crear el pedido. Intentá nuevamente.", 500);
     }
+    scheduleAnalyticsFlush();
     const totalQuery = await db.from("orders").select("total,order_number").eq("id", result.data).single() as unknown as TotalQuery;
     if (totalQuery.error || !totalQuery.data) return apiError("INTERNAL_ERROR", "No se pudo preparar el pedido.", 500);
     return NextResponse.json({ ok: true, orderId: result.data, orderNumber: totalQuery.data.order_number, total: Number(totalQuery.data.total || 0), publicKey: process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || null });

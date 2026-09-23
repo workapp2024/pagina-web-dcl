@@ -13,6 +13,7 @@ module.exports = function loadTs(file, mocks = {}, globals = {}) {
   }).outputText;
   const localRequire = name => {
     if (Object.hasOwn(mocks, name)) return mocks[name];
+    if (name === 'server-only') return {}; // Build-time boundary marker, not executable in this VM.
     if (name === 'next/server') return { NextResponse: { json: (body, init) => Response.json(body, init) } };
     if (name.startsWith('@/')) return module.exports(name.slice(2) + '.ts', mocks, globals);
     if (name.startsWith('.')) return module.exports(path.resolve(path.dirname(filename), name) + '.ts', mocks, globals);

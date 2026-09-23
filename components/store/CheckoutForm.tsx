@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-location-assign-relative-destination */
 "use client";
 import { useEffect, useRef, useState } from "react";
+import posthog from "posthog-js";
+import { readBrowserAnalyticsContext } from "@/lib/store/analytics-context";
 import { useCart } from "@/components/store/CartProvider";
 import { MercadoPagoBrick } from "@/components/store/MercadoPagoBrick";
 import { analyticsEvents, capture, captureOnce } from "@/lib/analytics";
@@ -30,7 +32,7 @@ export function CheckoutForm({transfer}:{transfer:Transfer}){
   async function createOrder(){
     if(!fingerprint)throw new Error("Revisa los productos y cantidades del carrito.");
     if(attempt.current?.fingerprint!==fingerprint)attempt.current={fingerprint,key:createClientUuid()};
-    const response=await fetch("/api/store/orders",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,paymentMethod:method,idempotencyKey:attempt.current.key,items:normalizeOrderItems(lines.map(item=>({productId:item.id,quantity:item.quantity})))})});
+    const response=await fetch("/api/store/orders",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,analytics_context:readBrowserAnalyticsContext(posthog),paymentMethod:method,idempotencyKey:attempt.current.key,items:normalizeOrderItems(lines.map(item=>({productId:item.id,quantity:item.quantity})))})});
     const body=await response.json();
     if(!response.ok){
       // A new key is used only on the next explicit submission, never automatically.

@@ -50,6 +50,8 @@ before(async () => {
   await db.exec("INSERT INTO site_settings(id,transfer_alias,transfer_holder,transfer_institution) VALUES(1,'test.alias','Test','Test') ON CONFLICT(id) DO UPDATE SET transfer_alias='test.alias',transfer_holder='Test',transfer_institution='Test'");
   await db.exec("INSERT INTO financial_periods(name,status) VALUES('Local test period','open')");
   await db.exec(fs.readFileSync('supabase/migrations/' + migration, 'utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20260920030000_order_refunded_archiving.sql', 'utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20260923010000_commercial_analytics_outbox.sql', 'utf8'));
 });
 after(async () => { await db?.close(); });
 

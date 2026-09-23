@@ -1,3 +1,5 @@
+import { commercialAnalyticsEnvironment } from "@/lib/commercial-analytics-config";
+import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { NextResponse } from "next/server";
 
 import { createAdminServerClient } from "@/lib/supabase/server";
@@ -172,12 +174,14 @@ export async function POST(request: Request) {
     if (error) throw new Error("No se pudo vincular la operación de Mercado Pago.");
 
     const completion = await db.rpc("complete_mercadopago_order", {
+      p_analytics_environment: commercialAnalyticsEnvironment(),
       p_order: orderId, p_external_order: mercadoPagoOrder.id, p_payment: payment?.id ?? "",
       p_amount: Number(mercadoPagoOrder.total_amount), p_currency: mercadoPagoOrder.currency || order.currency,
       p_status: localStatus(mercadoPagoOrder.status) === "rejected" ? "rejected" : mercadoPagoOrder.status || "pending",
     } as never);
     if (completion.error) throw new Error("No se pudo conciliar el pago. Consultá el estado del pedido antes de reintentar.");
 
+    scheduleAnalyticsFlush();
     return NextResponse.json({ ok: true, data: mercadoPagoOrder });
   } catch (error) {
     return apiInternalError("mercadopago_order_creation", error);

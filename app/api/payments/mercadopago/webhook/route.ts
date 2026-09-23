@@ -1,3 +1,5 @@
+import { commercialAnalyticsEnvironment } from "@/lib/commercial-analytics-config";
+import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { InvalidWebhookSignatureError, WebhookSignatureValidator } from "mercadopago";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -145,6 +147,7 @@ export async function POST(request: NextRequest) {
     const payment = order.transactions?.payments?.[0];
     const db = createAdminServerClient();
     const result = await db.rpc("complete_mercadopago_order", {
+      p_analytics_environment: commercialAnalyticsEnvironment(),
       p_order: order.external_reference,
       p_external_order: order.id,
       p_payment: payment?.id ? String(payment.id) : "",
@@ -153,6 +156,7 @@ export async function POST(request: NextRequest) {
       p_status: order.status,
     } as never) as unknown as { error: { message: string } | null };
     if (result.error) throw new Error(result.error.message);
+    scheduleAnalyticsFlush();
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Mercado Pago webhook failed", {

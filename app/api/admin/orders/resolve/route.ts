@@ -1,3 +1,5 @@
+import { commercialAnalyticsEnvironment } from "@/lib/commercial-analytics-config";
+import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { NextResponse } from "next/server";
 import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
@@ -33,6 +35,7 @@ export async function POST(request: Request) {
   try {
     const db = createAdminServerClient();
     const { data, error } = await db.rpc("resolve_order" as never, {
+      p_analytics_environment: commercialAnalyticsEnvironment(),
       p_order: body.orderId,
       p_resolution: body.resolutionType,
       p_external_reference: reference || null,
@@ -44,6 +47,7 @@ export async function POST(request: Request) {
       if (conflicts[error.message]) return apiError("BAD_REQUEST", conflicts[error.message], 409);
       throw new Error(error.message);
     }
+    scheduleAnalyticsFlush();
     return NextResponse.json({ ok: true, resolution: data });
   } catch (error) { return apiInternalError("admin_order_resolution", error); }
 }

@@ -49,7 +49,7 @@ test('resolution API forwards the exact idempotency key and translates RPC confl
   const body = { orderId: id, resolutionType: 'REFUND_STOCK_UNAVAILABLE', externalReference: ' refund-1 ', note: ' Devuelto ', idempotencyKey: key, stock: 999 };
   const h = api(); assert.equal((await h.POST(request(body))).status, 200);
   assert.deepEqual(h.calls, [{ name: 'resolve_order', args: { p_order: id, p_resolution: 'REFUND_STOCK_UNAVAILABLE',
-    p_external_reference: 'refund-1', p_note: 'Devuelto', p_idempotency_key: key } }]);
+    p_external_reference: 'refund-1', p_note: 'Devuelto', p_idempotency_key: key, p_analytics_environment: 'development' } }]);
   const conflict = api(true, 'ORDER_RESOLUTION_INSUFFICIENT_STOCK');
   const response = await conflict.POST(request({ ...body, resolutionType: 'COMPLETE_STOCK_UNAVAILABLE' }));
   assert.equal(response.status, 409); assert.match((await response.json()).error, /stock disponible/);

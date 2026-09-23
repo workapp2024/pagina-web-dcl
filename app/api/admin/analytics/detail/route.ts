@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { analyticsDates } from "@/lib/analytics-dates";
 import { detailKinds, getAnalyticsDetail, type DetailKind } from "@/lib/posthog-admin";
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
   } catch {
     return NextResponse.json({ status: "error", message: "Rango de fechas inválido." }, { status: 400 });
   }
+  scheduleAnalyticsFlush();
   const result = await getAnalyticsDetail(kind as DetailKind, range.from, range.to);
   if (result.status !== "ok" || !["products", "cart", "checkout", "whatsapp"].includes(kind)) return NextResponse.json(result);
   const detailRows = [...result.data.rows, ...(result.data.secondary?.rows ?? [])];
