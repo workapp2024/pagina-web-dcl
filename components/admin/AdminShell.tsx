@@ -10,6 +10,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   if (pathname === "/admin/login") {
     return <>{children}</>;
   }
+  if (/^\/admin\/pedidos\/DCL-[0-9]{6,19}\/comprobante\/?$/.test(pathname)) {
+    return <div className="min-h-screen bg-white text-zinc-900 print:min-h-0">{children}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-black text-white">

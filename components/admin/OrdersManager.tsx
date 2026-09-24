@@ -11,6 +11,7 @@ type HistoryEntry = {
   action?: "status_change" | "archive" | "restore";
 };
 type Order = OperationalOrder & {
+  receipt_available?: boolean;
   id: string; order_number: string; total: number; created_at: string; payment_method: string;
   fulfillment_method: "pickup" | "delivery"; shipping_address: string | null;
   notes: string; transfer_declared_at: string | null;
@@ -167,7 +168,9 @@ export function OrdersManager() {
         <div><dt className="text-zinc-400">Estado operativo</dt><dd className="font-bold">{operationalLabels[selected.operational_status]}</dd></div>
         <div><dt className="text-zinc-400">Estado técnico del pedido</dt><dd className="font-bold">{technicalOrderLabels[selected.status] || selected.status}</dd></div>
         <div><dt className="text-zinc-400">Estado del pago</dt><dd className="font-bold">{paymentLabels[selected.payment?.status || ""] || "Sin transacción"} · {paymentMethodLabels[selected.payment_method]}</dd></div>
-        <div><dt className="text-zinc-400">Venta vinculada</dt><dd className="break-all">{selected.payment?.sale_id ? `${selected.payment.sale_id} · ${selected.payment.sale_status || "Estado no disponible"}` : "Sin venta"}</dd></div>
+        <div><dt className="text-zinc-400">Venta vinculada</dt><dd className="break-all">{selected.payment?.sale_id ? `${selected.payment.sale_id} · ${selected.payment.sale_status || "Estado no disponible"}` : "Sin venta"}</dd>
+          {selected.receipt_available === true && /^DCL-[0-9]{6,19}$/.test(selected.order_number) && <a href={`/admin/pedidos/${selected.order_number}/comprobante`} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-flex items-center ${buttonClass}`}>Ver comprobante</a>}
+        </div>
         <div><dt className="text-zinc-400">Pago y proveedor</dt><dd className="break-all">{selected.payment?.provider || "Sin proveedor"}{selected.payment?.external_payment_id && ` · Pago: ${selected.payment.external_payment_id}`}{selected.payment?.external_order_id && ` · Orden externa: ${selected.payment.external_order_id}`}</dd></div>
         <div><dt className="text-zinc-400">Modalidad</dt><dd>{fulfillmentLabels[selected.fulfillment_method]}{selected.shipping_address && ` · ${selected.shipping_address}`}</dd></div>
         {selected.notes && <div><dt className="text-zinc-400">Observaciones del pedido</dt><dd>{selected.notes}</dd></div>}

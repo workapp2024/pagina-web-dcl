@@ -5,6 +5,7 @@ import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } fro
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { isOperationalStatus } from "@/lib/store/order-operations";
+import { getOrderReceiptAvailability } from "@/lib/store/order-receipt";
 
 async function guard(){if(!(await isAdminAuthenticated()))return NextResponse.json({ok:false,error:"No autorizado."},{status:401});if(!isServiceRoleConfigured())return NextResponse.json({ok:false,error:"Falta SUPABASE_SERVICE_ROLE_KEY."},{status:500});return null}
 function periodStart(period: string) {
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
     const db = createAdminServerClient();
     const result = await db.rpc("list_admin_operational_orders" as never, { p_q: q, p_status: view === "archived" ? "all" : status, p_since: periodStart(period), p_page: page, p_limit: limit, p_operational: view === "archived" ? "all" : operational, p_archived: view === "archived" } as never) as unknown as { data: { data: unknown[]; pagination: { total: number; page: number; limit: number } } | null; error: { message: string } | null };
     if (result.error || !result.data) throw new Error(result.error?.message || "No se pudieron consultar los pedidos.");
-    const rows = result.data.data as { id: string; payment?: Record<string, unknown> | null }[];
+    const rows = result.data.data as { id: string; order_number?: string; payment?: Record<string, unknown> | null }[];
     const ids = rows.map(row => row.id);
     if (!ids.length) return NextResponse.json({ ok: true, ...result.data }, { headers: { "Cache-Control": "no-store" } });
     const [payments, resolutions] = await Promise.all([
@@ -46,7 +47,9 @@ export async function GET(request: Request) {
     for (const payment of (payments.data || []) as Payment[]) if (!paymentByOrder.has(payment.order_id)) paymentByOrder.set(payment.order_id, payment);
     const resolutionsByOrder = new Map<string, Resolution[]>();
     for (const entry of (resolutions.data || []) as Resolution[]) resolutionsByOrder.set(entry.order_id, [...(resolutionsByOrder.get(entry.order_id) || []), entry]);
+    const receiptAvailability = await getOrderReceiptAvailability(rows.flatMap(row => row.order_number ? [row.order_number] : []));
     return NextResponse.json({ ok: true, ...result.data, data: rows.map(row => ({ ...row,
+      receipt_available: Boolean(row.order_number && receiptAvailability[row.order_number]),
       payment: paymentByOrder.has(row.id) ? { ...row.payment, ...paymentByOrder.get(row.id) } : row.payment,
       resolutions: resolutionsByOrder.get(row.id) || [],
     })) }, { headers: { "Cache-Control": "no-store" } });
