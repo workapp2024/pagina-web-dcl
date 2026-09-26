@@ -3,7 +3,8 @@ import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { NextResponse } from "next/server";
 
 import { createAdminServerClient } from "@/lib/supabase/server";
-import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
+import { apiError, apiInternalError, boundedString, readJsonObject } from "@/lib/api";
+import { authorizedBuyerOrder, buyerNotFound, isSameOriginWrite } from "@/lib/store/buyer-session";
 import { rateLimit } from "@/lib/rate-limit";
 
 type MercadoPagoOrder = {
@@ -22,7 +23,7 @@ type MercadoPagoErrorDiagnostic = {
   code?: string;
   cause?: string | string[];
 };
-type LocalOrder = { total: number | string; currency: string };
+type LocalOrder = { total: number | string; currency: string; payment_method: string };
 type LocalTransaction = { id: string; external_idempotency_key: string; external_order_id: string | null };
 
 function sanitizeDiagnosticValue(value: unknown, maxLength = 180): string | undefined {
@@ -75,10 +76,12 @@ function localStatus(status?: string): "pending" | "approved" | "rejected" | "er
 export async function POST(request: Request) {
   const limited = rateLimit(request, "mercadopago-order", { limit: 10, windowMs: 60 * 1000 });
   if (limited) return limited;
+  if (!isSameOriginWrite(request)) return buyerNotFound();
   try {
     const body = await readJsonObject(request);
     if (!body) return apiError("BAD_REQUEST", "Datos de pago inválidos.", 400);
-    const orderId = body.orderId;
+    const orderId = await authorizedBuyerOrder(body.orderNumber);
+    if (!orderId) return buyerNotFound();
     const token = boundedString(body.token, 4096, { required: true });
     const paymentMethodId = boundedString(body.payment_method_id, 80, { required: true });
     const paymentType = boundedString(body.payment_type, 80, { required: true });
@@ -86,12 +89,12 @@ export async function POST(request: Request) {
     const payer = body.payer && typeof body.payer === "object" ? body.payer as Record<string, unknown> : {};
     const payerEmail = boundedString(payer.email, 254, { required: true });
 
-    if (!isUuid(orderId) || !token || !paymentMethodId || !paymentType || !payerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail) || !Number.isInteger(installments) || installments < 1 || installments > 36) {
+    if (!token || !paymentMethodId || !paymentType || !payerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail) || !Number.isInteger(installments) || installments < 1 || installments > 36) {
       return NextResponse.json({ ok: false, error: "Datos de pago incompletos." }, { status: 400 });
     }
 
     const db = createAdminServerClient();
-    const orderQuery = await db.from("orders").select("total,currency").eq("id", orderId).single() as unknown as { data: LocalOrder | null };
+    const orderQuery = await db.from("orders").select("total,currency,payment_method").eq("id", orderId).single() as unknown as { data: LocalOrder | null };
     const transactionQuery = await db
       .from("payment_transactions")
       .select("id,external_idempotency_key,external_order_id")
@@ -100,7 +103,7 @@ export async function POST(request: Request) {
       .single() as unknown as { data: LocalTransaction | null };
     const order = orderQuery.data;
     const transaction = transactionQuery.data;
-    if (!order || !transaction) throw new Error("Pedido no encontrado.");
+    if (!order || !transaction || order.payment_method !== "card") return buyerNotFound();
     const paymentWindow = await db.rpc("get_order_payment_window" as never, { p_order: orderId } as never) as unknown as { data: string | null; error: unknown };
     if (paymentWindow.error) return apiError("INTERNAL_ERROR", "No se pudo verificar la reserva.", 503);
     if (!paymentWindow.data || !Number.isFinite(Date.parse(paymentWindow.data)) || Date.parse(paymentWindow.data) <= Date.now()) return apiError("RESERVATION_EXPIRED", "La reserva ya no permite iniciar un pago.", 409);
@@ -149,7 +152,7 @@ export async function POST(request: Request) {
       });
       const retryAfter = response.headers.get("retry-after");
       return NextResponse.json(
-        { ok: false, error: mercadoPagoOrder.message || "No se pudo procesar el pago.", retryAfter },
+        { ok: false, error: "No se pudo procesar el pago. Consultá el estado de tu pedido.", retryAfter },
         { status: response.status === 429 || response.status === 423 ? 503 : 400 },
       );
     }
@@ -182,7 +185,7 @@ export async function POST(request: Request) {
     if (completion.error) throw new Error("No se pudo conciliar el pago. Consultá el estado del pedido antes de reintentar.");
 
     scheduleAnalyticsFlush();
-    return NextResponse.json({ ok: true, data: mercadoPagoOrder });
+    return NextResponse.json({ ok: true });
   } catch (error) {
     return apiInternalError("mercadopago_order_creation", error);
   }

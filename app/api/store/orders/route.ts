@@ -7,15 +7,16 @@ import { rateLimit } from "@/lib/rate-limit";
 import { createAdminServerClient } from "@/lib/supabase/server";
 import { sanitizeAnalyticsContext } from "@/lib/store/analytics-context";
 import { normalizeOrderItems } from "@/lib/store/order-input";
+import { buyerNotFound, claimBuyerAttempt, getBuyerSession, isSameOriginWrite, recoverBuyerOrder } from "@/lib/store/buyer-session";
 
 const PAYMENT_METHODS = new Set(["mercadopago", "card", "transfer"]);
 type RpcError = { code?: string; message?: string; details?: string; hint?: string };
 type RpcResult = { data: string | null; error: RpcError | null };
-type TotalQuery = { data: { total: number | string; order_number: string } | null; error: unknown };
 
 export async function POST(request: Request) {
   const limited = rateLimit(request, "public-order", { limit: 10, windowMs: 60 * 1000 });
   if (limited) return limited;
+  if (!isSameOriginWrite(request)) return buyerNotFound();
 
   const body = await readJsonObject(request);
   if (!body) return apiError("BAD_REQUEST", "El pedido no tiene un formato válido.", 400);
@@ -46,6 +47,12 @@ export async function POST(request: Request) {
   catch { return apiError("INVALID_QUANTITY", "Revisá las cantidades acumuladas por producto.", 400); }
 
   try {
+    const session = await getBuyerSession();
+    if (!session) return buyerNotFound();
+    const requestFingerprint = JSON.stringify({ name, phone, email, fulfillment, address: fulfillment === "delivery" ? address : "", notes, paymentMethod, items: normalizedItems });
+    if (!(await claimBuyerAttempt(session.id, idempotencyKey, requestFingerprint))) return buyerNotFound();
+    const recovered = await recoverBuyerOrder(session.id, idempotencyKey);
+    if (recovered) return NextResponse.json({ ok: true, orderNumber: recovered }, { headers: { "Cache-Control": "no-store" } });
     const db = createAdminServerClient();
     if (paymentMethod === "transfer") {
       const { data: settings } = await db.from("site_settings").select("transfer_alias,transfer_cbu_cvu,transfer_holder,transfer_institution").eq("id", 1).maybeSingle() as unknown as { data: { transfer_alias: string; transfer_cbu_cvu: string; transfer_holder: string; transfer_institution: string } | null };
@@ -57,6 +64,8 @@ export async function POST(request: Request) {
       p_analytics_context: sanitizeAnalyticsContext(body.analytics_context), p_analytics_environment: commercialAnalyticsEnvironment(),
     } as never) as unknown as RpcResult;
     if (result.error || !result.data) {
+      const recovered = await recoverBuyerOrder(session.id, idempotencyKey);
+      if (recovered) return NextResponse.json({ ok: true, orderNumber: recovered }, { headers: { "Cache-Control": "no-store" } });
       const diagnostic = { stage: "create_public_order", code: result.error?.code, message: result.error?.message, details: result.error?.details, hint: result.error?.hint };
       console.warn("Public order rejected", process.env.NODE_ENV === "production" ? { stage: diagnostic.stage, code: diagnostic.code } : diagnostic);
       const reason = result.error?.message;
@@ -70,9 +79,9 @@ export async function POST(request: Request) {
       return apiError("ORDER_CREATION_ERROR", "No se pudo crear el pedido. Intentá nuevamente.", 500);
     }
     scheduleAnalyticsFlush();
-    const totalQuery = await db.from("orders").select("total,order_number").eq("id", result.data).single() as unknown as TotalQuery;
-    if (totalQuery.error || !totalQuery.data) return apiError("INTERNAL_ERROR", "No se pudo preparar el pedido.", 500);
-    return NextResponse.json({ ok: true, orderId: result.data, orderNumber: totalQuery.data.order_number, total: Number(totalQuery.data.total || 0), publicKey: process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || null });
+    const orderNumber = await recoverBuyerOrder(session.id, idempotencyKey);
+    if (!orderNumber) return apiError("INTERNAL_ERROR", "No se pudo preparar la recuperación. Conservá este intento.", 503);
+    return NextResponse.json({ ok: true, orderNumber }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return apiInternalError("create_public_order", error);
   }

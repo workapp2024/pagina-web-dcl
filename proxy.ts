@@ -11,6 +11,8 @@ const WEBHOOK_PATHS = new Set([
   "/api/payments/mercadopago/checkout-pro-webhook",
 ]);
 const PUBLIC_WRITE_PATHS = new Set([
+  "/api/store/buyer-session",
+  "/api/store/orders/recover",
   "/api/store/orders",
   "/api/payments/mercadopago/orders",
   "/api/payments/mercadopago/preference",

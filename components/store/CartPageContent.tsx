@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { ManagedImage } from "@/components/ui/ManagedImage";
 import { useCart } from "@/components/store/CartProvider";
 import { analyticsEvents, capture } from "@/lib/analytics";
+import { BuyerOrderLink } from "@/components/store/BuyerOrderLink";
 
 const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
@@ -22,6 +23,7 @@ export function CartPageContent({ categories }: { categories: string[] }) {
   }, [lines]);
 
   return <main className="mx-auto min-h-[70svh] max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <BuyerOrderLink />
     <div className="mb-7"><span className="text-xs font-bold uppercase tracking-[.24em] text-red-400">Compra segura DCL</span><h1 className="mt-2 text-3xl font-black uppercase tracking-[-.05em] text-white sm:text-4xl">Carrito</h1></div>
     {!lines.length ? <section className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-zinc-950/80">
       <div className="px-5 py-9 text-center sm:px-8 sm:py-12"><div className="mx-auto grid h-20 w-20 place-items-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300"><CartIcon/></div><h2 className="mt-6 text-2xl font-black text-white">Tu carrito está vacío</h2><p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-zinc-400">Todavía no agregaste productos. Encontrá la iluminación ideal para tu vehículo o explorá nuestras categorías.</p><Link href="/vehiculos" className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-red-600 px-6 text-xs font-bold uppercase tracking-wider text-white transition hover:bg-red-500">Encontrá el LED para tu vehículo</Link></div>

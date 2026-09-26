@@ -20,11 +20,13 @@ function loadSdk() {
   return window.__dclMercadoPagoSdk;
 }
 
-export function MercadoPagoBrick({ orderId, amount, publicKey }: { orderId: string; amount: number; publicKey: string }) {
+export function MercadoPagoBrick({ orderNumber, amount, publicKey }: { orderNumber: string; amount: number; publicKey: string }) {
   const id = `mp-card-${useId().replace(/:/g, "")}`;
   const router = useRouter();
   const controller = useRef<BrickController | null>(null);
   const generation = useRef(0);
+  const submitted = useRef(false);
+  const [paymentSubmitted, setPaymentSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
 
@@ -38,14 +40,19 @@ export function MercadoPagoBrick({ orderId, amount, publicKey }: { orderId: stri
         callbacks: {
           onReady: () => { if (!disposed) setReady(true); },
           onSubmit: (form: Record<string, unknown>, additional: { paymentTypeId?: string }) => new Promise<void>(async (resolve, reject) => {
+            if (submitted.current) { reject(new Error("Consultá el estado del pedido antes de volver a pagar.")); return; }
+            submitted.current = true;
+            setPaymentSubmitted(true);
             try {
               const payer = form.payer && typeof form.payer === "object" ? form.payer : {};
-              const response = await fetch("/api/payments/mercadopago/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId, token: form.token, payment_method_id: form.payment_method_id, payment_type: additional.paymentTypeId, installments: form.installments, payer }) });
+              const response = await fetch("/api/payments/mercadopago/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderNumber, token: form.token, payment_method_id: form.payment_method_id, payment_type: additional.paymentTypeId, installments: form.installments, payer }) });
               const body = await response.json();
               if (!response.ok) throw new Error(body.error || "No se pudo procesar el pago.");
               resolve();
-              router.push(`/checkout/resultado?result=pending&order=${encodeURIComponent(orderId)}`);
-            } catch (cause) { const message = cause instanceof Error ? cause.message : "No se pudo procesar el pago."; setError(message); reject(cause); }
+              router.replace(`/checkout/resultado?pedido=${encodeURIComponent(orderNumber)}`);
+              router.refresh();
+              window.dispatchEvent(new Event("dcl-order-refresh"));
+            } catch (cause) { setError("No pudimos confirmar el pago. No vuelvas a pagar; actualizá el estado del pedido o contactá a DCL."); reject(cause); }
           }),
           onError: () => { if (!disposed) setError("No se pudo cargar el formulario de tarjeta."); },
         },
@@ -54,7 +61,7 @@ export function MercadoPagoBrick({ orderId, amount, publicKey }: { orderId: stri
       else controller.current = created;
     }).catch(cause => { if (!disposed) setError(cause instanceof Error ? cause.message : "No se pudo cargar Mercado Pago."); });
     return () => { disposed = true; generation.current += 1; const mounted = controller.current; controller.current = null; if (mounted) void mounted.unmount(); };
-  }, [amount, id, orderId, publicKey, router]);
+  }, [amount, id, orderNumber, publicKey, router]);
 
-  return <section className="rounded-2xl border border-white/10 bg-zinc-950 p-4 sm:p-6"><h2 className="text-xl font-black">Crédito o débito</h2>{!ready&&!error&&<p className="mt-3 text-sm text-zinc-400">Cargando formulario seguro…</p>}<div id={id} className="mt-4 min-h-20"/>{error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}</section>;
+  return <section className="rounded-2xl border border-white/10 bg-zinc-950 p-4 sm:p-6"><h2 className="text-xl font-black">Crédito o débito</h2>{!ready&&!error&&<p className="mt-3 text-sm text-zinc-400">Cargando formulario seguro…</p>}<div id={id} hidden={paymentSubmitted} className="mt-4 min-h-20"/>{paymentSubmitted&&!error&&<p role="status">Consultá el estado del pedido antes de volver a pagar.</p>}{error&&<p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}</section>;
 }

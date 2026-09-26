@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { apiError, apiInternalError, isUuid, readJsonObject } from "@/lib/api";
+import { apiError, apiInternalError, readJsonObject } from "@/lib/api";
+import { authorizedBuyerOrder, buyerNotFound, isSameOriginWrite } from "@/lib/store/buyer-session";
 import { rateLimit } from "@/lib/rate-limit";
 import { createAdminServerClient } from "@/lib/supabase/server";
 
@@ -22,9 +23,11 @@ function checkoutProSiteUrl() {
 
 export async function POST(request: Request) {
   const limited = rateLimit(request, "mercadopago-preference", { limit: 10, windowMs: 60_000 }); if (limited) return limited;
+  if (!isSameOriginWrite(request)) return buyerNotFound();
   try {
-    const body = await readJsonObject(request); const orderId = body?.orderId;
-    if (!isUuid(orderId)) return apiError("BAD_REQUEST", "Pedido inválido.", 400);
+    const body = await readJsonObject(request);
+    const orderId = await authorizedBuyerOrder(body?.orderNumber);
+    if (!orderId) return buyerNotFound();
     const db = createAdminServerClient();
     const { data: order } = await db.from("orders").select("id,total,currency,payment_method").eq("id", orderId).single() as unknown as { data: Order | null };
     const { data: transaction } = await db.from("payment_transactions").select("id,external_idempotency_key,external_order_id").eq("order_id", orderId).eq("provider", "mercadopago").single() as unknown as { data: Transaction | null };
@@ -35,6 +38,7 @@ export async function POST(request: Request) {
     const token = process.env.MERCADOPAGO_ACCESS_TOKEN; if (!token) throw new Error("Mercado Pago no configurado.");
     const baseUrl = checkoutProSiteUrl();
     const resultUrl = new URL("/checkout/resultado", baseUrl);
+    resultUrl.searchParams.set("pedido", String(body?.orderNumber));
     // Checkout Pro usa una notificación payment propia de la preferencia. El
     // webhook global de Orders API permanece separado en /mercadopago/webhook.
     const notificationUrl = new URL("/api/payments/mercadopago/checkout-pro-webhook", baseUrl).toString();
@@ -49,9 +53,9 @@ export async function POST(request: Request) {
       if (rechecked.error || !rechecked.data || !Number.isFinite(Date.parse(rechecked.data)) || deadline > Date.parse(rechecked.data) || deadline <= Date.now()) return apiError("RESERVATION_EXPIRED", "La reserva ya no permite continuar.", 409);
       return NextResponse.json({ ok: true, checkoutUrl: existing.init_point });
     }
-    const response = await fetch("https://api.mercadopago.com/checkout/preferences", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Idempotency-Key": transaction.external_idempotency_key }, body: JSON.stringify({ external_reference: order.id, items: [{ id: order.id, title: "Pedido DCL Cree LED", quantity: 1, currency_id: order.currency, unit_price: Number(order.total) }], back_urls: { success: `${resultUrl}?result=success&order=${order.id}`, pending: `${resultUrl}?result=pending&order=${order.id}`, failure: `${resultUrl}?result=failure&order=${order.id}` }, auto_return: "approved", notification_url: notificationUrl, expires: true, expiration_date_to: expiration, metadata: { local_order_id: order.id } }) });
+    const response = await fetch("https://api.mercadopago.com/checkout/preferences", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Idempotency-Key": transaction.external_idempotency_key }, body: JSON.stringify({ external_reference: order.id, items: [{ id: order.id, title: "Pedido DCL Cree LED", quantity: 1, currency_id: order.currency, unit_price: Number(order.total) }], back_urls: { success: resultUrl.toString(), pending: resultUrl.toString(), failure: resultUrl.toString() }, auto_return: "approved", notification_url: notificationUrl, expires: true, expiration_date_to: expiration, metadata: { local_order_id: order.id } }) });
     const preference = await response.json() as { id?: string; init_point?: string; sandbox_init_point?: string; message?: string };
-    if (!response.ok || !preference.id || !preference.init_point) return NextResponse.json({ ok: false, error: preference.message || "No se pudo abrir Mercado Pago." }, { status: 502 });
+    if (!response.ok || !preference.id || !preference.init_point) return NextResponse.json({ ok: false, error: "No se pudo abrir Mercado Pago para este pedido." }, { status: 502 });
     developmentLog("preference_created", { preferenceId: preference.id, orderId: order.id });
     const { data: linked, error } = await db.from("payment_transactions").update({ external_order_id: preference.id } as never).eq("id", transaction.id).or(`external_order_id.is.null,external_order_id.eq.${preference.id}`).select("id").maybeSingle();
     if (error || !linked) return apiError("BAD_REQUEST", "Otro intento ya preparó el pago. Reintentá para recuperar la preferencia vinculada.", 409);
