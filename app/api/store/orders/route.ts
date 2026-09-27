@@ -69,6 +69,7 @@ export async function POST(request: Request) {
       const diagnostic = { stage: "create_public_order", code: result.error?.code, message: result.error?.message, details: result.error?.details, hint: result.error?.hint };
       console.warn("Public order rejected", process.env.NODE_ENV === "production" ? { stage: diagnostic.stage, code: diagnostic.code } : diagnostic);
       const reason = result.error?.message;
+      if (reason === "FINANCE_NOT_READY") return apiError("CONFIGURATION_ERROR", "Las compras online están temporalmente pausadas. Podés comunicarte con DCL por WhatsApp.", 503);
       if (reason === "IDEMPOTENCY_CONFLICT") return apiError("IDEMPOTENCY_CONFLICT", "La compra cambió. Volvé a preparar el pedido.", 409);
       if (reason === "RESERVATION_EXPIRED") return apiError("RESERVATION_EXPIRED", "El pedido ya no tiene una reserva vigente. Iniciá una nueva compra.", 409);
       if (reason === "OUT_OF_STOCK") return apiError("OUT_OF_STOCK", "No hay stock suficiente para completar el pedido.", 409);

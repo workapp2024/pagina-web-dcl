@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 const database = require('./database.cjs');
 const fs = require('node:fs');
 let db;
-before(async () => { db = await database(); });
+before(async () => { db = await database(); await db.exec('SELECT activate_finances(0,0,gen_random_uuid())'); });
 after(async () => { await db?.close(); });
 const scalar = async (sql, args=[]) => Object.values((await db.query(sql,args)).rows[0])[0];
 async function product(stock=5) {
@@ -109,7 +109,7 @@ test('least privilege table and sensitive function ACLs',async()=>{
     const allowed=role==='service_role'?(table==='inventory_reservations'?['SELECT','INSERT','UPDATE']:['SELECT','INSERT']):[];
     for(const privilege of ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','TRIGGER','REFERENCES']) assert.equal(await scalar('SELECT has_table_privilege($1,$2,$3)',[role,table,privilege]),allowed.includes(privilege),`${role} ${table} ${privilege}`);
   }
-  for(const role of ['anon','authenticated']) assert.equal(await scalar("SELECT has_function_privilege($1,'public.complete_manual_transfer(uuid)','EXECUTE')",[role]),false);
+  for(const role of ['anon','authenticated']) assert.equal(await scalar("SELECT has_function_privilege($1,'public.complete_manual_transfer(uuid,text)','EXECUTE')",[role]),false);
 });
 test('admin filters count before pagination with more than 50 orders and conservative delivery',async()=>{
   const p=await product(100);

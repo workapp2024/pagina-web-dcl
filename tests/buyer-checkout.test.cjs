@@ -61,7 +61,7 @@ async function createOrder(method = 'transfer') {
 }
 before(async () => {
   db = await database();
-  await db.exec("ALTER SEQUENCE order_commercial_number_seq RESTART WITH 900001; INSERT INTO financial_periods(name,status) VALUES('Local only','open')");
+  await db.exec("ALTER SEQUENCE order_commercial_number_seq RESTART WITH 900001; SELECT activate_finances(0,0,gen_random_uuid())");
 });
 after(async () => { await db?.close(); });
 
