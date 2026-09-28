@@ -10,7 +10,9 @@ function chain(result) {
   for (const method of ['select','eq','or','order','limit','update','maybeSingle','single']) query[method]=()=>query;
   return query;
 }
-const mocks = db => ({ '@/lib/rate-limit': { rateLimit:()=>null }, '@/lib/supabase/server':{createAdminServerClient:()=>db,isServiceRoleConfigured:()=>true} });
+const mocks = db => ({ '@/lib/rate-limit': { rateLimit:()=>null }, '@/lib/supabase/server':{createAdminServerClient:()=>db,isServiceRoleConfigured:()=>true},
+  '@/lib/store/buyer-session':{authorizedBuyerOrder:async number=>number==='DCL-900001'?id:null,isSameOriginWrite:()=>true,buyerNotFound:()=>Response.json({ok:false},{status:404})},
+  '@/lib/store/analytics-outbox':{scheduleAnalyticsFlush(){}} });
 const request=body=>new Request('https://test.invalid/api',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
 test('availability RPC error, null, invalid number and thrown exception never advertise physical stock',async()=>{
   for(const result of [{data:null,error:{}},{data:null,error:null},{data:-1,error:null},{data:'10',error:null},new Error('offline')]) {
@@ -34,42 +36,43 @@ function preference({deadline=new Date(Date.now()+7*60000).toISOString(),existin
 test('Checkout Pro sends the supplied real deadline, including a partially elapsed reservation',async()=>{
   for(const minutes of [29,6]) {
     const deadline=new Date(Date.now()+minutes*60000).toISOString(),{POST,calls}=preference({deadline});
-    assert.equal((await POST(request({orderId:id}))).status,200);
+    assert.equal((await POST(request({orderNumber:'DCL-900001'}))).status,200);
     const payload=JSON.parse(calls[0].init.body);
     assert.equal(payload.expiration_date_to,deadline);assert.equal(payload.expires,true);
   }
 });
 test('Checkout Pro reuses linked preference without creating another or extending deadline',async()=>{
   const {POST,calls}=preference({existing:'pref'});
-  assert.equal((await POST(request({orderId:id}))).status,200);
+  assert.equal((await POST(request({orderNumber:'DCL-900001'}))).status,200);
   assert.equal(calls.length,1);assert.equal(calls[0].init.method,undefined);
 });
 test('expired/invalid reservation and expired/overshooting preference fail closed',async()=>{
   for(const deadline of [null,'invalid',new Date(Date.now()-1000).toISOString()]) {
-    const {POST,calls}=preference({deadline});assert.equal((await POST(request({orderId:id}))).status,409);assert.equal(calls.length,0);
+    const {POST,calls}=preference({deadline});assert.equal((await POST(request({orderNumber:'DCL-900001'}))).status,409);assert.equal(calls.length,0);
   }
   for(const externalDeadline of [new Date(Date.now()-1000).toISOString(),new Date(Date.now()+60*60000).toISOString()]) {
-    const {POST}=preference({existing:'pref',externalDeadline});assert.equal((await POST(request({orderId:id}))).status,409);
+    const {POST}=preference({existing:'pref',externalDeadline});assert.equal((await POST(request({orderNumber:'DCL-900001'}))).status,409);
   }
 });
 test('reservation invalidated while provider responds is rejected for new and reused preference',async()=>{
   for(const existing of [null,'pref']) for(const final of [null,'invalid']) {
-    const {POST}=preference({existing,final});assert.equal((await POST(request({orderId:id}))).status,409);
+    const {POST}=preference({existing,final});assert.equal((await POST(request({orderNumber:'DCL-900001'}))).status,409);
   }
 });
 test('stock_unavailable and approved-but-incomplete always return review',async()=>{
   for(const status of ['stock_unavailable','pending_payment','cancelled']) {
-    const db={from:table=>chain({data:table==='orders'?{status,payment_method:'mercadopago',total:100,currency:'ARS'}:{status:'approved'}})};
+    const db={from:table=>chain({data:table==='orders'?{order_number:'DCL-900001',status,payment_method:'mercadopago',total:100,currency:'ARS'}:table==='order_items'?[{product_name:'Test',quantity:1,unit_price:100,line_total:100}]:{status:'approved',currency:'ARS',amount:100,provider:'mercadopago'}})};
     const {GET}=load('app/api/store/orders/[id]/status/route.ts',mocks(db));
-    const body=await (await GET(new Request('https://test.invalid'),{params:Promise.resolve({id})})).json();
+    const body=await (await GET(new Request('https://test.invalid'),{params:Promise.resolve({id:'DCL-900001'})})).json();
     assert.equal(body.result,'review');assert.equal(body.paymentReceived,true);
   }
 });
 test('signed Checkout Pro webhook repeats the same reconciliation arguments; unsigned webhook is rejected',async()=>{
   const calls=[];
   class InvalidSignature extends Error {}
-  const db={from:()=>chain({data:{external_order_id:'pref'}}),rpc:async(name,args)=>{calls.push({name,args});return {data:'sale',error:null};}};
-  const {POST}=load('app/api/payments/mercadopago/checkout-pro-webhook/route.ts',{...mocks(db),mercadopago:{InvalidWebhookSignatureError:InvalidSignature,WebhookSignatureValidator:{validate:()=>{}}}},{console:silent,process:{env:{MERCADOPAGO_ACCESS_TOKEN:'mock',MERCADOPAGO_WEBHOOK_SECRET:'mock'}},fetch:async()=>Response.json({id:123,status:'approved',external_reference:id,transaction_amount:100,currency_id:'ARS'})});
+  const transactionId=randomUUID();
+  const db={from:()=>chain({data:{id:transactionId,order_id:id,external_order_id:'pref',provider_request_started_at:null}}),rpc:async(name,args)=>{calls.push({name,args});return {data:{ok:true},error:null};}};
+  const {POST}=load('app/api/payments/mercadopago/checkout-pro-webhook/route.ts',{...mocks(db),mercadopago:{InvalidWebhookSignatureError:InvalidSignature,WebhookSignatureValidator:{validate:()=>{}}}},{console:silent,process:{env:{MERCADOPAGO_ACCESS_TOKEN:'mock',MERCADOPAGO_WEBHOOK_SECRET:'mock'}},fetch:async url=>Response.json(url.includes('/merchant_orders/')?{id:456,external_reference:id,preference_id:'pref',payments:[{id:123}]}:url.includes('/checkout/preferences/')?{id:'pref',external_reference:id}:{id:123,status:'approved',external_reference:id,transaction_amount:100,currency_id:'ARS',order:{id:456,type:'mercadopago'}})});
   const req=()=>({nextUrl:new URL('https://test.invalid?type=payment&data.id=123'),headers:new Headers({'x-signature':'mock','x-request-id':'mock'})});
   assert.equal((await POST(req())).status,200);assert.equal((await POST(req())).status,200);
   assert.deepEqual(calls[0],calls[1]);assert.equal(calls[0].args.p_status,'processed');

@@ -1,4 +1,4 @@
-import { commercialAnalyticsEnvironment } from "@/lib/commercial-analytics-config";
+import { providerGet, reconcileVerifiedOrder, type VerifiedOrder } from "@/lib/store/mercadopago-recovery";
 import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { NextResponse } from "next/server";
 
@@ -7,15 +7,7 @@ import { apiError, apiInternalError, boundedString, readJsonObject } from "@/lib
 import { authorizedBuyerOrder, buyerNotFound, isSameOriginWrite } from "@/lib/store/buyer-session";
 import { rateLimit } from "@/lib/rate-limit";
 
-type MercadoPagoOrder = {
-  id?: string;
-  status?: string;
-  currency?: string;
-  total_amount?: string | number;
-  external_reference?: string;
-  message?: string;
-  transactions?: { payments?: Array<{ id?: string; status?: string }> };
-};
+type MercadoPagoOrder = VerifiedOrder & { message?: string };
 
 type MercadoPagoErrorDiagnostic = {
   error?: string;
@@ -67,11 +59,6 @@ function getMercadoPagoErrorDiagnostic(value: unknown): MercadoPagoErrorDiagnost
   };
 }
 
-function localStatus(status?: string): "pending" | "approved" | "rejected" | "error" {
-  if (status === "processed") return "approved";
-  if (status === "rejected" || status === "cancelled") return "rejected";
-  return "pending";
-}
 
 export async function POST(request: Request) {
   const limited = rateLimit(request, "mercadopago-order", { limit: 10, windowMs: 60 * 1000 });
@@ -104,19 +91,29 @@ export async function POST(request: Request) {
     const order = orderQuery.data;
     const transaction = transactionQuery.data;
     if (!order || !transaction || order.payment_method !== "card") return buyerNotFound();
+    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    if (!accessToken) throw new Error("Mercado Pago no configurado.");
+    // Query known operations without another charge, even after reservation expiry.
+    if (transaction.external_order_id) {
+      const verified = await providerGet(`/v1/orders/${encodeURIComponent(transaction.external_order_id)}`, accessToken);
+      await reconcileVerifiedOrder(db, verified, transaction.external_order_id, orderId);
+      scheduleAnalyticsFlush();
+      return NextResponse.json({ ok: true });
+    }
     const paymentWindow = await db.rpc("get_order_payment_window" as never, { p_order: orderId } as never) as unknown as { data: string | null; error: unknown };
     if (paymentWindow.error) return apiError("INTERNAL_ERROR", "No se pudo verificar la reserva.", 503);
     if (!paymentWindow.data || !Number.isFinite(Date.parse(paymentWindow.data)) || Date.parse(paymentWindow.data) <= Date.now()) return apiError("RESERVATION_EXPIRED", "La reserva ya no permite iniciar un pago.", 409);
 
-    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
-    if (!accessToken) throw new Error("Mercado Pago no configurado.");
+    const claim = await db.rpc("begin_mercadopago_request" as never, { p_order: orderId } as never);
+    if (claim.error) throw new Error("No se pudo preparar el pago.");
+    if (claim.data !== true) return NextResponse.json({ ok: false, code: "PAYMENT_RECOVERY_PENDING", message: "El pago requiere verificación. Consultá el estado del pedido; no vuelvas a pagar." }, { status: 409 });
 
     const amount = Number(order.total).toFixed(2);
     const mercadoPagoRequest = {
       type: "online",
       processing_mode: "automatic",
       total_amount: amount,
-      external_reference: orderId,
+      external_reference: transaction.external_idempotency_key,
       payer: { email: payerEmail, identification: payer.identification },
       transactions: {
         payments: [{ amount, payment_method: { id: paymentMethodId, type: paymentType, token, installments } }],
@@ -156,33 +153,8 @@ export async function POST(request: Request) {
         { status: response.status === 429 || response.status === 423 ? 503 : 400 },
       );
     }
-    if (
-      !mercadoPagoOrder.id ||
-      mercadoPagoOrder.external_reference !== orderId ||
-      Number(mercadoPagoOrder.total_amount) !== Number(order.total) ||
-      (mercadoPagoOrder.currency && mercadoPagoOrder.currency !== order.currency)
-    ) {
-      throw new Error("La respuesta de Mercado Pago no coincide con el pedido local.");
-    }
-
-    const payment = mercadoPagoOrder.transactions?.payments?.[0];
-    const { error } = await db
-      .from("payment_transactions")
-      .update({
-        external_order_id: mercadoPagoOrder.id,
-        external_payment_id: payment?.id ?? null,
-      } as never)
-      .eq("id", transaction.id)
-      .or(`external_order_id.is.null,external_order_id.eq.${mercadoPagoOrder.id}`);
-    if (error) throw new Error("No se pudo vincular la operación de Mercado Pago.");
-
-    const completion = await db.rpc("complete_mercadopago_order", {
-      p_analytics_environment: commercialAnalyticsEnvironment(),
-      p_order: orderId, p_external_order: mercadoPagoOrder.id, p_payment: payment?.id ?? "",
-      p_amount: Number(mercadoPagoOrder.total_amount), p_currency: mercadoPagoOrder.currency || order.currency,
-      p_status: localStatus(mercadoPagoOrder.status) === "rejected" ? "rejected" : mercadoPagoOrder.status || "pending",
-    } as never);
-    if (completion.error) throw new Error("No se pudo conciliar el pago. Consultá el estado del pedido antes de reintentar.");
+    if (!mercadoPagoOrder.id) throw new Error("Respuesta de pago sin identificador.");
+    await reconcileVerifiedOrder(db, mercadoPagoOrder, mercadoPagoOrder.id, orderId);
 
     scheduleAnalyticsFlush();
     return NextResponse.json({ ok: true });

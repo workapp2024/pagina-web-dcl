@@ -1,18 +1,10 @@
-import { commercialAnalyticsEnvironment } from "@/lib/commercial-analytics-config";
+import { reconcileVerifiedOrder, type VerifiedOrder } from "@/lib/store/mercadopago-recovery";
 import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { InvalidWebhookSignatureError, WebhookSignatureValidator } from "mercadopago";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminServerClient } from "@/lib/supabase/server";
 
-type MercadoPagoOrder = {
-  id?: string;
-  external_reference?: string;
-  currency?: string;
-  total_amount?: string | number;
-  status?: string;
-  transactions?: { payments?: Array<{ id?: string | number }> };
-};
 
 type ProviderDiagnostic = { providerCode?: string; providerMessage?: string };
 
@@ -36,10 +28,10 @@ async function getProviderDiagnostic(response: Response): Promise<ProviderDiagno
   }
 }
 
-function isMercadoPagoOrder(value: unknown, externalOrderId: string): value is MercadoPagoOrder {
+function isVerifiedOrder(value: unknown, externalOrderId: string): value is VerifiedOrder {
   if (!value || typeof value !== "object") return false;
-  const order = value as MercadoPagoOrder;
-  return order.id === externalOrderId && Boolean(order.external_reference) && Boolean(order.currency);
+  const order = value as VerifiedOrder;
+  return order.id === externalOrderId && Boolean(order.external_reference);
 }
 
 function hasOrderIdentifierShape(externalOrderId: string): boolean {
@@ -115,6 +107,10 @@ export async function POST(request: NextRequest) {
     };
     console.info("Mercado Pago Orders API response", responseLog);
     if (response.status === 404) {
+      if (hasOrderIdentifierShape(externalOrderId)) {
+        // A real resource may not yet be readable. Preserve delivery retries.
+        return NextResponse.json({ ok: false, error: "Payment order is not available yet." }, { status: 502 });
+      }
       console.warn("Mercado Pago webhook ignored", { ...responseLog, reason: "external_order_not_found" });
       return NextResponse.json({ ok: true, ignored: "external_order_not_found" });
     }
@@ -138,24 +134,14 @@ export async function POST(request: NextRequest) {
       console.error("Mercado Pago webhook provider error", { stage, reason: "invalid_order_response" });
       return NextResponse.json({ ok: false, error: "Could not verify payment order." }, { status: 502 });
     }
-    if (!isMercadoPagoOrder(order, externalOrderId)) {
+    if (!isVerifiedOrder(order, externalOrderId)) {
       console.error("Mercado Pago webhook provider error", { stage, reason: "inconsistent_order_response" });
       return NextResponse.json({ ok: false, error: "Could not verify payment order." }, { status: 502 });
     }
 
     stage = "local_order_completion";
-    const payment = order.transactions?.payments?.[0];
     const db = createAdminServerClient();
-    const result = await db.rpc("complete_mercadopago_order", {
-      p_analytics_environment: commercialAnalyticsEnvironment(),
-      p_order: order.external_reference,
-      p_external_order: order.id,
-      p_payment: payment?.id ? String(payment.id) : "",
-      p_amount: Number(order.total_amount),
-      p_currency: order.currency,
-      p_status: order.status,
-    } as never) as unknown as { error: { message: string } | null };
-    if (result.error) throw new Error(result.error.message);
+    await reconcileVerifiedOrder(db, order, externalOrderId);
     scheduleAnalyticsFlush();
     return NextResponse.json({ ok: true });
   } catch (error) {
