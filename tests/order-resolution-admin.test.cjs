@@ -20,6 +20,7 @@ test('only state-appropriate resolutions are offered', () => {
   assert.deepEqual(plain(availableResolutions(order('completed', 'approved', id, 'transfer'))), ['REFUND_VERIFIED', 'TRANSFER_APPROVAL_ERROR']);
   assert.deepEqual(plain(availableResolutions(order('completed', 'approved', id))), ['REFUND_VERIFIED']);
   assert.deepEqual(plain(availableResolutions(order('stock_unavailable', 'approved'))), ['COMPLETE_STOCK_UNAVAILABLE', 'REFUND_STOCK_UNAVAILABLE']);
+  assert.deepEqual(plain(availableResolutions(order('stock_unavailable', 'approved', null, 'transfer'))), ['COMPLETE_STOCK_UNAVAILABLE', 'REFUND_STOCK_UNAVAILABLE']);
   assert.deepEqual(plain(availableResolutions(order('refund_required', 'approved', null, 'mercadopago', 'cancelled'))), ['REFUND_STOCK_UNAVAILABLE']);
   assert.deepEqual(plain(availableResolutions(order('refunded', 'refunded', null, 'mercadopago', 'cancelled'))), []);
   assert.deepEqual(plain(availableResolutions(order('completed', 'approved', id, 'mercadopago', 'delivered'))), []);

@@ -53,6 +53,7 @@ export function OrdersManager() {
   const [resolutionKey, setResolutionKey] = useState("");
   const [resolutionAttempted, setResolutionAttempted] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const latest = useRef(0);
@@ -85,7 +86,7 @@ export function OrdersManager() {
     if (name === "cancel_order" && !window.confirm("¿Cancelar el pedido pendiente y liberar su reserva mediante el flujo actual?")) return;
     if (name === "operational" && !window.confirm("¿Registrar este cambio operativo? No modifica el pago ni el stock.")) return;
     if (name === "archive" && !window.confirm("Este pedido dejará de aparecer entre los pedidos activos. No se eliminará y podrás restaurarlo.")) return;
-    inFlight.current = true; setBusy(true); setError("");
+    inFlight.current = true; setBusy(true); setError(""); setNotice("");
     try {
       const endpoint = ["archive", "restore"].includes(name) ? "/api/admin/orders/archive" : name === "operational" ? "/api/admin/orders/operational-status" : "/api/admin/orders";
       const response = await fetch(endpoint, {
@@ -95,6 +96,7 @@ export function OrdersManager() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "No se pudo completar la acción.");
       setNote(""); setOperationNote(""); await load();
+      if (name === "confirm_transfer") setNotice(body.message || "Transferencia confirmada y venta registrada.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo completar la acción."); }
     finally { inFlight.current = false; setBusy(false); }
   }
@@ -134,6 +136,7 @@ export function OrdersManager() {
   }
 
   return <div className="space-y-5">
+    {notice && <p role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">{notice}</p>}
     <header><h1 className="text-3xl font-black">Pedidos</h1><p className="mt-2 text-sm text-zinc-400">Gestioná preparación y entrega. El pago se muestra por separado.</p></header>
     <nav aria-label="Organización de pedidos" className="flex gap-2"><button disabled={busy} aria-pressed={view === "active"} onClick={() => switchView("active")} className={`${buttonClass} ${view === "active" ? "bg-red-600" : ""}`}>Pedidos activos</button><button disabled={busy} aria-pressed={view === "archived"} onClick={() => switchView("archived")} className={`${buttonClass} ${view === "archived" ? "bg-red-600" : ""}`}>Ver archivados</button></nav>
     {view === "archived" && <p className="text-sm text-zinc-400">Pedidos archivados. Conservan sus datos y pueden restaurarse.</p>}

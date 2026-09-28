@@ -88,7 +88,7 @@ export function validateOrderReceipt({ order, payments, sale, items, resolutions
     // Only these resolutions are possible for an order with a historical sale.
     if (resolutions.some(r => r.order_id !== order.id || r.payment_transaction_id !== payment.id || r.sale_id !== sale.id
       || !["COMPLETE_STOCK_UNAVAILABLE", "REFUND_VERIFIED", "TRANSFER_APPROVAL_ERROR"].includes(r.resolution_type)
-      || (r.resolution_type === "COMPLETE_STOCK_UNAVAILABLE" && payment.provider !== "mercadopago")
+      || (r.resolution_type === "COMPLETE_STOCK_UNAVAILABLE" && !["mercadopago", "transfer"].includes(payment.provider))
       || !dateIsValid(r.created_at) || Date.parse(r.created_at) < Date.parse(sale.created_at))) return incident();
     if (new Set(resolutions.map(r => r.resolution_type)).size !== resolutions.length) return incident();
     const reversals = resolutions.filter(r => r.resolution_type !== "COMPLETE_STOCK_UNAVAILABLE");

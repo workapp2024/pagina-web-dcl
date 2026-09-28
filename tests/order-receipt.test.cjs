@@ -192,14 +192,14 @@ function validRecords() {
   const items = [{ id: randomUUID(), sale_id: sale.id, product_name: 'LED histórico', quantity: 2, unit_price: '100.15', line_total: '200.30' }];
   return { order, sale, payments: [payment], salePayments: [{ ...payment }], items, resolutions: [] };
 }
-test('stock completion resolution requires Mercado Pago, as resolve_order does', () => {
+test('stock completion resolution accepts Mercado Pago and transfer, as resolve_order does', () => {
   const records = validRecords();
   records.resolutions = [{ order_id: records.order.id, payment_transaction_id: records.payments[0].id,
     sale_id: records.sale.id, resolution_type: 'COMPLETE_STOCK_UNAVAILABLE', created_at: '2026-09-23T21:37:00Z' }];
   assert.equal(helper.validateOrderReceipt(records).status, 'ok');
   records.order.payment_method = records.sale.payment_method = 'transfer';
   records.payments[0].provider = records.salePayments[0].provider = 'transfer';
-  assert.equal(helper.validateOrderReceipt(records).status, 'incident');
+  assert.equal(helper.validateOrderReceipt(records).status, 'ok');
 });
 
 test('contradictory relationships, amounts, currencies, missing items or snapshot fail closed', () => {

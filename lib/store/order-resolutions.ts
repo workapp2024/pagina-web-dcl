@@ -36,7 +36,7 @@ export function availableResolutions(order: ResolvableOrder): ResolutionType[] {
     return ["CANCEL_PENDING"];
   }
   if (order.status === "stock_unavailable" && payment.status === "approved"
-    && payment.provider === "mercadopago" && !payment.sale_id) {
+    && (payment.provider === "mercadopago" || (payment.provider === "transfer" && order.payment_method === "transfer")) && !payment.sale_id) {
     return ["COMPLETE_STOCK_UNAVAILABLE", "REFUND_STOCK_UNAVAILABLE"];
   }
   if (order.status === "completed" && payment.status === "approved" && payment.sale_id
