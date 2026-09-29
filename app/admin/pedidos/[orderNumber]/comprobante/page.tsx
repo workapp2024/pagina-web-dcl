@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Comprobante de compra | DCL Cree LED", robots: { index: false, follow: false } };
 
 export default async function ReceiptPage({ params }: { params: Promise<{ orderNumber: string }> }) {
-  if (!(await isAdminAuthenticated())) redirect("/admin/login");
+  if (!(await isAdminAuthenticated("commercial"))) redirect("/admin/login");
   const { orderNumber } = await params;
   const result = await getOrderReceipt(orderNumber);
   return <main className={styles.page}>

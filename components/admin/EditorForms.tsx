@@ -1122,6 +1122,15 @@ export function AdminHomeEditor() {
         </div>
       </SectionCard>
 
+      <SectionCard title="¿Por qué DCL?" description="Mostrá las tarjetas actuales, un texto simple u ocultá la sección.">
+        <div className="space-y-4">
+          <label className="flex items-center gap-3"><input type="checkbox" checked={content.siteSettings.whyUsEnabled} onChange={e => updateSettings({ whyUsEnabled: e.target.checked })} />Mostrar sección</label>
+          <label className="block">Diseño<select className="mt-2 block w-full rounded-xl bg-zinc-900 p-3" value={content.siteSettings.whyUsDisplayMode} onChange={e => updateSettings({ whyUsDisplayMode: e.target.value as "cards" | "text" })}><option value="cards">Tarjetas</option><option value="text">Texto simple</option></select></label>
+          <label className="block">Título<input className="mt-2 block w-full rounded-xl bg-zinc-900 p-3" maxLength={255} value={content.siteSettings.whyUsSectionTitle} onChange={e => updateSettings({ whyUsSectionTitle: e.target.value })} /></label>
+          {content.siteSettings.whyUsDisplayMode === "text" && <label className="block">Texto<textarea rows={4} maxLength={4000} className="mt-2 block w-full rounded-xl bg-zinc-900 p-3" value={content.siteSettings.whyUsText} onChange={e => updateSettings({ whyUsText: e.target.value })} /></label>}
+        </div>
+      </SectionCard>
+
       <SectionCard title="Títulos de secciones" description="Estos textos conservan los valores actuales y se pueden editar para la Home.">
         <div className="grid gap-4 md:grid-cols-2">
           {([
@@ -1129,7 +1138,6 @@ export function AdminHomeEditor() {
             ["needsSectionTitle", "Necesidades"],
             ["productsSectionTitle", "Productos"],
             ["promotionsSectionTitle", "Promociones"],
-            ["whyUsSectionTitle", "Por qué DCL"],
           ] as const).map(([key, label]) => (
             <label key={key} className="block text-sm text-zinc-300">
               <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">{label}</span>

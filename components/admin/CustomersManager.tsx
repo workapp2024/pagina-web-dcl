@@ -1,4 +1,5 @@
 "use client";
+import { useIsOwner } from "@/components/admin/AdminIdentityProvider";
 
 import { useEffect, useState } from "react";
 
@@ -15,6 +16,7 @@ const emptyForm: Form = { fullName: "", phone: "", email: "", documentNumber: ""
 const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
 export function CustomersManager() {
+  const isOwner = useIsOwner();
   const [view, setView] = useState<"active" | "archived">("active");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -111,8 +113,8 @@ export function CustomersManager() {
           <p>Gasto total: <strong>{money(selected.total)}</strong></p>
           <div className="flex flex-wrap gap-3 border-t border-white/15 pt-4">
             <button disabled={busy} onClick={() => startEdit(selected)} className="text-white disabled:opacity-50">Editar</button>
-            {selected.archived_at ? <button disabled={busy} onClick={() => void mutate("restore")} className="text-green-300 disabled:opacity-50">Restaurar</button> : <button disabled={busy} onClick={() => void mutate("archive")} className="text-amber-300 disabled:opacity-50">Archivar</button>}
-            <button disabled={busy} onClick={() => void mutate("delete")} className="text-red-300 disabled:opacity-50">Eliminar definitivamente</button>
+            {isOwner && (selected.archived_at ? <button disabled={busy} onClick={() => void mutate("restore")} className="text-green-300 disabled:opacity-50">Restaurar</button> : <button disabled={busy} onClick={() => void mutate("archive")} className="text-amber-300 disabled:opacity-50">Archivar</button>)}
+            {isOwner && <button disabled={busy} onClick={() => void mutate("delete")} className="text-red-300 disabled:opacity-50">Eliminar definitivamente</button>}
           </div>
         </div>}
       </section>

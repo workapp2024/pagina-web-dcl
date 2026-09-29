@@ -18,8 +18,8 @@ type InventoryMovementInsert = Database["public"]["Tables"]["inventory_movements
 const INVENTORY_PRODUCT_SELECT = "id,name,active,price,cost_price,margin_percentage,stock,stock_min";
 const INVENTORY_MOVEMENT_SELECT = "id,product_id,movement_type,quantity_delta,reason,reference_type,reference_id,created_at";
 
-async function requireInventoryAdmin() {
-  if (!(await isAdminAuthenticated())) {
+async function requireInventoryAdmin(readOnly = false) {
+  if (!(await isAdminAuthenticated(readOnly ? "stock:read" : "admin"))) {
     return NextResponse.json({ ok: false, message: "No autorizado." }, { status: 401 });
   }
 
@@ -61,7 +61,7 @@ function mapMovement(row: InventoryMovementRow, productName: string): InventoryM
 }
 
 export async function GET(request: Request) {
-  const accessError = await requireInventoryAdmin();
+  const accessError = await requireInventoryAdmin(true);
   if (accessError) return accessError;
 
   try {

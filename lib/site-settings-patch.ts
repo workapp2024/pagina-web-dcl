@@ -5,7 +5,7 @@ import { isThemePreset } from "@/lib/theme";
 // Each editor owns only these columns. Never send a full cached SiteSettings row.
 export const siteSettingsSections = {
   configuration: ["logo", "whatsapp", "instagram", "facebook", "email", "phone", "address"],
-  home: ["logo", "vehicleSectionTitle", "needsSectionTitle", "whyUsSectionTitle", "productsSectionTitle", "promotionsSectionTitle"],
+  home: ["logo", "vehicleSectionTitle", "needsSectionTitle", "whyUsSectionTitle", "whyUsEnabled", "whyUsDisplayMode", "whyUsText", "productsSectionTitle", "promotionsSectionTitle"],
   appearance: ["themePreset"],
   transfer: ["transferAlias", "transferCbuCvu", "transferHolder", "transferInstitution", "transferInstructions"],
 } as const satisfies Record<string, readonly (keyof SiteSettings)[]>;
@@ -14,6 +14,7 @@ export type SiteSettingsSection = keyof typeof siteSettingsSections;
 type SettingsUpdate = Database["public"]["Tables"]["site_settings"]["Update"];
 
 const fields = {
+  whyUsDisplayMode: ["why_us_display_mode", 5], whyUsText: ["why_us_text", 4000],
   logo: ["logo_url", 10000], whatsapp: ["whatsapp", 10000],
   instagram: ["instagram", 10000], facebook: ["facebook", 10000],
   email: ["email", 255], phone: ["phone", 100], address: ["address", 255],
@@ -40,8 +41,15 @@ export function buildSiteSettingsPatch(section: unknown, settings: unknown): Set
   const entries = Object.entries(settings);
   if (!entries.length) throw new Error("No hay cambios para guardar.");
   const row: Record<string, string> = {};
+  const flags: Pick<SettingsUpdate, "why_us_enabled"> = {};
   for (const [key, value] of entries) {
     if (!allowed.includes(key)) throw new Error(`El campo ${key} no pertenece a esta sección.`);
+    if (key === "whyUsEnabled") {
+      if (typeof value !== "boolean") throw new Error("Mostrar sección debe ser booleano.");
+      flags.why_us_enabled = value;
+      continue;
+    }
+    if (key === "whyUsDisplayMode" && value !== "cards" && value !== "text") throw new Error("Diseño no válido.");
     const [column, limit] = fields[key as keyof typeof fields];
     if (typeof value !== "string" || value.length > limit) throw new Error(`Valor no válido para ${key}.`);
     if (key === "themePreset" && !isThemePreset(value)) throw new Error("Paleta no reconocida. No se cambió el tema activo.");
@@ -70,5 +78,5 @@ export function buildSiteSettingsPatch(section: unknown, settings: unknown): Set
       throw new Error("Para habilitar transferencia indicá alias o CBU/CVU, titular e institución.");
     }
   }
-  return row as SettingsUpdate;
+  return { ...row, ...flags } as SettingsUpdate;
 }

@@ -6,6 +6,8 @@ import { useSiteContent } from "@/components/providers/SiteContentProvider";
 export function WhyUs() {
   const { content } = useSiteContent();
 
+  if (content.siteSettings.whyUsEnabled === false) return null;
+
   return (
     <section id="nosotros" className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
       <div className="mb-8 max-w-2xl">
@@ -14,7 +16,7 @@ export function WhyUs() {
         </h2>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      {content.siteSettings.whyUsDisplayMode === "text" ? <p className="max-w-3xl whitespace-pre-wrap break-words text-base leading-8 text-zinc-300">{content.siteSettings.whyUsText}</p> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {reasons.map((reason) => (
           <article key={reason.title} className="rounded-[1.5rem] border border-white/10 bg-zinc-900/80 p-5">
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-600/15 text-lg font-black text-red-400">
@@ -24,7 +26,7 @@ export function WhyUs() {
             <p className="mt-3 text-sm leading-6 text-zinc-300">{reason.text}</p>
           </article>
         ))}
-      </div>
+      </div>}
     </section>
   );
 }

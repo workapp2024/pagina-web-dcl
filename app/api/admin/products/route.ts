@@ -24,7 +24,7 @@ function nonNegativeInteger(value: unknown, fallback = 0): number {
 }
 
 async function requireAdminWriteAccess() {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated("catalog"))) {
     return NextResponse.json({ ok: false, message: "No autorizado." }, { status: 401 });
   }
 

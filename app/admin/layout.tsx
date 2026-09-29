@@ -1,11 +1,15 @@
 import { connection } from "next/server";
+import { getAdminIdentity } from "@/lib/admin-auth";
+import { AdminIdentityProvider } from "@/components/admin/AdminIdentityProvider";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
 import { ADMIN_MAINTENANCE_MESSAGE, isMaintenanceMode } from "@/lib/maintenance-mode";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await connection();
+  const identity = await getAdminIdentity();
   return (
+    <AdminIdentityProvider value={identity}>
     <SiteContentProvider>
       <AdminShell>
         {isMaintenanceMode() && (
@@ -16,5 +20,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {children}
       </AdminShell>
     </SiteContentProvider>
+    </AdminIdentityProvider>
   );
 }

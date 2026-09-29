@@ -348,6 +348,16 @@ export interface Database {
           updated_at?: string;
         };
       };
+      admin_bootstrap: {
+        Row: { id: number; user_id: string; completed_at: string };
+        Insert: { id: number; user_id: string };
+        Update: never;
+      };
+      admin_profiles: {
+        Row: { id: string; email: string; display_name: string; role: "ADMIN" | "VENDEDOR"; active: boolean; session_version: number; created_at: string };
+        Insert: { id: string; email: string; display_name?: string; role: "ADMIN" | "VENDEDOR"; active?: boolean; session_version?: number };
+        Update: { active?: boolean; display_name?: string; session_version?: number };
+      };
       site_settings: {
         Row: {
           id: number;
@@ -360,6 +370,9 @@ export interface Database {
           address: string;
           vehicle_section_title: string;
           needs_section_title: string;
+          why_us_enabled: boolean;
+          why_us_display_mode: "cards" | "text";
+          why_us_text: string;
           why_us_section_title: string;
           products_section_title: string;
           promotions_section_title: string;
@@ -387,6 +400,9 @@ export interface Database {
           address?: string;
           vehicle_section_title?: string;
           needs_section_title?: string;
+          why_us_enabled?: boolean;
+          why_us_display_mode?: "cards" | "text";
+          why_us_text?: string;
           why_us_section_title?: string;
           products_section_title?: string;
           promotions_section_title?: string;
@@ -414,6 +430,9 @@ export interface Database {
           address?: string;
           vehicle_section_title?: string;
           needs_section_title?: string;
+          why_us_enabled?: boolean;
+          why_us_display_mode?: "cards" | "text";
+          why_us_text?: string;
           why_us_section_title?: string;
           products_section_title?: string;
           promotions_section_title?: string;
@@ -565,6 +584,10 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      complete_admin_bootstrap: {
+        Args: { p_user: string; p_email: string; p_name: string };
+        Returns: string;
+      };
       create_sale_with_inventory: {
         Args: { p_customer_id: string; p_customer_vehicle_id: string | null; p_notes: string; p_items: Json; p_create_installation?: boolean; p_payment_method?: string; p_idempotency_key?: string | null };
         Returns: string;

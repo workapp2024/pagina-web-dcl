@@ -20,7 +20,7 @@ const VALID_CATEGORIES: StorageCategory[] = ["products", "promotions", "vehicles
 export async function POST(request: Request) {
   const limited = rateLimit(request, "admin-upload", { limit: 20, windowMs: 10 * 60 * 1000 });
   if (limited) return limited;
-  const authenticated = await isAdminAuthenticated();
+  const authenticated = await isAdminAuthenticated("catalog");
   if (!authenticated) {
     return apiError("UNAUTHORIZED", "No autorizado.", 401);
   }
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get("file");
     const categoryInput = String(formData.get("category") || "products");
+    if (categoryInput !== "products" && !(await isAdminAuthenticated())) return apiError("FORBIDDEN", "Sólo podés subir imágenes de productos.", 403);
     const idHint = formData.get("idHint") ? String(formData.get("idHint")) : undefined;
 
     if (!(file instanceof File)) {

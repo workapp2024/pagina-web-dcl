@@ -3,6 +3,6 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { redirect } from "next/navigation";
 
 export default async function AdminCompatibilidadesPage() {
-  if (!(await isAdminAuthenticated())) redirect("/admin/login");
+  if (!(await isAdminAuthenticated("catalog"))) redirect("/admin/login");
   return <AdminCompatibilityManager />;
 }

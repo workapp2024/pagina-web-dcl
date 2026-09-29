@@ -25,7 +25,7 @@ function slugify(value: string): string {
 export async function POST(request: Request) {
   const limited = rateLimit(request, "admin-vehicle-compatibility", { limit: 30, windowMs: 10 * 60 * 1000 });
   if (limited) return limited;
-  const authenticated = await isAdminAuthenticated();
+  const authenticated = await isAdminAuthenticated("catalog");
   if (!authenticated) {
     return NextResponse.json({ ok: false, message: "No autorizado." }, { status: 401 });
   }
@@ -159,7 +159,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const authenticated = await isAdminAuthenticated();
+  const authenticated = await isAdminAuthenticated("catalog");
   if (!authenticated) {
     return NextResponse.json({ ok: false, message: "No autorizado." }, { status: 401 });
   }

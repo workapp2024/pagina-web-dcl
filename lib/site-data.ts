@@ -88,6 +88,9 @@ export type SiteSettings = {
   heroImage: string;
   vehicleSectionTitle: string;
   needsSectionTitle: string;
+  whyUsEnabled: boolean;
+  whyUsDisplayMode: "cards" | "text";
+  whyUsText: string;
   whyUsSectionTitle: string;
   productsSectionTitle: string;
   promotionsSectionTitle: string;
@@ -167,6 +170,9 @@ export const defaultSiteContent: SiteContent = {
     heroImage: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1600&q=80",
     vehicleSectionTitle: "¿QUÉ VEHÍCULO TENÉS?",
     needsSectionTitle: "¿QUÉ ESTÁS BUSCANDO?",
+    whyUsEnabled: true,
+    whyUsDisplayMode: "cards",
+    whyUsText: "",
     whyUsSectionTitle: "¿POR QUÉ DCL?",
     productsSectionTitle: "PRODUCTOS DESTACADOS",
     promotionsSectionTitle: "PROMOCIONES DCL",

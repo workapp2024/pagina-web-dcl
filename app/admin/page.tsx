@@ -1,13 +1,14 @@
+import { SellerDashboard } from "@/components/admin/SellerDashboard";
 import { redirect } from "next/navigation";
 import { DashboardManager } from "@/components/admin/DashboardManager";
-import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { getAdminIdentity, isAdminAuthenticated } from "@/lib/admin-auth";
 
 export default async function AdminHomePage() {
-  if (!(await isAdminAuthenticated())) {
+  if (!(await isAdminAuthenticated("commercial"))) {
     redirect("/admin/login");
   }
 
-  return <DashboardManager />;
+  return (await getAdminIdentity())?.role === "VENDEDOR" ? <SellerDashboard /> : <DashboardManager />;
   /* return (
     <div>
           <h1 className="text-3xl font-black uppercase tracking-[-0.06em] text-white">Resumen de administración</h1>

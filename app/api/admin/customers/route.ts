@@ -9,7 +9,7 @@ type VehicleRow = { id: string; customer_id: string; brand_name: string; model_n
 type WarrantyRow = { id: string; customer_id: string; status: string; warranty_claims?: { status: string }[] };
 
 async function guard() {
-  if (!(await isAdminAuthenticated())) return apiError("UNAUTHORIZED", "No autorizado.", 401);
+  if (!(await isAdminAuthenticated("commercial"))) return apiError("UNAUTHORIZED", "No autorizado.", 401);
   if (!isServiceRoleConfigured()) return apiError("CONFIGURATION_ERROR", "Falta configurar el acceso al servidor.", 503);
   return null;
 }
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
   const body = await readJsonObject(request);
   if (!body || typeof body.action !== "string") return apiError("BAD_REQUEST", "Acción inválida.", 400);
   const action = body.action;
+  if (!["create", "edit"].includes(action) && !(await isAdminAuthenticated())) return apiError("FORBIDDEN", "Acceso denegado.", 403);
   if (!["create", "edit", "archive", "restore", "delete"].includes(action)) return apiError("BAD_REQUEST", "Acción inválida.", 400);
   const customerId = body.customerId;
   if (action !== "create" && !isUuid(customerId)) return apiError("BAD_REQUEST", "Cliente inválido.", 400);

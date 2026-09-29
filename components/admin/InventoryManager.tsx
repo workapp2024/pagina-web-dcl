@@ -1,4 +1,5 @@
 "use client";
+import { useIsOwner } from "@/components/admin/AdminIdentityProvider";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -35,6 +36,7 @@ function formatCurrency(value: number | undefined) {
 }
 
 export function AdminInventoryManager() {
+  const isOwner = useIsOwner();
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [form, setForm] = useState<MovementForm>(emptyForm);
@@ -132,7 +134,7 @@ export function AdminInventoryManager() {
       {error ? <div className="rounded-2xl border border-red-500/35 bg-red-500/10 p-4 text-sm text-red-100">{error}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-500/35 bg-emerald-500/10 p-4 text-sm text-emerald-100">{notice}</div> : null}
 
-      <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
+      {isOwner && <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
         <div className="mb-5">
           <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">Registrar movimiento</h2>
           <p className="mt-2 text-sm text-zinc-400">Para ajuste, usá un delta: positivo suma unidades y negativo las descuenta.</p>
@@ -203,7 +205,7 @@ export function AdminInventoryManager() {
             </button>
           </div>
         </form>
-      </section>
+      </section>}
 
       <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
         <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">Stock por producto</h2>

@@ -13,7 +13,7 @@ const errors: Record<string, string> = {
 };
 
 export async function POST(request: Request) {
-  if (!(await isAdminAuthenticated())) return apiError("UNAUTHORIZED", "No autorizado.", 401);
+  if (!(await isAdminAuthenticated("orders:operate"))) return apiError("UNAUTHORIZED", "No autorizado.", 401);
   if (!isServiceRoleConfigured()) return apiError("CONFIGURATION_ERROR", "Falta configurar el acceso al servidor.", 503);
   const body = await readJsonObject(request);
   const note = body ? boundedString(body.note ?? "", 1000) : null;

@@ -1,4 +1,5 @@
 "use client";
+import { useIsOwner } from "@/components/admin/AdminIdentityProvider";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { operationalActions, operationalLabels, paymentLabels, paymentMethodLabels, technicalOrderLabels, type OperationalOrder, type OperationalStatus } from "@/lib/store/order-operations";
@@ -36,6 +37,7 @@ const filters = [
 const buttonClass = "min-h-11 rounded-xl border border-white/15 px-4 py-2 text-sm font-bold disabled:opacity-40";
 
 export function OrdersManager() {
+  const isOwner = useIsOwner();
   const [rows, setRows] = useState<Order[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
@@ -182,12 +184,12 @@ export function OrdersManager() {
       {selected.status === "stock_unavailable" && <p className="mt-4 border-l-2 border-amber-400 pl-3 text-sm text-amber-100">Pago aprobado sin venta por falta de stock reservado.</p>}
       {selected.status === "refunded" && <p className="mt-4 text-sm text-emerald-200">Reembolso conciliado. No hay nuevas acciones de resolución.</p>}
       {selected.operational_status === "delivered" && <p className="mt-4 text-sm text-zinc-300">Las devoluciones de pedidos ya entregados se gestionarán mediante el flujo de postventa.</p>}
-      {!selected.archived_at && availableResolutions(selected).length > 0 && <section className="mt-5 border-t border-white/10 pt-4"><h3 className="font-bold">Resolución del pedido</h3><div className="mt-3 flex flex-wrap gap-2">{availableResolutions(selected).map(type => <button key={type} disabled={busy} onClick={() => openResolution(type)} className={`${buttonClass} ${type === "REFUND_STOCK_UNAVAILABLE" && selected.status === "refund_required" ? "border-amber-400 text-amber-100" : ""}`}>{resolutionLabels[type]}</button>)}</div></section>}
-      <section className="mt-5 rounded-2xl border border-white/10 p-4"><h3 className="font-bold">Organización del pedido</h3>
+      {isOwner && !selected.archived_at && availableResolutions(selected).length > 0 && <section className="mt-5 border-t border-white/10 pt-4"><h3 className="font-bold">Resolución del pedido</h3><div className="mt-3 flex flex-wrap gap-2">{availableResolutions(selected).map(type => <button key={type} disabled={busy} onClick={() => openResolution(type)} className={`${buttonClass} ${type === "REFUND_STOCK_UNAVAILABLE" && selected.status === "refund_required" ? "border-amber-400 text-amber-100" : ""}`}>{resolutionLabels[type]}</button>)}</div></section>}
+      {isOwner && <section className="mt-5 rounded-2xl border border-white/10 p-4"><h3 className="font-bold">Organización del pedido</h3>
         {selected.archived_at ? <><p className="mt-2 text-sm text-zinc-400">Archivado el {date(selected.archived_at)}.</p><button disabled={busy} onClick={() => void action("restore", { archive: false })} className={`mt-3 ${buttonClass}`}>Restaurar pedido</button></>
           : selected.archive_block_reason === null ? <button disabled={busy} onClick={() => void action("archive", { archive: true })} className={`mt-3 ${buttonClass}`}>Archivar pedido</button>
             : <p className="mt-2 text-sm text-zinc-400">{archiveBlockMessages[selected.archive_block_reason || ""] || "Este pedido requiere revisión antes de archivarse."}</p>}
-      </section>
+      </section>}
       <section className="mt-5 rounded-2xl border border-white/10 p-4"><h3 className="font-bold">Gestión operativa</h3>
         <p className="mt-2 text-sm text-zinc-400">Estos cambios registran preparación y entrega; no modifican pagos ni stock.</p>
         {actions.financialReview && selected.operational_status !== "cancelled" && <p className="mt-3 text-sm text-amber-200">Una cancelación requiere revisión financiera o devolución. No puede resolverse cambiando el estado operativo.</p>}
@@ -197,7 +199,7 @@ export function OrdersManager() {
           {actions.canCancel && <button disabled={busy} onClick={() => void changeOperation("cancelled")} className={buttonClass}>Registrar cancelación operativa</button>}
         </div></>}
       </section>
-      {selected.payment_method === "transfer" && selected.status === "pending_manual_verification" && <section className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4"><h3 className="font-bold">Verificación de transferencia</h3><p className="mt-1 text-sm text-zinc-300">{selected.transfer_declared_at ? `El cliente informó la transferencia el ${date(selected.transfer_declared_at)}.` : "El cliente todavía no informó la transferencia."}</p><button disabled={busy || !selected.transfer_declared_at} onClick={() => void action("confirm_transfer")} className={`mt-4 ${buttonClass} bg-red-600`}>Confirmar transferencia recibida</button></section>}
+      {isOwner && selected.payment_method === "transfer" && selected.status === "pending_manual_verification" && <section className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4"><h3 className="font-bold">Verificación de transferencia</h3><p className="mt-1 text-sm text-zinc-300">{selected.transfer_declared_at ? `El cliente informó la transferencia el ${date(selected.transfer_declared_at)}.` : "El cliente todavía no informó la transferencia."}</p><button disabled={busy || !selected.transfer_declared_at} onClick={() => void action("confirm_transfer")} className={`mt-4 ${buttonClass} bg-red-600`}>Confirmar transferencia recibida</button></section>}
       {selected.resolutions?.length > 0 && <section className="mt-5"><h3 className="font-bold">Resoluciones</h3><ol className="mt-3 space-y-2">{selected.resolutions.map(entry => <li key={entry.id} className="rounded-lg bg-white/5 p-3 text-sm"><b>{resolutionLabels[entry.resolution_type] || entry.resolution_type}</b><p className="mt-1 text-xs text-zinc-400">{date(entry.created_at)} · {entry.actor} · {entry.source}</p>{entry.external_reference && <p className="mt-2 break-all">Referencia: {entry.external_reference}</p>}<p className="mt-2 whitespace-pre-wrap">{entry.note}</p></li>)}</ol></section>}
       <section className="mt-5"><h3 className="font-bold">Historial operativo</h3><ol className="mt-3 space-y-2">{selected.operationalHistory.map(entry => <li key={entry.id} className="rounded-xl bg-white/5 p-3 text-sm"><p className="font-bold">{entry.action === "archive" ? "Pedido archivado" : entry.action === "restore" ? "Pedido restaurado" : <>{entry.previous_status ? `${operationalLabels[entry.previous_status]} → ` : "Inicio → "}{operationalLabels[entry.new_status]}</>}</p><p className="mt-1 text-xs text-zinc-400">{date(entry.created_at)} · {entry.actor} · {entry.source}</p>{entry.note && <p className="mt-2 whitespace-pre-wrap">{entry.note}</p>}</li>)}</ol></section>
       <section className="mt-5"><h3 className="font-bold">Notas internas</h3><div className="mt-2 space-y-2">{selected.internalNotes.map(item => <div key={item.id} className="rounded-xl bg-white/5 p-3 text-sm"><p>{item.note}</p><small className="text-zinc-500">{date(item.created_at)}</small></div>)}</div><label className="mt-3 block text-sm">Nueva nota<textarea disabled={busy} value={note} onChange={e => setNote(e.target.value)} maxLength={1000} className="mt-2 min-h-20 w-full rounded-xl bg-zinc-900 p-3" /></label><button disabled={busy || !note.trim()} onClick={() => void action("add_note", { note })} className={`mt-2 ${buttonClass}`}>Agregar nota</button></section>
