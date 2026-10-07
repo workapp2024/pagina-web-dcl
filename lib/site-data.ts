@@ -1,3 +1,4 @@
+import { defaultWhyUsCards, type WhyUsCard } from "@/lib/why-us";
 import type { ProductVehicleType, ProductFunction } from "@/lib/product-taxonomy";
 import { whatsappUrl } from "@/lib/whatsapp";
 import { DEFAULT_THEME, type ThemePreset } from "@/lib/theme";
@@ -53,10 +54,6 @@ export type NeedCategory = {
   href: string;
 };
 
-export type Reason = {
-  title: string;
-  text: string;
-};
 
 export type Promotion = {
   id: string;
@@ -89,8 +86,7 @@ export type SiteSettings = {
   vehicleSectionTitle: string;
   needsSectionTitle: string;
   whyUsEnabled: boolean;
-  whyUsDisplayMode: "cards" | "text";
-  whyUsText: string;
+  whyUsCards: WhyUsCard[];
   whyUsSectionTitle: string;
   productsSectionTitle: string;
   promotionsSectionTitle: string;
@@ -146,12 +142,6 @@ export const needCategories: NeedCategory[] = [
   },
 ];
 
-export const reasons: Reason[] = [
-  { title: "ILUMINACIÓN", text: "Opciones pensadas para mejorar la iluminación de tu vehículo." },
-  { title: "COMPATIBILIDAD", text: "Te ayudamos a encontrar la opción adecuada para tu vehículo." },
-  { title: "ASESORAMIENTO", text: "Consultanos antes de comprar." },
-  { title: "PARA TU VEHÍCULO", text: "Opciones para autos, camionetas, motos y vehículos de trabajo." },
-];
 
 export const defaultSiteContent: SiteContent = {
   siteSettings: {
@@ -171,9 +161,8 @@ export const defaultSiteContent: SiteContent = {
     vehicleSectionTitle: "¿QUÉ VEHÍCULO TENÉS?",
     needsSectionTitle: "¿QUÉ ESTÁS BUSCANDO?",
     whyUsEnabled: true,
-    whyUsDisplayMode: "cards",
-    whyUsText: "",
-    whyUsSectionTitle: "¿POR QUÉ DCL?",
+    whyUsCards: defaultWhyUsCards,
+    whyUsSectionTitle: "¿Por qué DCL?",
     productsSectionTitle: "PRODUCTOS DESTACADOS",
     promotionsSectionTitle: "PROMOCIONES DCL",
     radioEnabled: true,

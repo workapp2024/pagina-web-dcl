@@ -1,32 +1,28 @@
 "use client";
-
-import { reasons } from "@/lib/site-data";
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
+import { normalizeWhyUsCards } from "@/lib/why-us";
+import { WhyUsIcon } from "./WhyUsIcon";
+import styles from "./WhyUs.module.css";
 
 export function WhyUs() {
   const { content } = useSiteContent();
-
-  if (content.siteSettings.whyUsEnabled === false) return null;
-
-  return (
-    <section id="nosotros" className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-      <div className="mb-8 max-w-2xl">
-        <h2 className="text-3xl font-black uppercase tracking-[-0.06em] text-white md:text-4xl">
-          {content.siteSettings.whyUsSectionTitle}
-        </h2>
-      </div>
-
-      {content.siteSettings.whyUsDisplayMode === "text" ? <p className="max-w-3xl whitespace-pre-wrap break-words text-base leading-8 text-zinc-300">{content.siteSettings.whyUsText}</p> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        {reasons.map((reason) => (
-          <article key={reason.title} className="rounded-[1.5rem] border border-white/10 bg-zinc-900/80 p-5">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-600/15 text-lg font-black text-red-400">
-              {reason.title.slice(0, 1)}
-            </div>
-            <h3 className="text-xl font-black uppercase tracking-[-0.04em] text-white">{reason.title}</h3>
-            <p className="mt-3 text-sm leading-6 text-zinc-300">{reason.text}</p>
-          </article>
-        ))}
+  const settings = content.siteSettings;
+  if (settings.whyUsEnabled === false) return null;
+  const cards = normalizeWhyUsCards(settings.whyUsCards).filter(card => card.enabled).sort((a, b) => a.order - b.order);
+  const title = settings.whyUsSectionTitle ?? "¿Por qué DCL?";
+  return <section id="nosotros" aria-labelledby="why-us-title" className={styles.section}>
+    <div className={styles.inner}>
+      <header className={styles.header}>
+        <span className={styles.accent} aria-hidden="true" />
+        <h2 id="why-us-title" className={styles.title}>{title.split(/(\bDCL\b)/gi).map((part, index) => /^DCL$/i.test(part) ? <span key={index}>{part}</span> : part)}</h2>
+      </header>
+      {cards.length > 0 && <div className={styles.grid} data-count={cards.length}>
+        {cards.map(card => <article key={card.id} className={styles.card}>
+          <div className={styles.icon}><WhyUsIcon icon={card.icon} /></div>
+          <h3>{card.title}</h3><span className={styles.rule} aria-hidden="true" />
+          {card.description && <p>{card.description}</p>}
+        </article>)}
       </div>}
-    </section>
-  );
+    </div>
+  </section>;
 }

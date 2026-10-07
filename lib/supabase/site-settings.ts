@@ -1,3 +1,4 @@
+import { normalizeWhyUsCards } from "@/lib/why-us";
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
 import { isSupabaseConfigured } from "./test-connection";
@@ -49,9 +50,8 @@ export async function getSupabaseSiteSettings(): Promise<Partial<SiteSettings> |
     if (row.vehicle_section_title) settings.vehicleSectionTitle = row.vehicle_section_title;
     if (row.needs_section_title) settings.needsSectionTitle = row.needs_section_title;
     if (typeof row.why_us_enabled === "boolean") settings.whyUsEnabled = row.why_us_enabled;
-    if (["cards", "text"].includes(row.why_us_display_mode)) settings.whyUsDisplayMode = row.why_us_display_mode;
-    if (typeof row.why_us_text === "string") settings.whyUsText = row.why_us_text;
-    if (row.why_us_section_title) settings.whyUsSectionTitle = row.why_us_section_title;
+    settings.whyUsCards = normalizeWhyUsCards(row.why_us_cards);
+    if (typeof row.why_us_section_title === "string") settings.whyUsSectionTitle = row.why_us_section_title;
     if (row.products_section_title) settings.productsSectionTitle = row.products_section_title;
     if (row.promotions_section_title) settings.promotionsSectionTitle = row.promotions_section_title;
     if (typeof row.radio_enabled === "boolean") settings.radioEnabled = row.radio_enabled;

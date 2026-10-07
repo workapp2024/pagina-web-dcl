@@ -1,0 +1,33 @@
+.section {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #fff;
+  background: #08090b;
+  /* Future automotive art can sit behind these light overlays. */
+  background-image: radial-gradient(ellipse at 95% 5%, #a5091724, transparent 47%), radial-gradient(ellipse at 5% 100%, #737c8614, transparent 40%), linear-gradient(135deg, #0d1013, #060708 65%);
+}
+.section::before { content: ""; position: absolute; z-index: -1; inset: 0; pointer-events: none; background: linear-gradient(148deg, transparent 30%, #ffffff04 31%, transparent 33%), radial-gradient(ellipse at 100% 70%, #ed11151a, transparent 35%); }
+.inner { max-width: 80rem; margin: auto; padding: 3rem 1rem; }
+.header { margin-bottom: 1.75rem; max-width: 42rem; }
+.accent { display: block; width: 2rem; height: 3px; border-radius: 2px; background: #ff2229; margin-bottom: .75rem; }
+.title { margin: 0; color: #fff; font-size: clamp(1.75rem, 2.6vw, 2.25rem); line-height: 1.15; font-weight: 900; letter-spacing: -.055em; text-transform: uppercase; overflow-wrap: anywhere; }
+.title span { color: #ff2229; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: .875rem; }
+.card { min-width: 0; padding: 1.25rem; border: 1px solid #ffffff24; border-radius: 1rem; background: linear-gradient(145deg, #14171ba6, #08090bde); box-shadow: 0 14px 38px #00000024; }
+.icon { width: 3rem; height: 3rem; display: grid; place-items: center; border-radius: .75rem; border-top: 1px solid #ed222b85; border-left: 1px solid #ed222b70; background: linear-gradient(145deg, #9d111b30, #210b101f); margin-bottom: 1rem; color: #f7f7f8; }
+.icon svg { width: 2rem; height: 2rem; }
+.card h3 { color: #fff; font-size: clamp(1.125rem, 1.6vw, 1.25rem); font-weight: 900; line-height: 1.25; letter-spacing: -.025em; text-transform: uppercase; margin: 0; overflow-wrap: anywhere; }
+.rule { display: block; width: 2rem; height: 3px; border-radius: 2px; background: #ff2229; margin: .875rem 0; }
+.card p { color: #bfc2c9; font-size: .875rem; line-height: 1.7; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (min-width: 640px) {
+  .inner { padding: 3.5rem 1.5rem; }
+}
+@media (min-width: 1024px) {
+  .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+  .grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid[data-count="1"] { grid-template-columns: minmax(0, 1fr); max-width: 38rem; }
+  .inner { padding-inline: 2rem; }
+  .card { padding: 1.5rem; }
+  .card h3 { min-height: 2.5em; }
+}

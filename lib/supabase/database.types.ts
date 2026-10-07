@@ -370,6 +370,7 @@ export interface Database {
           address: string;
           vehicle_section_title: string;
           needs_section_title: string;
+          why_us_cards: Json;
           why_us_enabled: boolean;
           why_us_display_mode: "cards" | "text";
           why_us_text: string;
@@ -400,6 +401,7 @@ export interface Database {
           address?: string;
           vehicle_section_title?: string;
           needs_section_title?: string;
+          why_us_cards?: Json;
           why_us_enabled?: boolean;
           why_us_display_mode?: "cards" | "text";
           why_us_text?: string;
@@ -430,6 +432,7 @@ export interface Database {
           address?: string;
           vehicle_section_title?: string;
           needs_section_title?: string;
+          why_us_cards?: Json;
           why_us_enabled?: boolean;
           why_us_display_mode?: "cards" | "text";
           why_us_text?: string;

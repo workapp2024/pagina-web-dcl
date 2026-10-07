@@ -166,20 +166,23 @@ test('ADMIN creates only sellers and toggles only seller profiles; never returns
   assert.equal((await api.PATCH(request({ id, active: true, role: 'ADMIN' }, 'PATCH'))).status, 400);
 });
 
-test('Why DCL renders original cards by default, configured text, or nothing', () => {
+test('Why DCL renders three editable cards and respects the section switch', () => {
   const { renderToStaticMarkup } = require('react-dom/server');
-  const settings = { whyUsSectionTitle: 'Custom title', whyUsEnabled: true, whyUsDisplayMode: 'cards', whyUsText: 'Long paragraph\nSecond line <script>' };
-  const render = () => renderToStaticMarkup(load('components/sections/WhyUs.tsx', { '@/components/providers/SiteContentProvider': { useSiteContent: () => ({ content: { siteSettings: settings } }) } }).WhyUs());
-  const cards = render(); assert.equal((cards.match(/<article/g) || []).length, 4); assert.match(cards, /Custom title/);
-  settings.whyUsDisplayMode = 'text'; const text = render(); assert.doesNotMatch(text, /<article/); assert.match(text, /Long paragraph/); assert.match(text, /&lt;script&gt;/);
+  const settings = { whyUsSectionTitle: 'Custom title', whyUsEnabled: true };
+  const render = () => renderToStaticMarkup(load('components/sections/WhyUs.tsx', {
+    '@/components/providers/SiteContentProvider': { useSiteContent: () => ({ content: { siteSettings: settings } }) },
+    './WhyUsIcon': load('components/sections/WhyUsIcon.tsx'),
+    './WhyUs.module.css': { __esModule: true, default: {} },
+  }).WhyUs());
+  const cards = render(); assert.equal((cards.match(/<article/g) || []).length, 3); assert.match(cards, /Custom title/);
   settings.whyUsEnabled = false; assert.equal(render(), '');
 });
 
-test('Why DCL patch validates mode and boolean and excludes secrets; owner can save', async () => {
+test('Why DCL patch validates cards and boolean and excludes secrets; owner can save', async () => {
   const { buildSiteSettingsPatch } = load('lib/site-settings-patch.ts');
-  const config = { whyUsEnabled: false, whyUsDisplayMode: 'text', whyUsText: 'Paragraph', whyUsSectionTitle: 'Title' };
-  assert.deepEqual(plain(buildSiteSettingsPatch('home', config)), { why_us_enabled: false, why_us_display_mode: 'text', why_us_text: 'Paragraph', why_us_section_title: 'Title' });
-  for (const changes of [{ whyUsDisplayMode: 'html' }, { whyUsEnabled: 'false' }, { whyUsText: 'a'.repeat(4001) }, { serviceRole: 'secret' }]) assert.throws(() => buildSiteSettingsPatch('home', changes));
+  const config = { whyUsEnabled: false, whyUsCards: load('lib/why-us.ts').defaultWhyUsCards, whyUsSectionTitle: 'Title' };
+  assert.deepEqual(plain(buildSiteSettingsPatch('home', config)), { why_us_enabled: false, why_us_cards: plain(config.whyUsCards), why_us_section_title: 'Title' });
+  for (const changes of [{ whyUsDisplayMode: 'text' }, { whyUsEnabled: 'false' }, { whyUsCards: [] }, { serviceRole: 'secret' }]) assert.throws(() => buildSiteSettingsPatch('home', changes));
   const h = harness('ADMIN');
   assert.equal((await load('app/api/admin/site-settings/route.ts', h.mocks).POST(request({ section: 'home', siteSettings: config }))).status, 200);
 });

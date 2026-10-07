@@ -1,4 +1,5 @@
 "use client";
+import { WhyUsCardsEditor } from "@/components/admin/WhyUsCardsEditor";
 
 import { useEffect, useRef, useState } from "react";
 import { ProductEditorDialog } from "@/components/admin/ProductEditorDialog";
@@ -1122,12 +1123,11 @@ export function AdminHomeEditor() {
         </div>
       </SectionCard>
 
-      <SectionCard title="¿Por qué DCL?" description="Mostrá las tarjetas actuales, un texto simple u ocultá la sección.">
+      <SectionCard title="¿Por qué DCL?" description="Editá las tres tarjetas, elegí su orden u ocultá la sección.">
         <div className="space-y-4">
           <label className="flex items-center gap-3"><input type="checkbox" checked={content.siteSettings.whyUsEnabled} onChange={e => updateSettings({ whyUsEnabled: e.target.checked })} />Mostrar sección</label>
-          <label className="block">Diseño<select className="mt-2 block w-full rounded-xl bg-zinc-900 p-3" value={content.siteSettings.whyUsDisplayMode} onChange={e => updateSettings({ whyUsDisplayMode: e.target.value as "cards" | "text" })}><option value="cards">Tarjetas</option><option value="text">Texto simple</option></select></label>
           <label className="block">Título<input className="mt-2 block w-full rounded-xl bg-zinc-900 p-3" maxLength={255} value={content.siteSettings.whyUsSectionTitle} onChange={e => updateSettings({ whyUsSectionTitle: e.target.value })} /></label>
-          {content.siteSettings.whyUsDisplayMode === "text" && <label className="block">Texto<textarea rows={4} maxLength={4000} className="mt-2 block w-full rounded-xl bg-zinc-900 p-3" value={content.siteSettings.whyUsText} onChange={e => updateSettings({ whyUsText: e.target.value })} /></label>}
+          <WhyUsCardsEditor value={content.siteSettings.whyUsCards} onChange={whyUsCards => updateSettings({ whyUsCards })} />
         </div>
       </SectionCard>
 
