@@ -16,6 +16,10 @@ export function orderMessage(order: PublicOrder) {
   if (order.result === "review") return { title: "Pedido en revisión", description: order.paymentReceived ? "Recibimos el pago pero necesitamos revisar tu pedido. No vuelvas a pagar." : "Necesitamos revisar el estado de tu pedido. Contactanos antes de pagar." };
   return { title: "Pedido recibido", description: order.paymentMethod === "transfer" ? "Esperando confirmación de transferencia" : "Estamos esperando la confirmación del pago" };
 }
+function trackWhatsAppClick() {
+  try { capture(analyticsEvents.whatsappClick, { source: "other" }); }
+  catch { /* Tracking must never block opening WhatsApp. */ }
+}
 export function CheckoutResult({ orderNumber, publicKey }: { orderNumber: string; publicKey: string }) {
   const [order, setOrder] = useState<PublicOrder | null>(null), [error, setError] = useState("");
   const [busy, setBusy] = useState(false), [card, setCard] = useState(false), [refresh, setRefresh] = useState(0), [pollingFinished, setPollingFinished] = useState(false);
@@ -59,6 +63,7 @@ export function CheckoutResult({ orderNumber, publicKey }: { orderNumber: string
       if (!response.ok || !body.ok) throw new Error("No pudimos registrar el aviso. Podés avisarnos por WhatsApp con el botón separado.");
       setOrder({ ...order, transferDeclared: true });
       captureOnce(`transfer-sent:${order.orderNumber}`, analyticsEvents.manualTransferMarkedSent);
+      trackWhatsAppClick();
       window.location.assign(transferChat);
     } catch (cause) { setDeclarationFailed(true); setError(cause instanceof Error ? cause.message : "No pudimos registrar el aviso."); }
     finally { inFlight.current = false; setBusy(false); }
@@ -87,7 +92,7 @@ export function CheckoutResult({ orderNumber, publicKey }: { orderNumber: string
         {order.transferDeclared && <p role="status" className="mt-4 text-emerald-300">Aviso registrado. DCL todavía debe verificar la transferencia.</p>}
         <button type="button" disabled={busy} onClick={() => void declareTransfer()} className="result-primary mt-5 w-full disabled:opacity-50">{busy ? "Registrando aviso…" : "Ya transferí — Avisar por WhatsApp"}</button>
         <p className="mt-3 text-xs text-zinc-400">Luego podés adjuntar el comprobante en WhatsApp. Este aviso no aprueba el pago.</p>
-        {declarationFailed && <a href={transferChat} className="result-secondary mt-4" target="_blank" rel="noopener noreferrer">Avisar por WhatsApp</a>}
+        {declarationFailed && <a href={transferChat} onClick={trackWhatsAppClick} className="result-secondary mt-4" target="_blank" rel="noopener noreferrer">Avisar por WhatsApp</a>}
       </section>}
       {order.result === "pending" && order.canPay && !error && order.paymentMethod === "mercadopago" && <button type="button" disabled={busy} onClick={() => void continuePayment()} className="result-primary mt-6 w-full">{busy ? "Abriendo Mercado Pago…" : "Continuar con el pago"}</button>}
       {order.result === "pending" && order.canPay && !error && order.paymentMethod === "card" && publicKey && (card ? <div className="mt-6"><MercadoPagoBrick orderNumber={order.orderNumber} amount={order.total} publicKey={publicKey}/></div> : <button type="button" onClick={() => setCard(true)} className="result-primary mt-6 w-full">Continuar con tarjeta</button>)}
@@ -95,6 +100,6 @@ export function CheckoutResult({ orderNumber, publicKey }: { orderNumber: string
       {order.result === "pending" && <p className="mt-5 text-xs text-zinc-400">{pollingFinished ? "Pausamos la actualización automática. Podés consultar el estado nuevamente." : "Consultamos el estado automáticamente durante unos minutos. Podés volver a este enlace en el mismo navegador."}</p>}
     </>}
     {error && <p role="alert" className="mt-5 text-red-300">{error}</p>}
-    <div className="mt-7 grid gap-3"><button type="button" onClick={() => { setPollingFinished(false); setRefresh(value => value + 1); }} className="result-secondary">Actualizar estado</button><a href={support} target="_blank" rel="noopener noreferrer" className="result-primary">Necesito ayuda con mi pedido</a><Link href="/productos" className="result-secondary">Seguir viendo productos</Link></div>
+    <div className="mt-7 grid gap-3"><button type="button" onClick={() => { setPollingFinished(false); setRefresh(value => value + 1); }} className="result-secondary">Actualizar estado</button><a href={support} onClick={trackWhatsAppClick} target="_blank" rel="noopener noreferrer" className="result-primary">Necesito ayuda con mi pedido</a><Link href="/productos" className="result-secondary">Seguir viendo productos</Link></div>
   </section></main>;
 }

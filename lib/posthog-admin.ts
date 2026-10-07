@@ -1,5 +1,7 @@
 ﻿import "server-only";
 
+import type { RankingRow, RankingResult } from "@/lib/analytics-v2";
+
 export type AnalyticsSummary = {
   totals: Record<string, number>;
   visitors: number | null;
@@ -38,8 +40,77 @@ async function hogQuery(key: string, project: string, host: string, sql: string,
   });
   if (!response.ok) throw new Error(`PostHog respondió HTTP ${response.status}.`);
   const body = await response.json();
-  if (body.error || body.query_status?.error || body.query_status?.complete === false || !Array.isArray(body.results) || !body.results.every(Array.isArray)) throw new Error("PostHog no devolvió resultados completos.");
+  if (body.error || body.query_status?.error || body.query_status?.complete === false || body.hasMore === true || body.has_more === true || !Array.isArray(body.results) || !body.results.every(Array.isArray)) throw new Error("PostHog no devolvió resultados completos.");
   return body.results as unknown[][];
+}
+
+// V2 shares the existing read-only transport, dates and production filter.
+export type StoreActivity = {
+  visitors: number | null; cartSessions: number; cartEvents: number; cartWithoutSession: number;
+  pageViews: number; pagesWithoutIdentity: number; legacyEvents: number; whatsappClicks: number;
+  whatsappSources: RankingRow[];
+};
+export type StoreActivityResult = { status: "ok"; data: StoreActivity } | { status: "unavailable" };
+async function storeQuery(sql: string, from: number, to: number) {
+  const key = process.env.POSTHOG_PERSONAL_API_KEY?.trim(), project = process.env.POSTHOG_PROJECT_ID?.trim();
+  if (!key || !project || !Number.isFinite(from) || !Number.isFinite(to) || from >= to) throw new Error("Analytics unavailable");
+  return hogQuery(key, project, process.env.POSTHOG_UI_HOST || "https://eu.posthog.com", sql, from, to);
+}
+export async function getStoreActivity(from: number, to: number): Promise<StoreActivityResult> {
+  try {
+    const session = "notEmpty(ifNull(toString(properties['$session_id']), ''))";
+    const identity = "notEmpty(ifNull(distinct_id, ''))";
+    const [audience, cart, coverage, sources] = await Promise.all([
+      storeQuery(`SELECT uniqExactIf(distinct_id, ${identity}), count(), countIf(${identity}) FROM events WHERE ${production} AND event = 'page_view'`, from, to),
+      storeQuery(`SELECT uniqExactIf(toString(properties['$session_id']), ${session}), count(), countIf(${session}) FROM events WHERE ${production} AND event = 'add_to_cart'`, from, to),
+      storeQuery(`SELECT count() FROM events WHERE ${dateFilter} AND empty(ifNull(toString(properties['environment']), '')) AND event IN (${measuredEvents})`, from, to),
+      storeQuery(`SELECT toString(properties['source']), count() FROM events WHERE ${production} AND event = 'whatsapp_click' GROUP BY toString(properties['source']) ORDER BY count() DESC`, from, to),
+    ]);
+    if (audience.length !== 1 || audience[0].length !== 3 || cart.length !== 1 || cart[0].length !== 3 || coverage.length !== 1 || coverage[0].length !== 1) throw new Error("Incomplete activity");
+    const [visitors, pageViews, identified] = audience[0].map(count);
+    const [cartSessions, cartEvents, sessionEvents] = cart[0].map(count);
+    if (identified > pageViews || visitors > identified || sessionEvents > cartEvents || cartSessions > sessionEvents) throw new Error("Invalid coverage");
+    const sourceNames: Record<string, string> = { product: "Producto", promotion: "Promoción", vehicle_search: "Búsqueda por vehículo", payment_success: "Pago completado", general: "General", header: "Header", floating: "Botón flotante", footer: "Footer", cart: "Carrito", other: "Otros" };
+    let whatsappClicks = 0;
+    const sourceCounts = new Map<string, RankingRow>();
+    for (const row of sources) {
+      if (row.length !== 2) throw new Error("Invalid sources");
+      const clicks = count(row[1]);
+      whatsappClicks += clicks;
+      const key = typeof row[0] === "string" && Object.hasOwn(sourceNames, row[0]) ? row[0] : "unknown";
+      const value = sourceCounts.get(key) || { key, label: key === "unknown" ? "Origen no disponible" : sourceNames[key], count: 0 };
+      value.count += clicks; sourceCounts.set(key, value);
+    }
+    return { status: "ok", data: { visitors: pageViews === identified && pageViews > 0 ? visitors : null,
+      cartSessions, cartEvents, cartWithoutSession: cartEvents - sessionEvents, pageViews, pagesWithoutIdentity: pageViews - identified,
+      legacyEvents: count(coverage[0][0]), whatsappClicks, whatsappSources: [...sourceCounts.values()].sort((a, b) => b.count - a.count).slice(0, 5) } };
+  } catch { return { status: "unavailable" }; }
+}
+
+export async function getStoreSearches(kind: "vehicles" | "connectors" | "no_results", from: number, to: number): Promise<RankingResult> {
+  try {
+    // Rank failures BEFORE LIMIT, independently of successful searches.
+    const dimensions = "toString(properties['brand']), toString(properties['model'])";
+    const vehicleRows = async (failures: boolean) => {
+      const found = await storeQuery(`SELECT ${dimensions}, count() FROM events WHERE ${production} AND ${failures ? "event = 'vehicle_search_no_results'" : "event IN ('vehicle_search_completed','vehicle_search_no_results')"} GROUP BY ${dimensions} ORDER BY count() DESC LIMIT 5`, from, to);
+      return found.map((row, index) => {
+        if (row.length !== 3) throw new Error("Invalid searches");
+        const parts = row.slice(0, 2).map(value => typeof value === "string" && /^[\p{L}\p{N} ._-]{1,80}$/u.test(value) ? value : "No reconocido");
+        return { key: `vehicle:${index}`, label: parts.join(" · "), count: count(row[2]) };
+      });
+    };
+    const connectorRows = async (failures: boolean) => {
+      const found = await storeQuery(`SELECT toString(properties['connector']), count() FROM events WHERE ${production} AND event = 'connector_search'${failures ? " AND properties['has_results'] = false" : ""} GROUP BY toString(properties['connector']) ORDER BY count() DESC LIMIT 5`, from, to);
+      return found.map((row, index) => {
+        if (row.length !== 2) throw new Error("Invalid searches");
+        return { key: `connector:${index}`, label: typeof row[0] === "string" && /^[A-Z0-9/]{1,20}$/.test(row[0]) ? `Conector ${row[0]}` : "Conector no reconocido", count: count(row[1]) };
+      });
+    };
+    if (kind === "vehicles") return { status: "ok", rows: await vehicleRows(false) };
+    if (kind === "connectors") return { status: "ok", rows: await connectorRows(false) };
+    const [vehicles, connectors] = await Promise.all([vehicleRows(true), connectorRows(true)]);
+    return { status: "ok", rows: [...vehicles, ...connectors].sort((a, b) => b.count - a.count).slice(0, 5) };
+  } catch { return { status: "unavailable" }; }
 }
 
 function safeError(error: unknown) {

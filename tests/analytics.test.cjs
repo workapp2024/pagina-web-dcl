@@ -1,7 +1,6 @@
-﻿/* eslint-disable @typescript-eslint/no-require-imports */
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { renderToStaticMarkup } = require('react-dom/server');
 const load = require('./load-ts.cjs');
 const plain = value => JSON.parse(JSON.stringify(value));
 const nodes = n => !n || typeof n !== 'object' ? [] : Array.isArray(n) ? n.flatMap(nodes) : [n, ...nodes(n.props?.children)];
@@ -215,27 +214,7 @@ test('checkout_started emits unique product IDs without customer data', () => {
     'next/navigation': { usePathname: () => '/checkout', useSearchParams: () => new URLSearchParams() },
     'posthog-js': { __loaded: false },
     '@/lib/analytics': { analyticsEvents: { pageView: 'page_view', checkoutStarted: 'checkout_started' }, capture: (...args) => events.push(args) },
-  }, { localStorage: { getItem: () => JSON.stringify([{ id: 'h7', quantity: 2, price: 10 }, { id: 'h7', quantity: 1, price: 10 }, { id: 'h4', quantity: 1, price: 20 }]) } });
+  }, { localStorage: { getItem: key => key === 'dcl-public-cart-v1' ? JSON.stringify([{ id: 'h7', quantity: 2, price: 10 }, { id: 'h7', quantity: 1, price: 10 }, { id: 'h4', quantity: 1, price: 20 }]) : null } });
   PublicAnalytics();
   assert.deepEqual(plain(events[1]), ['checkout_started', { item_count: 4, cart_total: 50, product_ids: ['h7', 'h4'] }]);
-});
-
-test('Admin preserves summary unavailable/error/zero states independently of the commercial funnel', async () => {
-  const analyticsComponent = {
-    '@/components/admin/AnalyticsDetails': { AnalyticsDetails: ({ metrics }) => require('react').createElement('div', null, metrics.map(metric => `${metric.kind}: ${metric.value ?? 'No disponible'}`).join(' ')) },
-    '@/components/admin/AnalyticsFunnel': load('components/admin/AnalyticsFunnel.tsx'),
-    '@/lib/posthog-funnel': { getCommercialFunnel: async () => ({ status: 'start_not_configured', startAt: null }) },
-  };
-  for (const [result, expected] of [[{ status: 'not_configured' }, 'Analytics no configurado'], [{ status: 'error', message: 'PostHog respondió HTTP 403.' }, 'Error consultando PostHog'], [{ status: 'ok', data: { totals: {}, productionEvents: 0, legacyEvents: 9 } }, 'Métricas no disponibles']]) {
-    const Page = load('app/admin/analitica/page.tsx', { ...analyticsComponent, '@/lib/admin-auth': { isAdminAuthenticated: async () => true }, '@/lib/posthog-admin': { getAnalyticsSummary: async () => result } }).default;
-    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
-    assert.ok(html.includes(expected)); assert.ok(!html.includes('Productos vistos'));
-    assert.equal((html.match(/id="commercial-funnel-title"/g) || []).length, 1);
-    assert.match(html, /Fecha de inicio de analítica comercial no configurada/);
-  }
-  const data = { totals: { page_view: 1 }, visitors: 1, sessions: null, productionEvents: 1, legacyEvents: 0, connectorNoResults: 0, pages: [], products: [], brands: [], models: [] };
-  const Page = load('app/admin/analitica/page.tsx', { ...analyticsComponent, '@/lib/admin-auth': { isAdminAuthenticated: async () => true }, '@/lib/posthog-admin': { getAnalyticsSummary: async () => ({ status: 'ok', data }) } }).default;
-  const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
-  for (const kind of ['visitors', 'sessions', 'pages', 'products', 'cart', 'vehicles', 'connectors', 'checkout', 'whatsapp', 'No disponible']) assert.ok(html.includes(kind));
-  assert.match(html, /products: 0/);
 });

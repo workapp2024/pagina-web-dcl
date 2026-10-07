@@ -1,48 +1,35 @@
 import { funnelPercent, type FunnelResult } from "@/lib/analytics-funnel";
 
-const localDate = (date: string) => new Intl.DateTimeFormat("es-AR", {
-  timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short", timeStyle: "short", hourCycle: "h23",
-}).format(new Date(date));
-const quantity = (value: number) => new Intl.NumberFormat("es-AR").format(value);
-
 export function AnalyticsFunnel({ result }: { result: FunnelResult }) {
   const data = result.status === "ok" ? result.data : null;
-  const message = result.status === "start_not_configured" ? "Fecha de inicio de analítica comercial no configurada"
-    : result.status === "not_configured" ? "Analytics no configurado. El embudo no está disponible."
-    : result.status === "before_start" ? "Embudo comercial no disponible para este período."
-    : result.status === "pending" ? "Datos todavía no disponibles. Volvé a consultar en unos momentos."
-    : result.status === "error" ? result.message : null;
-  return <section aria-labelledby="commercial-funnel-title" className="rounded-2xl border border-white/10 bg-white/[.02] p-4 sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h2 id="commercial-funnel-title" className="text-lg font-black uppercase tracking-wide">Embudo comercial</h2>
-        <p className="mt-1 text-sm text-zinc-300">Ventana de conversión: 7 días</p>
-        {result.startAt && <p className="mt-1 text-xs text-zinc-400">Analítica comercial disponible desde {localDate(result.startAt)} (Argentina)</p>}
-      </div>
-      {data && <div className="rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3">
-        <p className="text-xs text-zinc-300">Conversión completa de recorridos</p>
-        <b className="mt-1 block text-2xl text-red-300">{funnelPercent(data.conversion)}</b>
-        <p className="mt-1 text-xs text-zinc-400">Productos vistos → Compras completadas</p>
-      </div>}
-    </div>
-    {message && <p role={result.status === "error" ? "alert" : "status"} className="mt-5 rounded-xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100">{message}</p>}
-    {data && <>
-      <ol className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {data.steps.map((step, index) => <li key={step.label} className="min-w-0 rounded-xl border border-white/10 bg-zinc-950/40 p-4">
-          <h3 className="text-sm font-semibold"><span className="mr-2 text-red-400">{index + 1}.</span>{step.label}</h3>
-          <p className="mt-3"><b className="text-3xl tabular-nums">{quantity(step.count)}</b><span className="ml-2 text-xs text-zinc-400">{index < 3 ? "recorridos" : "pedidos únicos"}</span></p>
-          {index >= 3 && <p className="mt-1 text-xs text-zinc-400">En {quantity(step.journeys)} {step.journeys === 1 ? "recorrido" : "recorridos"}</p>}
-          <div aria-hidden="true" className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-red-500" style={{ width: `${data.steps[0].journeys ? step.journeys / data.steps[0].journeys * 100 : 0}%` }} /></div>
-          <dl className="mt-3 space-y-1 text-xs text-zinc-400">
-            <div className="flex justify-between gap-2"><dt>{index ? `Conversión de ${step.comparisonUnit}` : "Paso inicial"}</dt><dd className="text-zinc-200">{funnelPercent(step.conversion)}</dd></div>
-            <div className="flex justify-between gap-2"><dt>Caída desde el paso anterior</dt><dd className="text-right text-zinc-200">{step.drop === null ? "—" : `${quantity(step.drop)} ${step.comparisonUnit} · ${funnelPercent(step.dropPercent)}`}</dd></div>
-          </dl>
-        </li>)}
-      </ol>
-      {!data.steps[0].journeys && <p className="mt-4 text-sm text-zinc-300">La consulta se completó: 0 recorridos medibles en este período. Esto no demuestra ausencia de actividad o ventas.</p>}
-      <p className="mt-4 text-xs text-zinc-400">Hasta Pedidos creados, las conversiones y caídas comparan recorridos; en Pagos aprobados y Compras completadas comparan pedidos. La conversión completa y las barras representan recorridos. Un recorrido es una sesión medida y puede generar varios pedidos; cada pedido se cuenta una sola vez por etapa.</p>
-      <p className="mt-2 text-xs text-zinc-400">Sólo se incluyen eventos dentro del período elegido y posteriores al inicio de la analítica comercial. Los recorridos recientes pueden seguir convirtiendo hasta completar sus 7 días; los resultados se limitan al cierre del período.</p>
-    </>}
-    <p className="mt-4 text-sm text-zinc-400">El embudo representa recorridos que siguieron esta secuencia medible. Algunos clientes pueden omitir pasos o retomar la compra en otra sesión.</p>
-    <p className="mt-2 text-xs text-zinc-500">Se requiere la misma sesión desde la vista del producto hasta la creación del pedido. Los pagos y las compras pueden completarse después, fuera de esa sesión. Los eventos de navegación sin sesión no se incluyen.</p>
+  // Keep strict six-step attribution; display consistent journey units.
+  const steps = data ? [0, 1, 2, 5].map((index, position) => ({
+    label: ["Producto", "Carrito", "Checkout", "Compra atribuida"][position], count: data.steps[index].journeys,
+  })) : [];
+  return <section aria-labelledby="commercial-funnel-title" className="rounded-2xl border border-white/10 p-3 sm:p-4">
+    <div className="flex flex-wrap items-start justify-between gap-2"><div><h2 id="commercial-funnel-title" className="text-base font-bold">De visita a compra</h2><p className="mt-1 text-xs text-zinc-400">Recorridos que pudimos medir dentro de la tienda</p></div>
+      {data && <span className="rounded-lg bg-red-500/10 px-2 py-1 text-xs font-bold text-red-300">{funnelPercent(data.conversion)} completan</span>}</div>
+    {data ? <ol className="mt-4 space-y-3">{steps.map(step => <li key={step.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
+      <span className="text-sm text-zinc-300">{step.label}</span><b className="text-sm tabular-nums">{new Intl.NumberFormat("es-AR").format(step.count)}</b>
+      <div aria-hidden="true" className="col-span-2 h-1 rounded-full bg-white/5"><div className="h-full rounded-full bg-red-500/70" style={{ width: `${steps[0].count ? step.count / steps[0].count * 100 : 0}%` }}/></div>
+    </li>)}</ol> : <p role="status" className="mt-4 text-sm text-zinc-400">Recorridos atribuidos no disponibles para este período. Ver detalles de medición.</p>}
+    <p className="mt-3 text-xs leading-5 text-zinc-500">Las compras totales y los recorridos atribuidos pueden ser distintos: no todas las ventas se vinculan a una sesión medida.</p>
   </section>;
+}
+
+export function AnalyticsFunnelMeasurement({ result }: { result: FunnelResult }) {
+  const message = result.status === "start_not_configured" ? "Fecha de inicio de analítica comercial no configurada (COMMERCIAL_ANALYTICS_START_AT)."
+    : result.status === "not_configured" ? "PostHog no configurado para el embudo."
+    : result.status === "before_start" ? "El período es anterior al inicio de medición comercial."
+    : result.status === "pending" ? "La consulta del embudo todavía no tiene resultados completos."
+    : result.status === "error" ? result.message : null;
+  return <div className="space-y-2">
+    {message && <p>{message}</p>}
+    {result.startAt && <p>Inicio comercial: {new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short", timeStyle: "short", hourCycle: "h23" }).format(new Date(result.startAt))} (Argentina).</p>}
+    <p>El embudo comienza en Producto: la consulta existente no atribuye una visita previa. No se agrega una etapa de visitas con un conteo independiente.</p>
+    <p>Ventana de conversión: 7 días. Misma identidad y sesión desde Producto → Carrito → Checkout → Pedido; pago y compra se vinculan después por pedido e identidad. Todos los eventos deben estar dentro del período y posteriores al inicio comercial.</p>
+    <p>La vista compacta cuenta recorridos en las cuatro etapas. La compra atribuida requiere pedido creado y pago aprobado; es un evento histórico y no refleja anulaciones posteriores.</p>
+    {result.status === "ok" && <p>Compra atribuida: {result.data.steps[5].journeys} recorridos, {result.data.steps[5].count} pedidos únicos. {result.data.steps[0].journeys === 0 && "La consulta devolvió 0 recorridos medibles; esto no demuestra ausencia de ventas."}</p>}
+    <p>Los recorridos sin sesión quedan fuera. Los recientes pueden seguir convirtiendo; la consulta se corta al final del período.</p>
+  </div>;
 }

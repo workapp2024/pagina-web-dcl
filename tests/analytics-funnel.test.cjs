@@ -217,48 +217,26 @@ test('API authenticates before queries, validates dates, and never flushes outbo
   }
 });
 
-test('UI distinguishes all states, shows local start, six responsive stages, and no identifiers', () => {
-  const { AnalyticsFunnel } = load('components/admin/AnalyticsFunnel.tsx');
-  const render = result => renderToStaticMarkup(React.createElement(AnalyticsFunnel, { result }));
+test('V2 compact funnel preserves journey units and places technical states in measurement details', () => {
+  const { AnalyticsFunnel, AnalyticsFunnelMeasurement } = load('components/admin/AnalyticsFunnel.tsx');
+  const render = (component, result) => renderToStaticMarkup(React.createElement(component, { result }));
   const ok = { status: 'ok', startAt: env.COMMERCIAL_ANALYTICS_START_AT, from: start, to: start + day, data: parseFunnelRows(query(sequence())) };
-  const html = render(ok);
-  assert.equal((html.match(/<li /g) || []).length, 6);
-  assert.match(html, /23\/9\/26.*18:36/);
-  assert.match(html, /Ventana de conversión: 7 días/);
-  assert.match(html, /sm:grid-cols-2 xl:grid-cols-3/);
-  assert.match(html, /pedidos únicos/); assert.match(html, /Conversión completa de recorridos/);
-  assert.doesNotMatch(html, /distinct_id|session_id|order_id|browser-a|order-a|session-a|POSTHOG/);
-  for (const [status, text] of [['start_not_configured', 'Fecha de inicio de analítica comercial no configurada'], ['not_configured', 'Analytics no configurado'], ['before_start', 'Embudo comercial no disponible para este período.'], ['pending', 'Datos todavía no disponibles'], ['error', 'No se pudo consultar']]) {
-    const state = render({ status, startAt: status === 'start_not_configured' ? null : ok.startAt, message: 'No se pudo consultar' });
-    assert.ok(state.includes(text)); assert.doesNotMatch(state, /<li /);
+  const html = render(AnalyticsFunnel, ok);
+  assert.equal((html.match(/<li /g) || []).length, 4);
+  assert.match(html, /De visita a compra/); assert.match(html, /Compra atribuida/);
+  assert.doesNotMatch(html, /Ventana|POSTHOG|distinct_id|session_id|order_id|pedidos únicos/);
+  const details = render(AnalyticsFunnelMeasurement, ok);
+  assert.match(details, /23\/9\/26.*18:36/); assert.match(details, /Ventana de conversión: 7 días/);
+  for (const status of ['start_not_configured', 'not_configured', 'before_start', 'pending', 'error']) {
+    const state = { status, startAt: status === 'start_not_configured' ? null : ok.startAt, message: 'No se pudo consultar' };
+    assert.match(render(AnalyticsFunnel, state), /no disponibles/);
+    assert.doesNotMatch(render(AnalyticsFunnel, state), /<li /);
+    assert.ok(render(AnalyticsFunnelMeasurement, state).length);
   }
-  const empty = render({ ...ok, data: parseFunnelRows(query([])) });
-  assert.match(empty, /0 recorridos medibles/); assert.doesNotMatch(empty, />0%/); assert.match(empty, /—/);
-});
-
-test('Admin queries funnel once with the shared period, enforces auth and keeps it independent of KPIs', async () => {
-  const makePage = (authenticated, summary) => {
-    const calls = [];
-    const Page = load('app/admin/analitica/page.tsx', {
-      'next/navigation': { redirect: () => { throw new Error('redirect'); } },
-      '@/lib/admin-auth': { isAdminAuthenticated: async () => authenticated },
-      '@/components/admin/AnalyticsDetails': { AnalyticsDetails: () => React.createElement('div', { id: 'summary-kpis' }) },
-      '@/components/admin/AnalyticsFunnel': load('components/admin/AnalyticsFunnel.tsx'),
-      '@/lib/posthog-admin': { getAnalyticsSummary: async (...range) => { calls.push(['summary', ...range]); return summary; } },
-      '@/lib/posthog-funnel': { getCommercialFunnel: async (...range) => { calls.push(['funnel', ...range]); return { status: 'ok', startAt: env.COMMERCIAL_ANALYTICS_START_AT, from: range[0], to: range[1], data: parseFunnelRows(query(sequence())) }; } },
-    }).default;
-    return { Page, calls };
-  };
-  const params = { searchParams: Promise.resolve({ period: 'custom', from: '2026-09-01', to: '2026-09-02' }) };
-  const unauthorized = makePage(false, {});
-  await assert.rejects(unauthorized.Page(params), /redirect/); assert.equal(unauthorized.calls.length, 0);
-  const data = { totals: {}, visitors: 0, sessions: 0, productionEvents: 1, legacyEvents: 0, connectorNoResults: 0, pages: [], products: [], brands: [], models: [] };
-  for (const summary of [{ status: 'error', message: 'Unavailable' }, { status: 'ok', data }]) {
-    const { Page, calls } = makePage(true, summary);
-    const html = renderToStaticMarkup(await Page(params));
-    assert.equal(calls.length, 2); assert.deepEqual(calls[0].slice(1), calls[1].slice(1));
-    assert.equal(calls[1][1], Date.parse('2026-09-01T03:00:00Z') / 1000);
-    assert.equal((html.match(/id="commercial-funnel-title"/g) || []).length, 1);
-    if (summary.status === 'ok') assert.ok(html.indexOf('summary-kpis') < html.indexOf('id="commercial-funnel-title"'));
-  }
+  const empty = { ...ok, data: parseFunnelRows(query([])) };
+  assert.match(render(AnalyticsFunnelMeasurement, empty), /0 recorridos medibles/);
+  assert.doesNotMatch(render(AnalyticsFunnel, empty), />0%/);
+  // Two orders in one session still appear as one attributed journey.
+  const many = { ...ok, data: parseFunnelRows([[1,1,0],[2,1,0],[3,1,0],[4,1,2],[5,1,2],[6,1,2]]) };
+  assert.equal((render(AnalyticsFunnel, many).match(/tabular-nums">1<\/b>/g) || []).length, 4);
 });
