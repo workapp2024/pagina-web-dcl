@@ -173,6 +173,7 @@ test('missing table is distinguished from unexpected errors; public Home remains
 test('public Premium renders no empty section, native swipe cards and the existing cart abstraction', () => {
   const seen = [];
   const { PremiumProducts } = load('components/sections/PremiumProducts.tsx', {
+    '@/components/sections/PremiumSectionTitle': { PremiumSectionTitle: () => React.createElement('h2', null, 'Premium') },
     'next/link': ({ children, ...props }) => React.createElement('a', props, children),
     '@/components/ui/ManagedImage': { ManagedImage: ({ source, ...props }) => React.createElement('img', { src: source, ...props }) },
     '@/components/store/AddToCartButton': { AddToCartButton: ({ product }) => { seen.push(product); return React.createElement('button', null, 'Agregar al carrito'); } },

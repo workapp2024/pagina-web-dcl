@@ -174,7 +174,30 @@ test('browser helper scopes actual JSON payload before sending it', async () => 
     './client': {}, './server': {}, './test-connection': { isSupabaseConfigured: () => true }, './storage': {},
   }, { fetch: async (_url, init) => { calls.push(JSON.parse(init.body)); return Response.json({ ok: true }); } });
   await upsertSupabaseSiteSettings({ instagram: 'https://instagram.com/example', themePreset: 'graphite-pro', logo: 'logo', transferAlias: 'old' }, 'configuration');
-  assert.deepEqual(calls, [{ section: 'configuration', siteSettings: { logo: 'logo', instagram: 'https://instagram.com/example' } }]);
+  assert.deepEqual(calls, [{ section: 'configuration', siteSettings: { instagram: 'https://instagram.com/example' } }]);
+});
+
+test('only Home can update logo; configuration cannot overwrite or clear it even with a stale full snapshot', async () => {
+  for (const logo of ['', '/old-logo.webp', '/new-logo.webp']) {
+    const { POST, calls } = route();
+    const response = await POST(request({ section: 'configuration', siteSettings: { email: 'ventas@example.org', logo } }));
+    assert.equal(response.status, 400);
+    assert.equal(calls.length, 0);
+    const fields = pickSiteSettings('configuration', { logo, whatsapp: '', instagram: '', facebook: '', email: 'ventas@example.org', phone: '', address: '' });
+    const patch = buildSiteSettingsPatch('configuration', fields);
+    assert.equal(Object.hasOwn(patch, 'logo_url'), false);
+    assert.equal(({ logo_url: '/saved-logo.webp', ...patch }).logo_url, '/saved-logo.webp');
+  }
+  const home = route();
+  assert.equal((await home.POST(request({ section: 'home', siteSettings: { logo: '/uploaded-logo.webp' } }))).status, 200);
+  assert.deepEqual(home.calls[0], ['update', { logo_url: '/uploaded-logo.webp' }]);
+  const source = fs.readFileSync('components/admin/EditorForms.tsx', 'utf8');
+  const configuration = source.slice(source.indexOf('export function AdminSiteSettingsForm()'));
+  assert.doesNotMatch(configuration, /siteSettings\.logo|updateSettings\(\{ logo/);
+  assert.match(configuration, /Contacto y redes sociales/);
+  assert.match(configuration, /grid gap-4 md:grid-cols-2/);
+  assert.match(source, /label="Seleccionar logo"/);
+  assert.match(source, /saveHomeToSupabase\(\{ \.\.\.content.siteSettings, logo \}, \{ logo \}\)/);
 });
 
 test('isolated PostgreSQL reproduces unrelated theme rejection and verifies partial update preserves all other columns', async () => {

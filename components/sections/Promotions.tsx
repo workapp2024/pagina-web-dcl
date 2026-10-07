@@ -5,17 +5,20 @@ import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import { ManagedImage } from "@/components/ui/ManagedImage";
 import { isWhatsAppUrl, whatsappUrl } from "@/lib/whatsapp";
 import { analyticsEvents, capture } from "@/lib/analytics";
+import { publicText, publicPresentationDefaults } from "@/lib/public-site-content";
+import { useWhatsAppConfiguration } from "@/components/providers/WhatsAppProvider";
 
 export function Promotions() {
   const { content } = useSiteContent();
+  const { number } = useWhatsAppConfiguration();
   const activePromotions = useMemo(() => content.promotions.filter((promo) => promo.active), [content.promotions]);
   useEffect(() => { activePromotions.forEach(promo => capture(analyticsEvents.promotionView, { promotion_id: promo.id })); }, [activePromotions]);
 
   return (
     <section id="promociones" className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
       <div className="mb-8 max-w-2xl">
-        <h2 className="text-3xl font-black uppercase tracking-[-0.06em] text-white md:text-4xl">
-          {content.siteSettings.promotionsSectionTitle}
+        <h2 className="text-3xl font-black uppercase tracking-[-0.06em] text-white [overflow-wrap:anywhere] md:text-4xl">
+          {publicText(content.siteSettings.promotionsSectionTitle, publicPresentationDefaults.promotionsSectionTitle)}
         </h2>
       </div>
 
@@ -31,7 +34,7 @@ export function Promotions() {
               <p className="mt-2 text-sm leading-6 text-zinc-300">{promo.description}</p>
               {promo.price ? <p className="mt-3 text-lg font-black text-red-400">{promo.price}</p> : null}
               <a
-                href={isWhatsAppUrl(promo.ctaHref) ? whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${promo.title}.`) : promo.ctaHref}
+                href={isWhatsAppUrl(promo.ctaHref) ? whatsappUrl(`Hola DCL Cree LED, quiero consultar por ${promo.title}.`, number) : promo.ctaHref}
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => {

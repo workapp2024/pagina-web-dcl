@@ -8,7 +8,7 @@ import { SiteContentProvider } from "@/components/providers/SiteContentProvider"
 import { getSupabaseProducts } from "@/lib/supabase/products";
 import { whatsappUrl } from "@/lib/whatsapp";
 import { EventOnMount } from "@/components/analytics/EventOnMount";
-import { CommercialWhatsAppLink } from "@/components/analytics/CommercialWhatsAppLink";
+import { ConfiguredWhatsAppLink } from "@/components/ui/ConfiguredWhatsAppLink";
 import { analyticsEvents } from "@/lib/analytics";
 import { assessFitment } from "@/lib/store/fitment";
 import { ProductPurchaseActions } from "@/components/store/ProductPurchaseActions";
@@ -120,14 +120,14 @@ export default async function ProductoDetallePage({ params, searchParams }: Prod
                 ) : null}
 
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                  <CommercialWhatsAppLink source="product" analyticsContext={{ product_id: product.id }}
+                  <ConfiguredWhatsAppLink source="product" analyticsContext={{ product_id: product.id }}
                     href={whatsappHref}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center justify-center rounded-full bg-red-600 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500"
                   >
                     Consultar por WhatsApp
-                  </CommercialWhatsAppLink>
+                  </ConfiguredWhatsAppLink>
                   {!verifiedFitment && <a
                     href="/vehiculos"
                     className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3.5 text-sm font-bold uppercase tracking-[0.14em] text-white transition hover:border-red-500/70 hover:text-red-300"

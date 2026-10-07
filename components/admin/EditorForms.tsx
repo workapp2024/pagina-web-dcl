@@ -1200,7 +1200,7 @@ export function AdminSiteSettingsForm() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black uppercase tracking-[-0.06em] text-white">Configuración</h1>
-          <p className="mt-2 text-sm text-zinc-400">Centraliá los datos de contacto, redes sociales y branding principal.</p>
+          <p className="mt-2 text-sm text-zinc-400">Centralizá los datos de contacto y redes sociales.</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -1224,21 +1224,13 @@ export function AdminSiteSettingsForm() {
         </div>
       </div>
 
-      <SectionCard title="Branding" description="Logo y enlaces de marca.">
+      <SectionCard title="Contacto y redes sociales" description="WhatsApp, datos de contacto y enlaces de la tienda.">
         <div className="space-y-4">
-          <label className="block text-sm text-zinc-300">
-            <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Logo</span>
-            <input
-              value={content.siteSettings.logo}
-              onChange={(event) => updateSettings({ logo: event.target.value })}
-              className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
-            />
-          </label>
-
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block text-sm text-zinc-300">
               <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">WhatsApp</span>
               <input value={content.siteSettings.whatsapp} onChange={(event) => updateSettings({ whatsapp: event.target.value })} className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white" />
+              <span className="mt-2 block text-xs leading-5 text-zinc-400">Número internacional o enlace https://wa.me/… (Mendoza: 5492617791393). Vacío utiliza el número oficial. Cambia el destino de las consultas públicas; los mensajes se conservan.</span>
             </label>
             <label className="block text-sm text-zinc-300">
               <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Email</span>

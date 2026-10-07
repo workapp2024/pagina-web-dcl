@@ -3,13 +3,14 @@ import { ManagedImage } from "@/components/ui/ManagedImage";
 import { AddToCartButton } from "@/components/store/AddToCartButton";
 import type { Product } from "@/lib/site-data";
 import { accessoryVehicleLabel } from "@/lib/product-taxonomy";
+import { PremiumSectionTitle } from "@/components/sections/PremiumSectionTitle";
 
 export function PremiumProducts({ products }: { products: Product[] }) {
   if (!products.length) return null;
   const multiple = products.length > 1;
   return <section aria-labelledby="premium-title" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div><p className="text-sm font-bold uppercase tracking-[.22em] text-red-400">Selección DCL</p><h2 id="premium-title" className="mt-1 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl">Premium</h2></div>
+      <div className="min-w-0"><p className="text-sm font-bold uppercase tracking-[.22em] text-red-400">Selección DCL</p><PremiumSectionTitle /></div>
       {multiple && <p className="text-sm text-zinc-400 lg:hidden">Deslizá para ver más →</p>}
     </div>
     <ul aria-label="Productos Premium" tabIndex={multiple ? 0 : undefined} className={`flex snap-x snap-mandatory gap-5 overflow-x-auto overscroll-x-contain pb-4 focus-visible:outline-2 focus-visible:outline-red-400 lg:grid ${multiple ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>

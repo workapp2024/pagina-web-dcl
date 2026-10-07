@@ -199,10 +199,10 @@ test('commercial WhatsApp link preserves href, presentation and source', () => {
   element.props.onClick();
   assert.equal(element.props.href, 'https://wa.me/123'); assert.equal(element.props.className, 'original');
   assert.deepEqual(plain(events), [['whatsapp_click', { source: 'product' }]]);
-  const { WhatsAppButton } = load('components/ui/WhatsAppButton.tsx', { '@/components/analytics/CommercialWhatsAppLink': { CommercialWhatsAppLink } });
+  const { WhatsAppButton } = load('components/ui/WhatsAppButton.tsx', { '@/components/ui/ConfiguredWhatsAppLink': { ConfiguredWhatsAppLink: CommercialWhatsAppLink } });
   assert.equal(WhatsAppButton({}).props.source, 'general');
   assert.equal(WhatsAppButton({ source: 'vehicle_search' }).props.source, 'vehicle_search');
-  const { ProductCard } = load('components/ui/ProductCard.tsx', { '@/components/ui/ManagedImage': { ManagedImage: () => null }, '@/components/store/AddToCartButton': { AddToCartButton: () => null }, '@/components/analytics/CommercialWhatsAppLink': { CommercialWhatsAppLink } });
+  const { ProductCard } = load('components/ui/ProductCard.tsx', { '@/components/ui/ManagedImage': { ManagedImage: () => null }, '@/components/store/AddToCartButton': { AddToCartButton: () => null }, '@/components/ui/ConfiguredWhatsAppLink': { ConfiguredWhatsAppLink: CommercialWhatsAppLink } });
   const productLink = nodes(ProductCard({ id: 'x', name: 'H7', price: 1, category: 'General' })).find(n => n.type === CommercialWhatsAppLink);
   assert.equal(productLink.props.source, 'product'); assert.deepEqual(plain(productLink.props.analyticsContext), { product_id: 'x' });
 });

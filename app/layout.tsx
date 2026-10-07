@@ -8,6 +8,7 @@ import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
 import "./globals.css";
 import { Suspense } from "react";
 import { PublicAnalytics } from "@/components/analytics/PublicAnalytics";
+import { WhatsAppProvider } from "@/components/providers/WhatsAppProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://pagina-web-dcl.vercel.app"),
@@ -39,7 +40,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       lang="es-AR"
       className="h-full antialiased"
     >
-      <body className="min-h-full bg-black text-white"><RadioProvider settings={settings} stations={stations}><CartProvider>{children}</CartProvider></RadioProvider><Suspense><PublicAnalytics/></Suspense></body>
+      <body className="min-h-full bg-black text-white"><WhatsAppProvider configured={remoteSettings?.whatsapp}><RadioProvider settings={settings} stations={stations}><CartProvider>{children}</CartProvider></RadioProvider></WhatsAppProvider><Suspense><PublicAnalytics/></Suspense></body>
     </html>
   );
 }

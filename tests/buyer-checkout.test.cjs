@@ -246,7 +246,7 @@ function nodes(tree) {
   if (!tree || typeof tree !== 'object') return [];
   return [tree, ...React.Children.toArray(tree.props?.children).flatMap(nodes)];
 }
-const resultMocks = { '@/components/store/MercadoPagoBrick': { MercadoPagoBrick: () => null }, '@/lib/analytics': { capture() {}, captureOnce() {}, analyticsEvents: {} } };
+const resultMocks = { '@/components/providers/WhatsAppProvider': { useWhatsAppConfiguration: () => ({ number: '5492617791393' }) }, '@/components/store/MercadoPagoBrick': { MercadoPagoBrick: () => null }, '@/lib/analytics': { capture() {}, captureOnce() {}, analyticsEvents: {} } };
 
 test('failed transfer declaration renders independent WhatsApp without false success or navigation', async () => {
   await newSession(); const f = await createOrder(); const dto = await publicOrder.getPublicOrder(f.number);
@@ -295,7 +295,7 @@ test('card submission cannot be repeated after lost response', async () => {
   assert.equal(fetches, 1);
 });
 
-const resultModule=load('components/store/CheckoutResult.tsx',{'@/components/store/MercadoPagoBrick':{MercadoPagoBrick:()=>null},'@/lib/analytics':{capture(){},captureOnce(){},analyticsEvents:{}}});
+const resultModule=load('components/store/CheckoutResult.tsx',resultMocks);
 test('result copy for rejected/refunded/cancelled and WhatsApp has only order number; no cart recreation',()=>{
   for(const state of ['rejected','refunded','cancelled','review']) {
     const copy=resultModule.orderMessage({result:state,paymentReceived:true});

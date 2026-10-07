@@ -69,6 +69,7 @@ test('canonical URLs round trip all filters, remain shareable and clear to the f
 });
 
 const mocks = {
+  '@/components/providers/SiteContentProvider': { useSiteContent: () => ({ content: { siteSettings: {} } }) },
   '@/components/analytics/EventOnMount': { EventOnMount: () => null },
   '@/components/public/ConnectorField': load('components/public/ConnectorField.tsx'),
   'next/link': ({ children, ...props }) => React.createElement('a', props, children),

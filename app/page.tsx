@@ -36,7 +36,7 @@ export default async function Home() {
         <main>
           <Hero />
           <PremiumProducts products={premiumProducts} />
-          <VehicleSelector />
+          <VehicleSelector homeVisibility />
           <NeedCategories />
           <WhyUs />
           <Promotions />

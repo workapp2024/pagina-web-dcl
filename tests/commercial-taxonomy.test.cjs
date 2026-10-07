@@ -40,7 +40,8 @@ test('accessory cards show their destination in catalog and Premium', () => {
     '@/components/ui/ManagedImage': { ManagedImage: () => null },
     '@/components/store/AddToCartButton': { AddToCartButton: () => null },
     '@/lib/whatsapp': { whatsappUrl: () => '#' },
-    '@/components/analytics/CommercialWhatsAppLink': { CommercialWhatsAppLink: ({ href, children }) => React.createElement('a', { href }, children) },
+    '@/components/ui/ConfiguredWhatsAppLink': { ConfiguredWhatsAppLink: ({ href, children }) => React.createElement('a', { href }, children) },
+    '@/components/sections/PremiumSectionTitle': { PremiumSectionTitle: () => React.createElement('h2', null, 'Premium') },
   };
   const { ProductCard } = load('components/ui/ProductCard.tsx', mocks);
   const { PremiumProducts } = load('components/sections/PremiumProducts.tsx', mocks);

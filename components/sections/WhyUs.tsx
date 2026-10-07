@@ -3,13 +3,14 @@ import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import { normalizeWhyUsCards } from "@/lib/why-us";
 import { WhyUsIcon } from "./WhyUsIcon";
 import styles from "./WhyUs.module.css";
+import { publicText, publicPresentationDefaults } from "@/lib/public-site-content";
 
 export function WhyUs() {
   const { content } = useSiteContent();
   const settings = content.siteSettings;
   if (settings.whyUsEnabled === false) return null;
   const cards = normalizeWhyUsCards(settings.whyUsCards).filter(card => card.enabled).sort((a, b) => a.order - b.order);
-  const title = settings.whyUsSectionTitle ?? "¿Por qué DCL?";
+  const title = publicText(settings.whyUsSectionTitle, publicPresentationDefaults.whyUsSectionTitle);
   return <section id="nosotros" aria-labelledby="why-us-title" className={styles.section}>
     <div className={styles.inner}>
       <header className={styles.header}>

@@ -7,8 +7,9 @@ import { VehicleFinder } from "@/components/public/VehicleFinder";
 import { ConnectorField } from "@/components/public/ConnectorField";
 import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import { productVehicleTypes, type ProductVehicleType } from "@/lib/product-taxonomy";
+import { publicText, publicPresentationDefaults } from "@/lib/public-site-content";
 
-export function VehicleSelector({ initialVehicle, heading = "h2" }: { initialVehicle?: ProductVehicleType; heading?: "h1" | "h2" } = {}) {
+export function VehicleSelector({ initialVehicle, heading = "h2", homeVisibility = false }: { initialVehicle?: ProductVehicleType; heading?: "h1" | "h2"; homeVisibility?: boolean } = {}) {
   const { content } = useSiteContent();
   const [vehicle, setVehicle] = useState(initialVehicle);
   const [path, setPath] = useState<"connector" | "vehicle" | null>(null);
@@ -18,10 +19,10 @@ export function VehicleSelector({ initialVehicle, heading = "h2" }: { initialVeh
 
   return <section id="vehiculos" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-14 sm:px-6 lg:px-8">
     <div className="mb-6 max-w-2xl">
-      <Heading className="text-3xl font-black uppercase tracking-tight text-white">Encontrá el LED para tu vehículo</Heading>
+      <Heading className="text-3xl font-black uppercase tracking-tight text-white [overflow-wrap:anywhere]">{publicText(content.siteSettings?.vehicleSectionTitle, publicPresentationDefaults.vehicleSectionTitle)}</Heading>
       <p className="mt-3 text-sm text-zinc-300">{selected ? `${selected.label} · ${path === "connector" ? "Buscar por conector" : path === "vehicle" ? "Buscar por mi vehículo" : "¿Cómo querés buscar?"}` : "Para empezar, elegí tu tipo de vehículo."}</p>
     </div>
-    {!selected ? <VehicleCategories onSelect={setVehicle} /> : <>
+    {!selected ? <VehicleCategories onSelect={setVehicle} homeVisibility={homeVisibility} /> : <>
       <button type="button" onClick={() => { if (path) setPath(null); else setVehicle(undefined); }} className="mb-4 inline-flex min-h-12 items-center text-sm text-red-300 underline">← {path ? "Volver a las opciones" : "Cambiar vehículo"}</button>
       {!path && <div className="grid gap-3 sm:grid-cols-2">
         <button type="button" className={card} onClick={() => setPath("connector")}><span className="block text-lg font-bold text-white">Ya sé qué lámpara necesito</span><span className="mt-2 block text-sm text-zinc-400">Buscar por conector: H7, H4, H11...</span></button>

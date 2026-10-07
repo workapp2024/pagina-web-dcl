@@ -17,6 +17,8 @@ import { getSupabaseVehicleCategories } from "@/lib/supabase/vehicle-categories"
 import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
 import { getSupabaseHomeSettings } from "@/lib/supabase/home-settings";
 import { DEFAULT_THEME, isThemePreset } from "@/lib/theme";
+import { publicPresentation } from "@/lib/public-site-content";
+import { useWhatsAppConfiguration } from "@/components/providers/WhatsAppProvider";
 
 type SiteContentUpdater = SiteContent | ((previous: SiteContent) => SiteContent);
 
@@ -34,6 +36,7 @@ type SiteContentProviderProps = {
 };
 
 export function SiteContentProvider({ children, initialProducts }: SiteContentProviderProps) {
+  const { refresh: refreshWhatsApp } = useWhatsAppConfiguration();
   const [content, setContent] = useState<SiteContent>(() =>
     initialProducts && initialProducts.length > 0
       ? { ...defaultSiteContent, products: initialProducts }
@@ -86,12 +89,15 @@ export function SiteContentProvider({ children, initialProducts }: SiteContentPr
     });
 
     getSupabaseSiteSettings().then((remoteSite) => {
-      if (isMounted && remoteSite && Object.keys(remoteSite).length > 0) {
+      if (isMounted) {
+        // Only saved remote settings update contact links, never local Admin drafts.
+        refreshWhatsApp(remoteSite?.whatsapp);
         setContent((previous) => ({
           ...previous,
           siteSettings: {
             ...previous.siteSettings,
             ...remoteSite,
+            ...publicPresentation(remoteSite),
           },
         }));
       }
@@ -112,7 +118,7 @@ export function SiteContentProvider({ children, initialProducts }: SiteContentPr
     return () => {
       isMounted = false;
     };
-  }, [initialProducts]);
+  }, [initialProducts, refreshWhatsApp]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = isThemePreset(content.siteSettings.themePreset)

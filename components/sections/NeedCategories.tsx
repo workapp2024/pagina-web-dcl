@@ -4,11 +4,14 @@ import Link from "next/link";
 import { productNeeds } from "@/lib/product-taxonomy";
 import { productCatalogHref, productFilterEventProperties } from "@/lib/product-filters";
 import { analyticsEvents, capture } from "@/lib/analytics";
+import { useSiteContent } from "@/components/providers/SiteContentProvider";
+import { publicText, publicPresentationDefaults } from "@/lib/public-site-content";
 
 export function NeedCategories() {
+  const { content } = useSiteContent();
   return <section id="necesidades" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-14 sm:px-6 lg:px-8">
     <div className="mb-7 max-w-2xl">
-      <h2 className="text-3xl font-black uppercase tracking-tight text-white">¿Qué estás buscando?</h2>
+      <h2 className="text-3xl font-black uppercase tracking-tight text-white [overflow-wrap:anywhere]">{publicText(content.siteSettings?.needsSectionTitle, publicPresentationDefaults.needsSectionTitle)}</h2>
       <p className="mt-3 text-sm leading-6 text-zinc-300">Elegí una necesidad y refiná por tipo de vehículo en el mismo catálogo.</p>
     </div>
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

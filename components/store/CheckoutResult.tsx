@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { analyticsEvents, capture, captureOnce } from "@/lib/analytics";
 import { whatsappUrl } from "@/lib/whatsapp";
+import { useWhatsAppConfiguration } from "@/components/providers/WhatsAppProvider";
 import { MercadoPagoBrick } from "@/components/store/MercadoPagoBrick";
 import type { PublicOrder } from "@/lib/store/public-order";
 
@@ -21,6 +22,7 @@ function trackWhatsAppClick() {
   catch { /* Tracking must never block opening WhatsApp. */ }
 }
 export function CheckoutResult({ orderNumber, publicKey }: { orderNumber: string; publicKey: string }) {
+  const { number } = useWhatsAppConfiguration();
   const [order, setOrder] = useState<PublicOrder | null>(null), [error, setError] = useState("");
   const [busy, setBusy] = useState(false), [card, setCard] = useState(false), [refresh, setRefresh] = useState(0), [pollingFinished, setPollingFinished] = useState(false);
   const [declarationFailed, setDeclarationFailed] = useState(false);
@@ -52,8 +54,8 @@ export function CheckoutResult({ orderNumber, publicKey }: { orderNumber: string
     window.addEventListener("dcl-order-refresh", reload);
     return () => { active = false; if (timer) clearTimeout(timer); window.removeEventListener("dcl-order-refresh", reload); };
   }, [orderNumber, refresh]);
-  const support = whatsappUrl(order ? `Hola, necesito ayuda con mi pedido ${order.orderNumber}.` : "Hola, necesito ayuda para recuperar mi pedido.");
-  const transferChat = whatsappUrl(`Hola, realicé la transferencia correspondiente al pedido ${order?.orderNumber || ""}. Quiero enviar el comprobante.`);
+  const support = whatsappUrl(order ? `Hola, necesito ayuda con mi pedido ${order.orderNumber}.` : "Hola, necesito ayuda para recuperar mi pedido.", number);
+  const transferChat = whatsappUrl(`Hola, realicé la transferencia correspondiente al pedido ${order?.orderNumber || ""}. Quiero enviar el comprobante.`, number);
   async function declareTransfer() {
     if (!order || inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(""); setDeclarationFailed(false);

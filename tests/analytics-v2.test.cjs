@@ -138,6 +138,7 @@ test('page authenticates before reads; sources remain independent; compact mobil
 
 test('checkout help still opens when tracking fails, and never sends order context', () => {
   const { CheckoutResult } = load('components/store/CheckoutResult.tsx', {
+    '@/components/providers/WhatsAppProvider': { useWhatsAppConfiguration: () => ({ number: '5492615551234' }) },
     react: { useState: value => [value, () => {}], useRef: value => ({ current: value }), useEffect: () => {} },
     '@/components/store/MercadoPagoBrick': { MercadoPagoBrick: () => null },
     '@/lib/analytics': { analyticsEvents: { whatsappClick: 'whatsapp_click' }, capture: (event, properties) => {
@@ -151,7 +152,7 @@ test('checkout help still opens when tracking fails, and never sends order conte
 
 test('WhatsApp instrumentation preserves destinations and passes only safe product/source properties', () => {
   const product = fs.readFileSync('app/productos/[slug]/page.tsx', 'utf8'), checkout = fs.readFileSync('components/store/CheckoutResult.tsx', 'utf8');
-  assert.match(product, /CommercialWhatsAppLink source="product" analyticsContext=\{\{ product_id: product.id \}\}/);
+  assert.match(product, /ConfiguredWhatsAppLink source="product" analyticsContext=\{\{ product_id: product.id \}\}/);
   assert.equal((checkout.match(/capture\(analyticsEvents.whatsappClick, \{ source: "other" \}\)/g) || []).length, 1);
   assert.equal((checkout.match(/onClick=\{trackWhatsAppClick\}/g) || []).length, 2);
   assert.match(checkout, /trackWhatsAppClick\(\);\s+window.location.assign\(transferChat\)/);

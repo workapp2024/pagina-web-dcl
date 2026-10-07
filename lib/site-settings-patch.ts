@@ -2,10 +2,11 @@ import { validateWhyUsCards } from "@/lib/why-us";
 import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "@/lib/supabase/database.types";
 import { isThemePreset } from "@/lib/theme";
+import { configuredWhatsAppNumber } from "@/lib/whatsapp";
 
 // Each editor owns only these columns. Never send a full cached SiteSettings row.
 export const siteSettingsSections = {
-  configuration: ["logo", "whatsapp", "instagram", "facebook", "email", "phone", "address"],
+  configuration: ["whatsapp", "instagram", "facebook", "email", "phone", "address"],
   home: ["logo", "vehicleSectionTitle", "needsSectionTitle", "whyUsSectionTitle", "whyUsEnabled", "whyUsCards", "productsSectionTitle", "promotionsSectionTitle"],
   appearance: ["themePreset"],
   transfer: ["transferAlias", "transferCbuCvu", "transferHolder", "transferInstitution", "transferInstructions"],
@@ -55,6 +56,9 @@ export function buildSiteSettingsPatch(section: unknown, settings: unknown): Set
     }
     const [column, limit] = fields[key as keyof typeof fields];
     if (typeof value !== "string" || value.length > limit) throw new Error(`Valor no válido para ${key}.`);
+    if (key === "whatsapp" && value.trim() && !configuredWhatsAppNumber(value)) {
+      throw new Error("WhatsApp debe ser un número internacional o un enlace HTTPS de wa.me / api.whatsapp.com válido.");
+    }
     if (key === "themePreset" && !isThemePreset(value)) throw new Error("Paleta no reconocida. No se cambió el tema activo.");
     if (key === "facebook" || key === "instagram") {
       const url = value.trim();
