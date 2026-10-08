@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
+import { generateWholesaleCode, hashWholesaleCode } from "@/lib/wholesale-access";
 
-type CustomerRow = { id: string; full_name: string; phone: string | null; email: string | null; document_number: string | null; notes: string; created_at: string; updated_at: string; archived_at: string | null };
+type CustomerRow = { id: string; full_name: string; phone: string | null; email: string | null; document_number: string | null; notes: string; created_at: string; updated_at: string; archived_at: string | null; wholesale_enabled: boolean; wholesale_access_active: boolean; wholesale_access_activated_at: string | null; wholesale_code_updated_at: string | null; wholesale_access_updated_at: string | null };
 type SaleRow = { id: string; customer_id: string; total: number; status: string; created_at: string };
 type VehicleRow = { id: string; customer_id: string; brand_name: string; model_name: string; year: number | null; plate: string | null };
 type WarrantyRow = { id: string; customer_id: string; status: string; warranty_claims?: { status: string }[] };
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
     const limit = 20;
     const db = createAdminServerClient();
     let query = db.from("customers")
-      .select("id,full_name,phone,email,document_number,notes,created_at,updated_at,archived_at", { count: "exact" })
+      .select("id,full_name,phone,email,document_number,notes,created_at,updated_at,archived_at,wholesale_enabled,wholesale_access_active,wholesale_access_activated_at,wholesale_code_updated_at,wholesale_access_updated_at", { count: "exact" })
       .order("created_at", { ascending: false }).order("id", { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
     query = view === "active" ? query.is("archived_at", null) : query.not("archived_at", "is", null);
@@ -65,6 +66,23 @@ export async function POST(request: Request) {
   const body = await readJsonObject(request);
   if (!body || typeof body.action !== "string") return apiError("BAD_REQUEST", "Acción inválida.", 400);
   const action = body.action;
+  if (["wholesale_activate", "wholesale_revoke", "wholesale_disable"].includes(action)) {
+    if (!(await isAdminAuthenticated())) return apiError("FORBIDDEN", "Acceso denegado.", 403);
+    if (!isUuid(body.customerId)) return apiError("BAD_REQUEST", "Cliente inválido.", 400);
+    try {
+      const db = createAdminServerClient();
+      const code = action === "wholesale_activate" ? generateWholesaleCode() : null;
+      const rpcAction = action === "wholesale_activate" ? "activate" : action === "wholesale_revoke" ? "revoke" : "disable";
+      const { data, error } = await db.rpc("admin_manage_customer_wholesale" as never, {
+        p_action: rpcAction, p_customer: body.customerId, p_code_hash: code ? hashWholesaleCode(code) : null,
+      } as never) as unknown as { data: Record<string, unknown> | null; error: { message: string } | null };
+      if (error) {
+        if (error.message.includes("CUSTOMER_NOT_FOUND")) return apiError("NOT_FOUND", "Cliente no encontrado.", 404);
+        return apiError("INTERNAL_ERROR", "No se pudo actualizar el acceso mayorista.", 500);
+      }
+      return NextResponse.json({ ok: true, data: { customer: data, ...(code ? { code } : {}) } }, { headers: { "Cache-Control": "no-store, private" } });
+    } catch (error) { return apiInternalError("admin_customer_wholesale", error); }
+  }
   if (!["create", "edit"].includes(action) && !(await isAdminAuthenticated())) return apiError("FORBIDDEN", "Acceso denegado.", 403);
   if (!["create", "edit", "archive", "restore", "delete"].includes(action)) return apiError("BAD_REQUEST", "Acción inválida.", 400);
   const customerId = body.customerId;

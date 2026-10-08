@@ -19,6 +19,7 @@ import { analyticsEvents } from "@/lib/analytics";
 import { getPremiumProductIds } from "@/lib/supabase/premium";
 import { resolvePremiumProducts } from "@/lib/premium";
 import { PremiumProducts } from "@/components/sections/PremiumProducts";
+import { WholesaleCTA } from "@/components/sections/WholesaleCTA";
 
 // Se revalida periódicamente para reflejar altas/bajas de productos hechas desde el panel sin necesidad de un nuevo deploy.
 export const revalidate = 60;
@@ -36,6 +37,7 @@ export default async function Home() {
         <main>
           <Hero />
           <PremiumProducts products={premiumProducts} />
+          <WholesaleCTA />
           <VehicleSelector homeVisibility />
           <NeedCategories />
           <WhyUs />

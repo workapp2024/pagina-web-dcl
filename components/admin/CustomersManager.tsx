@@ -9,6 +9,9 @@ type Warranty = { id: string; status: string; warranty_claims?: { status: string
 type Customer = {
   id: string; full_name: string; phone: string | null; email: string | null;
   document_number: string | null; notes: string; archived_at: string | null;
+  wholesale_enabled: boolean; wholesale_access_active: boolean;
+  wholesale_access_activated_at: string | null; wholesale_code_updated_at: string | null;
+  wholesale_access_updated_at: string | null;
   vehicles: Vehicle[]; sales: Sale[]; warranties: Warranty[]; total: number;
 };
 type Form = { fullName: string; phone: string; email: string; documentNumber: string; notes: string };
@@ -29,6 +32,7 @@ export function CustomersManager() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [oneTimeCode, setOneTimeCode] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -72,6 +76,20 @@ export function CustomersManager() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo guardar el cliente."); }
     finally { setBusy(false); }
   }
+  async function mutateWholesale(action: "wholesale_activate" | "wholesale_revoke" | "wholesale_disable") {
+    if (!selected) return;
+    if (action !== "wholesale_activate" && !window.confirm(action === "wholesale_revoke" ? "¿Revocar el código mayorista de este cliente?" : "¿Quitar la condición mayorista y revocar su acceso?")) return;
+    setBusy(true); setError(""); setOneTimeCode("");
+    try {
+      const response = await fetch("/api/admin/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, customerId: selected.id }) });
+      const body = await response.json();
+      if (!body.ok) throw new Error(body.error || "No se pudo actualizar el acceso mayorista.");
+      if (body.data?.code) setOneTimeCode(body.data.code);
+      setSelected(body.data.customer);
+      setRefresh(value => value + 1);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo actualizar el acceso mayorista."); }
+    finally { setBusy(false); }
+  }
 
   return <div className="space-y-5">
     <header className="flex flex-wrap items-center justify-between gap-3">
@@ -89,6 +107,7 @@ export function CustomersManager() {
     {loading ? <p className="text-sm text-zinc-400">Cargando clientes...</p> : rows.length === 0 ? <p className="text-sm text-zinc-400">No hay clientes en esta vista.</p> :
       <div className="grid gap-2 md:grid-cols-2">{rows.map(customer => <button key={customer.id} onClick={() => { setSelected(customer); setFormMode(null); setError(""); }} className="border border-white/15 p-4 text-left hover:border-red-500/50">
         <strong>{customer.full_name}</strong><p className="mt-1 text-sm text-zinc-400">{customer.phone || customer.email || "Sin contacto"}</p>
+        {customer.wholesale_enabled && <small className="mt-2 inline-block rounded border border-amber-500/40 px-2 py-1 text-amber-200">Mayorista · {customer.wholesale_access_active ? "Acceso activo" : "Acceso inactivo"}</small>}
         <p className="mt-3 text-sm">{customer.sales.length} compras · {money(customer.total)}</p>
         <small className="text-zinc-400">{customer.vehicles.length} vehículos · {customer.warranties.length} garantías</small>
       </button>)}</div>}
@@ -108,6 +127,16 @@ export function CustomersManager() {
           <p>{selected.phone || "Sin teléfono"} · {selected.email || "Sin email"}</p>
           {selected.document_number && <p>Documento: {selected.document_number}</p>}
           {selected.notes && <p className="text-zinc-300">{selected.notes}</p>}
+          <section className="space-y-2 rounded border border-white/10 p-3"><h3 className="font-semibold">Acceso mayorista</h3>
+            <p className="text-zinc-300">{selected.wholesale_enabled ? `Cliente mayorista · acceso ${selected.wholesale_access_active ? "activo" : "inactivo"}` : "No es cliente mayorista"}</p>
+            {selected.wholesale_access_activated_at && <p className="text-xs text-zinc-400">Última activación: {new Date(selected.wholesale_access_activated_at).toLocaleString("es-AR")}</p>}
+            {selected.wholesale_code_updated_at && <p className="text-xs text-zinc-400">Código generado/reemplazado: {new Date(selected.wholesale_code_updated_at).toLocaleString("es-AR")}</p>}
+            {isOwner && <div className="flex flex-wrap gap-2">
+              <button disabled={busy} onClick={() => void mutateWholesale("wholesale_activate")} className="rounded bg-amber-600 px-3 py-2 text-xs font-semibold disabled:opacity-50">{selected.wholesale_access_active ? "Reemplazar código" : "Activar y generar código"}</button>
+              {selected.wholesale_access_active && <button disabled={busy} onClick={() => void mutateWholesale("wholesale_revoke")} className="rounded border border-white/20 px-3 py-2 text-xs disabled:opacity-50">Revocar acceso</button>}
+              {selected.wholesale_enabled && <button disabled={busy} onClick={() => void mutateWholesale("wholesale_disable")} className="rounded border border-red-500/40 px-3 py-2 text-xs text-red-200 disabled:opacity-50">Quitar condición mayorista</button>}
+            </div>}
+          </section>
           <section><h3 className="font-semibold">Vehículos</h3><p className="text-zinc-400">{selected.vehicles.map(vehicle => `${vehicle.brand_name} ${vehicle.model_name} ${vehicle.year || ""} ${vehicle.plate || ""}`).join(" · ") || "Sin vehículos"}</p></section>
           <section><h3 className="font-semibold">Historial de compras</h3>{selected.sales.length ? selected.sales.map(sale => <p key={sale.id} className="mt-2 border border-white/10 p-2">{new Date(sale.created_at).toLocaleDateString("es-AR")} · {money(sale.total)} · {sale.status}</p>) : <p className="text-zinc-400">Sin compras</p>}</section>
           <p>Gasto total: <strong>{money(selected.total)}</strong></p>
@@ -119,5 +148,6 @@ export function CustomersManager() {
         </div>}
       </section>
     </div>}
+    {oneTimeCode && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Código mayorista generado"><section className="w-full max-w-md space-y-3 border border-amber-500/40 bg-zinc-950 p-5"><h2 className="text-lg font-bold">Copiá el código ahora</h2><p className="text-sm text-zinc-300">Se muestra una sola vez. Guardalo y entregáselo al cliente.</p><code className="block select-all break-all rounded bg-zinc-900 p-3 text-lg">{oneTimeCode}</code><button onClick={() => { void navigator.clipboard?.writeText(oneTimeCode); }} className="rounded border border-white/20 px-3 py-2 text-sm">Copiar</button><button onClick={() => setOneTimeCode("")} className="ml-2 rounded bg-red-600 px-3 py-2 text-sm">Cerrar</button></section></div>}
   </div>;
 }

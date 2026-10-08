@@ -1,0 +1,33 @@
+import { NextResponse } from "next/server";
+import { boundedString, readJsonObject } from "@/lib/api";
+import { rateLimit } from "@/lib/rate-limit";
+import { isSameOriginWrite } from "@/lib/store/buyer-session";
+import { createWholesaleSessionToken, verifyWholesaleCode } from "@/lib/wholesale-access";
+import {
+  createWholesaleSession, findActiveWholesaleCustomerByCode, WHOLESALE_SESSION_COOKIE,
+  wholesaleSessionCookieOptions,
+} from "@/lib/wholesale-server";
+
+const invalidCode = () => NextResponse.json({ ok: false, error: "Código inválido o acceso inactivo." }, { status: 401, headers: { "Cache-Control": "no-store" } });
+
+export async function POST(request: Request) {
+  const limited = rateLimit(request, "wholesale-access", { limit: 8, windowMs: 60_000 });
+  if (limited) return limited;
+  if (!isSameOriginWrite(request)) return invalidCode();
+
+  const body = await readJsonObject(request);
+  const code = boundedString(body?.code, 64, { required: true });
+  if (!code || !/^[A-Za-z0-9_-]{24}$/.test(code)) return invalidCode();
+
+  const { customer, unavailable } = await findActiveWholesaleCustomerByCode(code);
+  if (unavailable) return NextResponse.json({ ok: false, error: "No se pudo validar el acceso. Intentá nuevamente." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  if (!customer || !verifyWholesaleCode(code, customer.wholesale_code_hash)) return invalidCode();
+
+  const token = createWholesaleSessionToken();
+  const created = await createWholesaleSession(customer.id, customer.wholesale_code_updated_at!, token);
+  if (!created) return NextResponse.json({ ok: false, error: "No se pudo iniciar la sesión. Intentá nuevamente." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+
+  const response = NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+  response.cookies.set(WHOLESALE_SESSION_COOKIE, token, wholesaleSessionCookieOptions);
+  return response;
+}

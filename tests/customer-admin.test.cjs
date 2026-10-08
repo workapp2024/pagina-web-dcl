@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const { PGlite } = require('@electric-sql/pglite');
 
 const migration = '20260920010000_customer_admin.sql';
+const wholesaleMigration = '20261007020000_customer_wholesale_access.sql';
 let db;
 const scalar = async (sql, values = []) => Object.values((await db.query(sql, values)).rows[0])[0];
 const manage = (action, id = null, data = {}) => scalar('SELECT admin_manage_customer($1,$2,$3::jsonb)', [action, id, JSON.stringify(data)]);
@@ -19,6 +20,7 @@ before(async () => {
     await db.exec(fs.readFileSync('supabase/migrations/' + file, 'utf8'));
   }
   await db.exec(fs.readFileSync('supabase/migrations/' + migration, 'utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/' + wholesaleMigration, 'utf8'));
 });
 after(async () => { await db?.close(); });
 
@@ -83,4 +85,28 @@ test('safe delete locks the customer row before dependency checks', () => {
   const sql = fs.readFileSync('supabase/migrations/' + migration, 'utf8');
   assert.match(sql, /SELECT \* INTO v_customer FROM public\.customers WHERE id=p_customer FOR UPDATE;[\s\S]*IF p_action='delete'/);
   assert.doesNotMatch(sql, /DELETE FROM public\.customer_vehicles|DELETE FROM public\.orders|DELETE FROM public\.sales|DELETE FROM public\.warranties/);
+});
+
+test('wholesale code activation, replacement and revocation never return or audit the hash', async () => {
+  const customer = await create('Mayorista');
+  const firstHash = 'a'.repeat(64), secondHash = 'b'.repeat(64);
+  const activate = hash => scalar("SELECT admin_manage_customer_wholesale('activate',$1,$2)", [customer.id, hash]);
+  const first = await activate(firstHash);
+  assert.equal(first.wholesale_enabled, true);
+  assert.equal(first.wholesale_access_active, true);
+  assert.equal(first.wholesale_code_hash, undefined);
+  assert.ok(first.wholesale_access_activated_at);
+  const replacement = await activate(secondHash);
+  assert.ok(replacement.wholesale_code_updated_at);
+  assert.equal(await scalar('SELECT wholesale_code_hash FROM customers WHERE id=$1', [customer.id]), secondHash);
+  assert.equal((await scalar("SELECT count(*)::int FROM customers WHERE id=$1 AND wholesale_code_hash=$2", [customer.id, firstHash])), 0);
+  const history = await db.query("SELECT before_data,after_data FROM customer_admin_history WHERE customer_id=$1", [customer.id]);
+  assert.ok(history.rows.every(row => (!row.before_data || !('wholesale_code_hash' in row.before_data)) && (!row.after_data || !('wholesale_code_hash' in row.after_data))));
+  const revoked = await scalar("SELECT admin_manage_customer_wholesale('revoke',$1,NULL)", [customer.id]);
+  assert.equal(revoked.wholesale_enabled, true);
+  assert.equal(revoked.wholesale_access_active, false);
+  assert.equal(await scalar('SELECT wholesale_code_hash FROM customers WHERE id=$1', [customer.id]), null);
+  const disabled = await scalar("SELECT admin_manage_customer_wholesale('disable',$1,NULL)", [customer.id]);
+  assert.equal(disabled.wholesale_enabled, false);
+  await assert.rejects(scalar("SELECT admin_manage_customer_wholesale('activate',$1,'bad')", [customer.id]), /WHOLESALE_INVALID_CODE_HASH/);
 });
