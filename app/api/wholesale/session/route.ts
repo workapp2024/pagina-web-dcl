@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { boundedString, readJsonObject } from "@/lib/api";
 import { rateLimit } from "@/lib/rate-limit";
 import { isSameOriginWrite } from "@/lib/store/buyer-session";
-import { createWholesaleSessionToken, verifyWholesaleCode } from "@/lib/wholesale-access";
+import { createWholesaleSessionToken, isValidManualWholesaleCode, normalizeWholesaleCode, verifyWholesaleCode } from "@/lib/wholesale-access";
 import {
   createWholesaleSession, findActiveWholesaleCustomerByCode, WHOLESALE_SESSION_COOKIE,
   wholesaleSessionCookieOptions,
@@ -17,11 +17,15 @@ export async function POST(request: Request) {
 
   const body = await readJsonObject(request);
   const code = boundedString(body?.code, 64, { required: true });
-  if (!code || !/^[A-Za-z0-9_-]{24}$/.test(code)) return invalidCode();
+  if (!code) return invalidCode();
+  const normalizedCode = normalizeWholesaleCode(code);
+  const isManualCode = isValidManualWholesaleCode(normalizedCode);
+  const isExistingGeneratedCode = /^[A-Za-z0-9_-]{24}$/.test(code);
+  if (!isManualCode && !isExistingGeneratedCode) return invalidCode();
 
-  const { customer, unavailable } = await findActiveWholesaleCustomerByCode(code);
+  const { customer, matchedCode, unavailable } = await findActiveWholesaleCustomerByCode(code);
   if (unavailable) return NextResponse.json({ ok: false, error: "No se pudo validar el acceso. Intentá nuevamente." }, { status: 503, headers: { "Cache-Control": "no-store" } });
-  if (!customer || !verifyWholesaleCode(code, customer.wholesale_code_hash)) return invalidCode();
+  if (!customer || !matchedCode || !verifyWholesaleCode(matchedCode, customer.wholesale_code_hash)) return invalidCode();
 
   const token = createWholesaleSessionToken();
   const created = await createWholesaleSession(customer.id, customer.wholesale_code_updated_at!, token);

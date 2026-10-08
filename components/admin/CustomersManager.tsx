@@ -18,6 +18,17 @@ type Form = { fullName: string; phone: string; email: string; documentNumber: st
 const emptyForm: Form = { fullName: "", phone: "", email: "", documentNumber: "", notes: "" };
 const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
+export function mergeWholesaleCustomer(current: Customer, updated: Partial<Customer>): Customer {
+  return {
+    ...current,
+    wholesale_enabled: updated.wholesale_enabled ?? current.wholesale_enabled,
+    wholesale_access_active: updated.wholesale_access_active ?? current.wholesale_access_active,
+    wholesale_access_activated_at: updated.wholesale_access_activated_at ?? current.wholesale_access_activated_at,
+    wholesale_code_updated_at: updated.wholesale_code_updated_at ?? null,
+    wholesale_access_updated_at: updated.wholesale_access_updated_at ?? null,
+  };
+}
+
 export function CustomersManager() {
   const isOwner = useIsOwner();
   const [view, setView] = useState<"active" | "archived">("active");
@@ -32,7 +43,8 @@ export function CustomersManager() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [oneTimeCode, setOneTimeCode] = useState("");
+  const [wholesaleCode, setWholesaleCode] = useState("");
+  const [wholesaleMessage, setWholesaleMessage] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -55,12 +67,12 @@ export function CustomersManager() {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [view, query, page, refresh]);
 
-  function startCreate() { setSelected(null); setForm(emptyForm); setFormMode("create"); setError(""); }
+  function startCreate() { setSelected(null); setForm(emptyForm); setFormMode("create"); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }
   function startEdit(customer: Customer) {
     setForm({ fullName: customer.full_name, phone: customer.phone || "", email: customer.email || "", documentNumber: customer.document_number || "", notes: customer.notes || "" });
     setFormMode("edit"); setError("");
   }
-  function chooseView(next: "active" | "archived") { setView(next); setPage(1); setSelected(null); setFormMode(null); setError(""); }
+  function chooseView(next: "active" | "archived") { setView(next); setPage(1); setSelected(null); setFormMode(null); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }
   async function mutate(action: "create" | "edit" | "archive" | "restore" | "delete") {
     if (action === "delete" && !window.confirm("¿Eliminar definitivamente este cliente? Esta acción no se puede deshacer.")) return;
     if (action === "archive" && !window.confirm("¿Archivar este cliente? Podrás restaurarlo después.")) return;
@@ -76,16 +88,24 @@ export function CustomersManager() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo guardar el cliente."); }
     finally { setBusy(false); }
   }
-  async function mutateWholesale(action: "wholesale_activate" | "wholesale_revoke" | "wholesale_disable") {
+  async function mutateWholesale(action: "wholesale_activate" | "wholesale_revoke" | "wholesale_disable", code?: string) {
     if (!selected) return;
+    const normalizedCode = code?.trim().toUpperCase() || "";
+    if (action === "wholesale_activate" && !/^[A-Z0-9]{4,32}$/.test(normalizedCode)) {
+      setError("Ingresá un código de 4 a 32 letras o números, sin espacios.");
+      setWholesaleMessage("");
+      return;
+    }
     if (action !== "wholesale_activate" && !window.confirm(action === "wholesale_revoke" ? "¿Revocar el código mayorista de este cliente?" : "¿Quitar la condición mayorista y revocar su acceso?")) return;
-    setBusy(true); setError(""); setOneTimeCode("");
+    setBusy(true); setError(""); setWholesaleMessage("");
     try {
-      const response = await fetch("/api/admin/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, customerId: selected.id }) });
+      const response = await fetch("/api/admin/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, customerId: selected.id, ...(action === "wholesale_activate" ? { code: normalizedCode } : {}) }) });
       const body = await response.json();
       if (!body.ok) throw new Error(body.error || "No se pudo actualizar el acceso mayorista.");
-      if (body.data?.code) setOneTimeCode(body.data.code);
-      setSelected(body.data.customer);
+      const updated = body.data?.customer;
+      setSelected(current => current && current.id === updated?.id ? mergeWholesaleCustomer(current, updated) : current);
+      setWholesaleCode("");
+      setWholesaleMessage(action === "wholesale_activate" ? "Acceso mayorista activado con el código ingresado." : action === "wholesale_revoke" ? "Acceso mayorista revocado." : "Condición mayorista desactivada.");
       setRefresh(value => value + 1);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo actualizar el acceso mayorista."); }
     finally { setBusy(false); }
@@ -105,7 +125,7 @@ export function CustomersManager() {
     </div>
     {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
     {loading ? <p className="text-sm text-zinc-400">Cargando clientes...</p> : rows.length === 0 ? <p className="text-sm text-zinc-400">No hay clientes en esta vista.</p> :
-      <div className="grid gap-2 md:grid-cols-2">{rows.map(customer => <button key={customer.id} onClick={() => { setSelected(customer); setFormMode(null); setError(""); }} className="border border-white/15 p-4 text-left hover:border-red-500/50">
+      <div className="grid gap-2 md:grid-cols-2">{rows.map(customer => <button key={customer.id} onClick={() => { setSelected(customer); setFormMode(null); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }} className="border border-white/15 p-4 text-left hover:border-red-500/50">
         <strong>{customer.full_name}</strong><p className="mt-1 text-sm text-zinc-400">{customer.phone || customer.email || "Sin contacto"}</p>
         {customer.wholesale_enabled && <small className="mt-2 inline-block rounded border border-amber-500/40 px-2 py-1 text-amber-200">Mayorista · {customer.wholesale_access_active ? "Acceso activo" : "Acceso inactivo"}</small>}
         <p className="mt-3 text-sm">{customer.sales.length} compras · {money(customer.total)}</p>
@@ -118,7 +138,7 @@ export function CustomersManager() {
     </div>}
     {(selected || formMode) && <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-label={formMode ? "Datos del cliente" : "Ficha del cliente"}>
       <section className="mx-auto max-w-xl border border-white/15 bg-zinc-950 p-5">
-        <div className="flex items-start justify-between gap-3"><h2 className="text-xl font-bold">{formMode === "create" ? "Crear cliente" : formMode === "edit" ? "Editar cliente" : selected?.full_name}</h2><button onClick={() => { setSelected(null); setFormMode(null); setError(""); }} className="text-sm text-zinc-300">Cerrar</button></div>
+        <div className="flex items-start justify-between gap-3"><h2 className="text-xl font-bold">{formMode === "create" ? "Crear cliente" : formMode === "edit" ? "Editar cliente" : selected?.full_name}</h2><button onClick={() => { setSelected(null); setFormMode(null); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }} className="text-sm text-zinc-300">Cerrar</button></div>
         {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
         {formMode ? <form className="mt-5 space-y-3" onSubmit={event => { event.preventDefault(); void mutate(formMode); }}>
           {([ ["fullName", "Nombre completo", 160], ["phone", "Teléfono", 50], ["email", "Email", 255], ["documentNumber", "Documento", 40], ["notes", "Notas", 1000] ] as const).map(([field, label, max]) => <label key={field} className="block text-sm">{label}<input value={form[field]} maxLength={max} required={field === "fullName"} type={field === "email" ? "email" : "text"} onChange={event => setForm(value => ({ ...value, [field]: event.target.value }))} className="mt-1 w-full rounded border border-white/15 bg-zinc-900 p-2.5" /></label>)}
@@ -131,8 +151,10 @@ export function CustomersManager() {
             <p className="text-zinc-300">{selected.wholesale_enabled ? `Cliente mayorista · acceso ${selected.wholesale_access_active ? "activo" : "inactivo"}` : "No es cliente mayorista"}</p>
             {selected.wholesale_access_activated_at && <p className="text-xs text-zinc-400">Última activación: {new Date(selected.wholesale_access_activated_at).toLocaleString("es-AR")}</p>}
             {selected.wholesale_code_updated_at && <p className="text-xs text-zinc-400">Código generado/reemplazado: {new Date(selected.wholesale_code_updated_at).toLocaleString("es-AR")}</p>}
-            {isOwner && <div className="flex flex-wrap gap-2">
-              <button disabled={busy} onClick={() => void mutateWholesale("wholesale_activate")} className="rounded bg-amber-600 px-3 py-2 text-xs font-semibold disabled:opacity-50">{selected.wholesale_access_active ? "Reemplazar código" : "Activar y generar código"}</button>
+            {wholesaleMessage && <p role="status" className="text-sm text-green-300">{wholesaleMessage}</p>}
+            {isOwner && <div className="space-y-2">
+              <label className="block text-xs text-zinc-300">Código mayorista<input aria-label="Código mayorista" autoComplete="off" maxLength={32} value={wholesaleCode} onChange={event => { setWholesaleCode(event.target.value.toUpperCase()); setError(""); setWholesaleMessage(""); }} className="mt-1 w-full rounded border border-white/15 bg-zinc-900 p-2.5 text-sm uppercase" /></label>
+              <button disabled={busy || !/^[A-Z0-9]{4,32}$/.test(wholesaleCode.trim())} onClick={() => void mutateWholesale("wholesale_activate", wholesaleCode)} className="rounded bg-amber-600 px-3 py-2 text-xs font-semibold disabled:opacity-50">{selected.wholesale_access_active ? "Cambiar código" : "Activar cliente mayorista"}</button>
               {selected.wholesale_access_active && <button disabled={busy} onClick={() => void mutateWholesale("wholesale_revoke")} className="rounded border border-white/20 px-3 py-2 text-xs disabled:opacity-50">Revocar acceso</button>}
               {selected.wholesale_enabled && <button disabled={busy} onClick={() => void mutateWholesale("wholesale_disable")} className="rounded border border-red-500/40 px-3 py-2 text-xs text-red-200 disabled:opacity-50">Quitar condición mayorista</button>}
             </div>}
@@ -148,6 +170,5 @@ export function CustomersManager() {
         </div>}
       </section>
     </div>}
-    {oneTimeCode && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Código mayorista generado"><section className="w-full max-w-md space-y-3 border border-amber-500/40 bg-zinc-950 p-5"><h2 className="text-lg font-bold">Copiá el código ahora</h2><p className="text-sm text-zinc-300">Se muestra una sola vez. Guardalo y entregáselo al cliente.</p><code className="block select-all break-all rounded bg-zinc-900 p-3 text-lg">{oneTimeCode}</code><button onClick={() => { void navigator.clipboard?.writeText(oneTimeCode); }} className="rounded border border-white/20 px-3 py-2 text-sm">Copiar</button><button onClick={() => setOneTimeCode("")} className="ml-2 rounded bg-red-600 px-3 py-2 text-sm">Cerrar</button></section></div>}
   </div>;
 }

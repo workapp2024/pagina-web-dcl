@@ -32,7 +32,7 @@ export function VehicleSelector({ initialVehicle, heading = "h2", homeVisibility
         <ConnectorField products={content.products} id="finder-connectors" label="¿Qué conector buscás?" required />
         <button type="submit" className="min-h-12 w-full rounded-full bg-red-600 px-6 text-sm font-bold text-white sm:w-auto">Buscar lámparas</button>
       </form>}
-      {path === "vehicle" && <VehicleFinder key={vehicle} initialType={selected.label} />}
+      {path === "vehicle" && <VehicleFinder key={vehicle} initialType={selected.label} products={content.products} />}
     </>}
     <Link href="/productos" className="mt-5 inline-flex min-h-12 items-center text-sm font-semibold text-red-300 underline">Ver todos los productos</Link>
   </section>;

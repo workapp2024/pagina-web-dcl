@@ -1,8 +1,12 @@
 import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
-export function generateWholesaleCode() {
-  return randomBytes(18).toString("base64url");
+export function normalizeWholesaleCode(code: string) {
+  return code.trim().toUpperCase();
+}
+
+export function isValidManualWholesaleCode(code: string) {
+  return /^[A-Z0-9]{4,32}$/.test(code);
 }
 
 export function hashWholesaleCode(code: string) {

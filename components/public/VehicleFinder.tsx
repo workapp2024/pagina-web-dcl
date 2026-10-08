@@ -1,19 +1,20 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSiteContent } from "@/components/providers/SiteContentProvider";
 import { ManagedImage } from "@/components/ui/ManagedImage";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { ProductPurchaseActions } from "@/components/store/ProductPurchaseActions";
+import { WholesaleProductCard } from "@/components/wholesale/WholesaleProductCard";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import { getPublicVehicleBrands, getPublicVehicleModels, searchPublicVehicleCompatibilities, VEHICLE_TYPES, type VehicleBrand, type VehicleModel } from "@/lib/supabase/vehicle-compatibility";
 import { vehiclePositions, vehicleProductMatches, vehicleReferenceLinks } from "@/lib/vehicle-product-search";
+import { groupWholesaleVehicleMatches } from "@/lib/wholesale-catalog-search";
+import type { Product } from "@/lib/site-data";
 
 const control = "min-h-12 min-w-0 text-base w-full rounded-xl border border-white/10 bg-zinc-900 px-3 text-white disabled:opacity-40";
 const sameName = (a: string, b: string) => a.trim().toLocaleLowerCase("es") === b.trim().toLocaleLowerCase("es");
 
-export function VehicleFinder({ initialType = "" }: { initialType?: string } = {}) {
-  const { content } = useSiteContent();
+export function VehicleFinder({ initialType = "", products, wholesaleMode = false, onWholesaleAdd }: { initialType?: string; products: Product[]; wholesaleMode?: boolean; onWholesaleAdd?: (productId: string) => void }) {
   const [type, setType] = useState(initialType);
   const [brands, setBrands] = useState<VehicleBrand[]>([]);
   const [brandName, setBrandName] = useState("");
@@ -30,6 +31,7 @@ export function VehicleFinder({ initialType = "" }: { initialType?: string } = {
   const model = models.find(item => sameName(item.name, modelName));
   const context = { type, brand: brandName, model: modelName, year, position };
   const references = vehicleReferenceLinks(context);
+  const wholesaleMatches = wholesaleMode && matches !== null ? groupWholesaleVehicleMatches(matches, year) : [];
   function invalidate() { request.current++; setMatches(null); setSearching(false); setSearchError(false); }
 
   useEffect(() => {
@@ -55,7 +57,8 @@ export function VehicleFinder({ initialType = "" }: { initialType?: string } = {
       const rows = brand && model ? await searchPublicVehicleCompatibilities(type, brand.id, model.id) : [];
       if (version !== request.current) return;
       if (rows === null) throw new Error("Compatibility lookup unavailable");
-      const found = vehicleProductMatches(content.products, rows, year, position);
+      const searchableProducts = wholesaleMode ? products.filter(product => Number(product.wholesalePrice) > 0) : products;
+      const found = vehicleProductMatches(searchableProducts, rows, year, position);
       setMatches(found);
       const props = { vehicle_type: type, brand: brand?.name, model: model?.name, year_provided: true, year: Number(year), position: position || undefined, result_count: found.length, has_results: found.length > 0 };
       capture(found.length ? analyticsEvents.vehicleSearchCompleted : analyticsEvents.vehicleSearchNoResults, props);
@@ -86,8 +89,13 @@ export function VehicleFinder({ initialType = "" }: { initialType?: string } = {
     </form>
     </details>
     {matches !== null && <div aria-live="polite">
-      <h3 className="mb-3 text-lg font-black">{matches.length ? "Productos compatibles" : "No encontramos esta referencia todavía."}</h3>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{matches.map(({ product, row, position: selectedPosition, connector }) => {
+      <h3 className="mb-3 text-lg font-black">{(wholesaleMode ? wholesaleMatches.length : matches.length) ? "Productos compatibles" : "No encontramos esta referencia todavía."}</h3>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{wholesaleMode ? wholesaleMatches.map(({ product, fitments }) => <WholesaleProductCard key={product.id} onAdd={onWholesaleAdd ? () => onWholesaleAdd(product.id) : undefined} product={{
+          id: product.id, name: product.name, description: product.description, imageUrl: product.image,
+          category: product.category, connectorType: product.connectorType || null,
+          functions: product.functions || [], vehicleTypes: product.vehicleTypes || [],
+          wholesalePrice: Number(product.wholesalePrice),
+        }} compatibility={fitments.join(" · ")} />) : matches.map(({ product, row, position: selectedPosition, connector }) => {
         const href = product.href + '?fitment=' + encodeURIComponent(row.id) + '&position=' + selectedPosition.key + '&year=' + encodeURIComponent(year);
         const cartProduct = { id: product.id, name: product.name, price: product.price, image: product.image, href, category: product.category };
         return <article key={product.id + '-' + row.id + '-' + selectedPosition.key} className="rounded-2xl border border-white/10 bg-white/5 p-3"><Link href={href} className="flex gap-3"><div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-black p-2"><ManagedImage source={product.image} alt={product.name} className="max-h-full max-w-full object-contain" /></div><div><b>{product.name}</b><small className="mt-1 block text-zinc-400">{row.brandName} {row.modelName} {year}</small><small className="block text-zinc-400">{selectedPosition.label} · {connector}</small><span className="mt-2 block text-xs font-bold text-red-300">Ver producto →</span></div></Link><div className="mt-3"><ProductPurchaseActions product={cartProduct} compact /></div></article>;

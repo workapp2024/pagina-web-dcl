@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
-import { generateWholesaleCode, hashWholesaleCode } from "@/lib/wholesale-access";
+import { hashWholesaleCode, isValidManualWholesaleCode, normalizeWholesaleCode } from "@/lib/wholesale-access";
 
 type CustomerRow = { id: string; full_name: string; phone: string | null; email: string | null; document_number: string | null; notes: string; created_at: string; updated_at: string; archived_at: string | null; wholesale_enabled: boolean; wholesale_access_active: boolean; wholesale_access_activated_at: string | null; wholesale_code_updated_at: string | null; wholesale_access_updated_at: string | null };
 type SaleRow = { id: string; customer_id: string; total: number; status: string; created_at: string };
@@ -69,18 +69,28 @@ export async function POST(request: Request) {
   if (["wholesale_activate", "wholesale_revoke", "wholesale_disable"].includes(action)) {
     if (!(await isAdminAuthenticated())) return apiError("FORBIDDEN", "Acceso denegado.", 403);
     if (!isUuid(body.customerId)) return apiError("BAD_REQUEST", "Cliente inválido.", 400);
+    let codeHash: string | null = null;
+    if (action === "wholesale_activate") {
+      const submittedCode = boundedString(body.code, 32, { required: true });
+      const code = submittedCode === null ? "" : normalizeWholesaleCode(submittedCode);
+      if (!isValidManualWholesaleCode(code)) return apiError("BAD_REQUEST", "El código debe tener de 4 a 32 letras o números, sin espacios ni otros caracteres.", 400);
+      codeHash = hashWholesaleCode(code);
+    }
     try {
       const db = createAdminServerClient();
-      const code = action === "wholesale_activate" ? generateWholesaleCode() : null;
       const rpcAction = action === "wholesale_activate" ? "activate" : action === "wholesale_revoke" ? "revoke" : "disable";
       const { data, error } = await db.rpc("admin_manage_customer_wholesale" as never, {
-        p_action: rpcAction, p_customer: body.customerId, p_code_hash: code ? hashWholesaleCode(code) : null,
-      } as never) as unknown as { data: Record<string, unknown> | null; error: { message: string } | null };
+        p_action: rpcAction, p_customer: body.customerId, p_code_hash: codeHash,
+      } as never) as unknown as { data: Record<string, unknown> | null; error: { message: string; code?: string; details?: string; constraint?: string } | null };
       if (error) {
         if (error.message.includes("CUSTOMER_NOT_FOUND")) return apiError("NOT_FOUND", "Cliente no encontrado.", 404);
+        const duplicateDetails = `${error.message} ${error.details || ""} ${error.constraint || ""}`;
+        if (duplicateDetails.includes("WHOLESALE_CODE_ALREADY_USED") || duplicateDetails.includes("wholesale_code_history_code_hash_uidx") || duplicateDetails.includes("customers_wholesale_code_hash_uidx")) {
+          return apiError("BAD_REQUEST", "Ese código mayorista ya fue utilizado.", 409);
+        }
         return apiError("INTERNAL_ERROR", "No se pudo actualizar el acceso mayorista.", 500);
       }
-      return NextResponse.json({ ok: true, data: { customer: data, ...(code ? { code } : {}) } }, { headers: { "Cache-Control": "no-store, private" } });
+      return NextResponse.json({ ok: true, data: { customer: data } }, { headers: { "Cache-Control": "no-store, private" } });
     } catch (error) { return apiInternalError("admin_customer_wholesale", error); }
   }
   if (!["create", "edit"].includes(action) && !(await isAdminAuthenticated())) return apiError("FORBIDDEN", "Acceso denegado.", 403);
