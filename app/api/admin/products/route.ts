@@ -7,6 +7,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { mapAdminProductRow } from "@/lib/supabase/products";
 import { buildProductClassificationPatch } from "@/lib/product-taxonomy";
 import { readJsonObject } from "@/lib/api";
+import { validateProductMoney } from "@/lib/product-pricing";
 
 export type ProductInsert = Database["public"]["Tables"]["products"]["Insert"];
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
@@ -83,6 +84,16 @@ export async function POST(request: Request) {
     } catch (error) {
       return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Imágenes no válidas." }, { status: 400 });
     }
+    let wholesalePrice: number | null | undefined;
+    try {
+      validateProductMoney(product.price, "Precio minorista");
+      validateProductMoney(product.costPrice, "Costo", true);
+      validateProductMoney(product.previousPrice, "Precio anterior", true);
+      if (product.marginPercentage != null && (typeof product.marginPercentage !== "number" || !Number.isFinite(product.marginPercentage) || Math.abs(product.marginPercentage) > 9999.99)) throw new Error("Recargo sobre costo fuera del rango admitido.");
+      if (Object.hasOwn(product, "wholesalePrice")) wholesalePrice = validateProductMoney(product.wholesalePrice, "Precio mayorista", true, true);
+    } catch (error) {
+      return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Importes inválidos." }, { status: 400 });
+    }
     const supabase = createAdminServerClient();
     const existing = await supabase.from("products").select("id,category").eq("id", product.id).maybeSingle();
     if (existing.error) throw new Error(existing.error.message);
@@ -130,6 +141,7 @@ export async function POST(request: Request) {
       warranty: product.warranty || null,
       warranty_days: product.warrantyDays ?? null,
       cost_price: optionalNumber(product.costPrice),
+      ...(wholesalePrice === undefined ? {} : { wholesale_price: wholesalePrice }),
       margin_percentage: optionalNumber(product.marginPercentage),
       stock_min: nonNegativeInteger(product.stockMin),
     };
@@ -145,6 +157,7 @@ export async function POST(request: Request) {
 
     if (error) {
       console.warn("Error al persistir producto en Supabase:", error.message);
+      if (/wholesale_price/.test(error.message)) return NextResponse.json({ ok: false, message: "Aplicá la migración de precio mayorista antes de guardar ese campo. No se guardaron los cambios." }, { status: 503 });
       if (/additional_image_urls/.test(error.message)) return NextResponse.json({ ok: false, message: "Aplicá la migración de imágenes adicionales antes de guardar las imágenes del producto." }, { status: 503 });
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }

@@ -35,7 +35,7 @@ function apiHarness(authenticated = true, error = null) {
     '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => db },
     '@/lib/supabase/products': {}, '@/lib/product-images': images,
   });
-  const save = additions => api.POST(new Request('https://test.invalid', { method: 'POST', body: JSON.stringify({ product: { id: 'p', name: 'Product', category: 'General', image: '/cover.webp', stock: 99, ...additions } }) }));
+  const save = additions => api.POST(new Request('https://test.invalid', { method: 'POST', body: JSON.stringify({ product: { id: 'p', name: 'Product', price: 100, category: 'General', image: '/cover.webp', stock: 99, ...additions } }) }));
   return { writes, save };
 }
 test('product API saves/replaces/removes additions, preserves omitted images and never changes stock or classification', async () => {
@@ -71,6 +71,8 @@ test('compact manager searches loaded products, opens one editor, cancels drafts
   const originals = [{ id: 'a', name: 'Alpha', price: 150, stock: 4, active: true, image: '/main.webp', images: ['/second.webp'], category: 'General' }, { id: 'b', name: 'Beta', price: 90, stock: 2, active: false }];
   const Dialog = () => null, Classification = () => null;
   const { AdminProductsManager } = load('components/admin/EditorForms.tsx', {
+    '@/components/admin/ProductPricingFields': { ProductPricingFields: () => null },
+    '@/components/admin/WhyUsCardsEditor': { WhyUsCardsEditor: () => null },
     react: h.react, '@/components/admin/ProductEditorDialog': { ProductEditorDialog: Dialog }, '@/components/admin/ProductClassificationEditor': { ProductClassificationEditor: Classification },
     '@/components/providers/SiteContentProvider': {}, '@/components/ui/ManagedImage': { ManagedImage: () => null },
     '@/lib/supabase/storage': { validateImageFile: () => ({ valid: true }) },

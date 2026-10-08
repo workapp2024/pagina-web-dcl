@@ -33,6 +33,7 @@ export type Product = {
   warrantyDays?: number;
   /** Campos privados: sólo se cargan a través de la API administrativa. */
   costPrice?: number;
+  wholesalePrice?: number | null;
   marginPercentage?: number;
   stock?: number;
   stockMin?: number;

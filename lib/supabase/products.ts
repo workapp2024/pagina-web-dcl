@@ -73,6 +73,7 @@ function mapProductRow(row: PublicProductRow, includePrivateFields = false): Pro
   if (includePrivateFields) {
     const adminRow = row as ProductRow;
     product.costPrice = adminRow.cost_price ?? undefined;
+    product.wholesalePrice = adminRow.wholesale_price;
     product.marginPercentage = adminRow.margin_percentage ?? undefined;
     product.stock = adminRow.stock;
     product.stockMin = adminRow.stock_min;

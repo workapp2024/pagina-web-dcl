@@ -58,6 +58,7 @@ export interface Database {
           warranty: string | null;
           warranty_days: number | null;
           cost_price: number | null;
+          wholesale_price: number | null;
           margin_percentage: number | null;
           stock: number;
           stock_min: number;
@@ -92,6 +93,7 @@ export interface Database {
           warranty?: string | null;
           warranty_days?: number | null;
           cost_price?: number | null;
+          wholesale_price?: number | null;
           margin_percentage?: number | null;
           stock?: number;
           stock_min?: number;
@@ -126,6 +128,7 @@ export interface Database {
           warranty?: string | null;
           warranty_days?: number | null;
           cost_price?: number | null;
+          wholesale_price?: number | null;
           margin_percentage?: number | null;
           stock?: number;
           stock_min?: number;

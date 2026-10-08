@@ -20,11 +20,7 @@ import { upsertSupabaseVehicleCategory } from "@/lib/supabase/vehicle-categories
 import { upsertSupabaseSiteSettings } from "@/lib/supabase/site-settings";
 import { pickSiteSettings } from "@/lib/site-settings-patch";
 import { upsertSupabaseHomeSettings } from "@/lib/supabase/home-settings";
-import {
-  calculateMarginPercentage,
-  calculateSalePrice,
-  parsePricingInput,
-} from "@/lib/product-pricing";
+import { ProductPricingFields } from "@/components/admin/ProductPricingFields";
 
 function slugifyProductName(value: string): string {
   return value
@@ -35,7 +31,6 @@ function slugifyProductName(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-type PricingDraft = Partial<Record<"cost" | "margin" | "price", string>>;
 
 function SectionCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
@@ -154,7 +149,7 @@ export function AdminProductsManager() {
   const [dirty, setDirty] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [pricingDrafts, setPricingDrafts] = useState<Record<string, PricingDraft>>({});
+  const [pricingInvalid, setPricingInvalid] = useState(false);
   const [productStatuses, setProductStatuses] = useState<
     Record<string, { status: "saving" | "success" | "error"; message?: string }>
   >({});
@@ -178,7 +173,7 @@ export function AdminProductsManager() {
   }, []);
 
   const saveProductToSupabase = async (productToSave: Product): Promise<boolean> => {
-    if (saving.current || uploading || classificationSaving) return false;
+    if (saving.current || uploading || classificationSaving || pricingInvalid) return false;
     saving.current = true;
     setProductStatuses((prev) => ({
       ...prev,
@@ -216,56 +211,6 @@ export function AdminProductsManager() {
     setEditingProduct(previous => previous?.id === productId ? { ...previous, ...changes } : previous);
   };
 
-  const updatePricingDraft = (productId: string, field: keyof PricingDraft, value: string) => {
-    setPricingDrafts((previous) => ({
-      ...previous,
-      [productId]: { ...previous[productId], [field]: value },
-    }));
-  };
-
-  const updateCost = (product: Product, rawValue: string) => {
-    updatePricingDraft(product.id, "cost", rawValue);
-    const cost = parsePricingInput(rawValue);
-    if (cost === undefined || cost <= 0) {
-      updateProduct(product.id, { costPrice: cost, marginPercentage: undefined });
-      updatePricingDraft(product.id, "margin", "");
-      return;
-    }
-
-    const margin = calculateMarginPercentage(cost, product.price);
-    updateProduct(product.id, { costPrice: cost, marginPercentage: margin });
-    updatePricingDraft(product.id, "margin", margin === undefined ? "" : String(margin));
-  };
-
-  const updateSalePrice = (product: Product, rawValue: string) => {
-    updatePricingDraft(product.id, "price", rawValue);
-    const salePrice = parsePricingInput(rawValue);
-    if (salePrice === undefined) {
-      if (!rawValue.trim()) updateProduct(product.id, { price: 0 });
-      return;
-    }
-
-    const margin = calculateMarginPercentage(product.costPrice, salePrice);
-    updateProduct(product.id, { price: salePrice, marginPercentage: margin });
-    if (margin !== undefined) updatePricingDraft(product.id, "margin", String(margin));
-  };
-
-  const updateMargin = (product: Product, rawValue: string) => {
-    updatePricingDraft(product.id, "margin", rawValue);
-    const margin = parsePricingInput(rawValue);
-    if (margin === undefined) {
-      if (!rawValue.trim()) updateProduct(product.id, { marginPercentage: undefined });
-      return;
-    }
-
-    const salePrice = calculateSalePrice(product.costPrice, margin);
-    updateProduct(product.id, {
-      marginPercentage: margin,
-      ...(salePrice === undefined ? {} : { price: salePrice }),
-    });
-    if (salePrice !== undefined) updatePricingDraft(product.id, "price", String(salePrice));
-  };
-
   const addProduct = () => {
     const timestamp = Date.now();
     const productName = "Nuevo producto";
@@ -288,7 +233,7 @@ export function AdminProductsManager() {
       ctaText: "VER PRODUCTO",
     };
 
-    setPricingDrafts({});
+    setPricingInvalid(false);
     setNewProduct(nextProduct);
     setEditingProduct(null);
     setDirty(false);
@@ -349,7 +294,7 @@ export function AdminProductsManager() {
       <label className="block text-sm text-zinc-300">Buscar producto…<input type="search" placeholder="Buscar producto…" value={search} onChange={event => setSearch(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-zinc-950 px-4 text-base" /></label>
       <div className="space-y-3">{visibleProducts.map(product => <article key={product.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-zinc-950 p-4">
         <div className="min-w-0"><h2 className="break-words font-bold text-white">{product.name}</h2><p className="mt-1 text-sm text-zinc-300">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(product.price)} · Stock: {product.stock ?? 0} · {product.active ? "Activo" : "Inactivo"}</p></div>
-        <button type="button" onClick={() => { setEditingProduct({ ...product }); setPricingDrafts({}); setDirty(false); setClassificationPending(false); }} className="min-h-11 rounded-full border border-red-500/50 px-5 text-sm font-bold text-red-300">Editar</button>
+        <button type="button" onClick={() => { setEditingProduct({ ...product }); setPricingInvalid(false); setDirty(false); setClassificationPending(false); }} className="min-h-11 rounded-full border border-red-500/50 px-5 text-sm font-bold text-red-300">Editar</button>
       </article>)}</div>
       {!isLoadingProducts && !visibleProducts.length && <p className="text-sm text-zinc-400">No se encontraron productos.</p>}
       {(selectedProduct ? [selectedProduct] : []).map((product) => {
@@ -387,33 +332,7 @@ export function AdminProductsManager() {
                   />
                 </label>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block text-sm text-zinc-300">
-                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Precio de venta</span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={pricingDrafts[product.id]?.price ?? String(product.price)}
-                      onChange={(event) => updateSalePrice(product, event.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
-                    />
-                    <span className="mt-1 block text-[11px] text-zinc-500">Podés modificar el precio de venta o el margen. El otro valor se calcula automáticamente según el costo.</span>
-                  </label>
-
-                  <label className="block text-sm text-zinc-300">
-                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Precio anterior</span>
-                    <input
-                      type="number"
-                      value={product.previousPrice ?? ""}
-                      onChange={(event) =>
-                        updateProduct(product.id, {
-                          previousPrice: event.target.value === "" ? undefined : Number(event.target.value),
-                        })
-                      }
-                      className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
-                    />
-                  </label>
-                </div>
+                <ProductPricingFields key={product.id} product={product} onChange={changes => updateProduct(product.id, changes)} onValidityChange={setPricingInvalid} />
 
                 <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
                   <label className="inline-flex items-center gap-2">
@@ -535,29 +454,6 @@ export function AdminProductsManager() {
                   </p>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <label className="block text-sm text-zinc-300">
-                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Costo</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={pricingDrafts[product.id]?.cost ?? (product.costPrice === undefined ? "" : String(product.costPrice))}
-                        onChange={(event) => updateCost(product, event.target.value)}
-                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
-                      />
-                    </label>
-
-                    <label className="block text-sm text-zinc-300">
-                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Margen (%)</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={pricingDrafts[product.id]?.margin ?? (product.marginPercentage === undefined ? "" : String(product.marginPercentage))}
-                        onChange={(event) => updateMargin(product, event.target.value)}
-                        className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white"
-                      />
-                      <span className="mt-1 block text-[11px] text-zinc-500">Acepta decimales con coma, por ejemplo 74,76.</span>
-                    </label>
-
-                    <label className="block text-sm text-zinc-300">
                       <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Stock actual</span>
                       <input
                         type="number"
@@ -588,7 +484,7 @@ export function AdminProductsManager() {
                     <button
                       type="button"
                       onClick={() => void finishSave(product)}
-                      disabled={statusInfo?.status === "saving"}
+                      disabled={pricingInvalid || statusInfo?.status === "saving"}
                       className="rounded-full bg-red-600 px-5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500 disabled:opacity-50"
                     >
                       {statusInfo?.status === "saving" ? "Guardando..." : "Guardar producto"}
