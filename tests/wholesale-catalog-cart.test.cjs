@@ -89,11 +89,27 @@ test('cart persistence prunes ineligible products and clears only after successf
   assert.ok(source.indexOf('if (!response.ok || !body.ok) throw') < source.indexOf('clearSubmittedSelection(currentSelection)'));
 });
 
-test('no-op selection actions preserve selection while actual changes keep attempt state server-side', () => {
+test('quantity controls accept only integer drafts from 1 to 100 and restore invalid values', () => {
+  assert.equal(selectionTools.parseWholesaleQuantityDraft('2'), 2);
+  assert.equal(selectionTools.parseWholesaleQuantityDraft('12'), 12);
+  for (const value of ['', '0', '101', '-1', '1.5', 'NaN', ' 2']) {
+    assert.equal(selectionTools.parseWholesaleQuantityDraft(value), null, value);
+  }
+
+  const drawer = fs.readFileSync('components/wholesale/WholesaleCartDrawer.tsx', 'utf8');
+  assert.match(drawer, /type="text"[\s\S]*inputMode="numeric"/);
+  assert.match(drawer, /value=\{draft\}/);
+  assert.match(drawer, /onChange=\{event => setEdit\(\{ quantity, draft: event\.target\.value, invalid: false \}\)\}/);
+  assert.match(drawer, /onBlur=\{commitDraft\}/);
+  assert.match(drawer, /if \(parsed === null\) \{\s*setEdit\(\{ quantity, draft: String\(quantity\), invalid: true \}\)/);
+  assert.match(drawer, /onQuantityChange\(product\.id, 0\)/);
+});
+
+test('add increments an existing product once, quantity updates reject invalid values, and totals stay aligned', () => {
   const selection = { 'h7-led': { product: products[0], quantity: 2 } };
-  const noOpAdd = selectionTools.addWholesaleProduct(selection, products[0]);
-  assert.equal(noOpAdd.changed, false);
-  assert.equal(noOpAdd.selection, selection);
+  const incremented = selectionTools.addWholesaleProduct(selection, products[0]);
+  assert.equal(incremented.changed, true);
+  assert.equal(incremented.selection['h7-led'].quantity, 3);
 
   const sameQuantity = selectionTools.setWholesaleQuantity(selection, 'h7-led', 2);
   assert.equal(sameQuantity.changed, false);
@@ -107,6 +123,19 @@ test('no-op selection actions preserve selection while actual changes keep attem
   assert.equal(addedProduct.changed, true);
   assert.equal(addedProduct.selection['fog-led'].quantity, 1);
 
+  for (const invalid of [-1, 1.5, 101, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const rejected = selectionTools.setWholesaleQuantity(selection, 'h7-led', invalid);
+    assert.equal(rejected.changed, false);
+    assert.equal(rejected.selection, selection);
+  }
+
+  const totals = selectionTools.getWholesaleSelectionTotals({
+    'h7-led': { product: products[0], quantity: 2 },
+    'fog-led': { product: products[1], quantity: 3 },
+  });
+  assert.deepEqual(plain(totals), { totalUnits: 5, indicativeTotal: 78000 });
+  assert.equal(selectionTools.addWholesaleProduct({ 'h7-led': { product: products[0], quantity: 100 } }, products[0]).changed, false);
+
   const removedProduct = selectionTools.setWholesaleQuantity(selection, 'h7-led', 0);
   assert.equal(removedProduct.changed, true);
   assert.equal(removedProduct.selection['h7-led'], undefined);
@@ -115,6 +144,8 @@ test('no-op selection actions preserve selection while actual changes keep attem
   assert.match(source, /El carrito actual se mantiene aparte/);
   assert.match(source, /window\.addEventListener\("storage", syncSelection\)/);
   assert.match(source, /savedSelection !== serializeWholesaleSelection\(submitted\)/);
+  assert.match(source, /cartFeedback/);
+  assert.match(source, /selectedQuantity=\{selection\[product\.id\]\?\.quantity\}/);
 });
 
 test('top cart uses one drawer for quantity edits and order submission', () => {

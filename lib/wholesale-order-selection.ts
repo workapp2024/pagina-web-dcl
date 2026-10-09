@@ -73,10 +73,28 @@ export function addWholesaleProduct(
   selection: WholesaleOrderSelection,
   product: WholesaleCatalogItem,
 ) {
-  if (selection[product.id]) return { selection, changed: false };
+  const current = selection[product.id];
+  if (current?.quantity >= 100) return { selection, changed: false };
   return {
-    selection: { ...selection, [product.id]: { product, quantity: 1 } },
+    selection: {
+      ...selection,
+      [product.id]: { product, quantity: current ? current.quantity + 1 : 1 },
+    },
     changed: true,
+  };
+}
+
+export function parseWholesaleQuantityDraft(value: string): number | null {
+  if (!/^[0-9]+$/.test(value)) return null;
+  const quantity = Number(value);
+  return Number.isInteger(quantity) && quantity >= 1 && quantity <= 100 ? quantity : null;
+}
+
+export function getWholesaleSelectionTotals(selection: WholesaleOrderSelection) {
+  const items = Object.values(selection);
+  return {
+    totalUnits: items.reduce((sum, item) => sum + item.quantity, 0),
+    indicativeTotal: items.reduce((sum, item) => sum + item.product.wholesalePrice * item.quantity, 0),
   };
 }
 
@@ -86,6 +104,9 @@ export function setWholesaleQuantity(
   quantity: number,
 ) {
   const current = selection[productId];
+  if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100) {
+    return { selection, changed: false };
+  }
   if (!current || (quantity > 0 && current.quantity === quantity)) {
     return { selection, changed: false };
   }

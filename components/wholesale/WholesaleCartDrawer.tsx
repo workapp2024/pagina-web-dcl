@@ -1,9 +1,78 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getWholesaleSelectionTotals, parseWholesaleQuantityDraft } from "@/lib/wholesale-order-selection";
 import type { WholesaleOrderSelection } from "@/lib/wholesale-order-selection";
 
 const money = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+
+function WholesaleCartItem({
+  product, quantity, busy, onQuantityChange,
+}: {
+  product: WholesaleOrderSelection[string]["product"];
+  quantity: number;
+  busy: boolean;
+  onQuantityChange: (productId: string, quantity: number) => void;
+}) {
+  const [edit, setEdit] = useState({ quantity, draft: String(quantity), invalid: false });
+  const draft = edit.quantity === quantity ? edit.draft : String(quantity);
+  const invalid = edit.quantity === quantity && edit.invalid;
+  const inputId = `wholesale-quantity-${product.id}`;
+  const hintId = `${inputId}-hint`;
+
+  function commitDraft() {
+    const parsed = parseWholesaleQuantityDraft(draft);
+    if (parsed === null) {
+      setEdit({ quantity, draft: String(quantity), invalid: true });
+      return;
+    }
+    setEdit({ quantity: parsed, draft: String(parsed), invalid: false });
+    onQuantityChange(product.id, parsed);
+  }
+
+  function adjustQuantity(delta: number) {
+    const parsed = parseWholesaleQuantityDraft(draft);
+    const base = parsed ?? quantity;
+    const next = Math.max(1, Math.min(100, base + delta));
+    setEdit({ quantity: next, draft: String(next), invalid: false });
+    onQuantityChange(product.id, next);
+  }
+
+  return <li className="rounded-xl border border-white/10 bg-black/25 p-3 sm:p-4">
+    <div className="min-w-0">
+      <h3 className="break-words text-base font-bold leading-6 text-white">{product.name}</h3>
+      <div className="mt-1 grid grid-cols-2 gap-2 text-sm">
+        <p className="min-w-0 text-zinc-400"><span className="block text-xs uppercase tracking-wide text-zinc-500">Precio unitario</span>{money.format(product.wholesalePrice)}</p>
+        <p className="min-w-0 text-right font-semibold text-white"><span className="block text-xs font-normal uppercase tracking-wide text-zinc-500">Subtotal</span>{money.format(product.wholesalePrice * quantity)}</p>
+      </div>
+    </div>
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <span className="mr-auto text-xs font-semibold uppercase tracking-wide text-zinc-400">Cantidad</span>
+      <button type="button" aria-label={`Disminuir cantidad de ${product.name}`} disabled={busy || quantity <= 1} onClick={() => adjustQuantity(-1)} className="min-h-11 min-w-11 rounded-lg border border-white/20 text-lg font-bold text-white disabled:opacity-40">−</button>
+      <input
+        id={inputId}
+        aria-label={`Cantidad de ${product.name}`}
+        aria-invalid={invalid}
+        aria-describedby={invalid ? hintId : undefined}
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        autoComplete="off"
+        value={draft}
+        disabled={busy}
+        onChange={event => setEdit({ quantity, draft: event.target.value, invalid: false })}
+        onBlur={commitDraft}
+        onKeyDown={event => {
+          if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+        }}
+        className="min-h-11 w-16 rounded-lg border border-white/20 bg-zinc-950 px-2 text-center text-base font-bold text-white focus-visible:outline-2 focus-visible:outline-red-400"
+      />
+      <button type="button" aria-label={`Aumentar cantidad de ${product.name}`} disabled={busy || quantity >= 100} onClick={() => adjustQuantity(1)} className="min-h-11 min-w-11 rounded-lg border border-white/20 text-lg font-bold text-white disabled:opacity-40">+</button>
+      <button type="button" disabled={busy} onClick={() => onQuantityChange(product.id, 0)} className="min-h-11 rounded-lg px-3 text-sm font-semibold text-red-300 underline underline-offset-4 disabled:opacity-50">Eliminar</button>
+    </div>
+    {invalid && <p id={hintId} role="status" className="mt-2 text-xs text-amber-200">Ingresá un entero de 1 a 100. Se restauró la cantidad anterior.</p>}
+  </li>;
+}
 
 export function WholesaleCartDrawer({
   open, onClose, selection, busy, error, message, onQuantityChange, onSubmit,
@@ -19,8 +88,7 @@ export function WholesaleCartDrawer({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const items = Object.values(selection);
-  const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
-  const indicativeTotal = items.reduce((sum, item) => sum + item.product.wholesalePrice * item.quantity, 0);
+  const { totalUnits, indicativeTotal } = getWholesaleSelectionTotals(selection);
 
   useEffect(() => {
     const element = dialog.current;
@@ -50,12 +118,8 @@ export function WholesaleCartDrawer({
       {message && <p role="status" className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-950/30 p-4 text-sm leading-6 text-emerald-100">{message}</p>}
 
       {items.length ? <>
-        <ul className="divide-y divide-white/10">
-          {items.map(({ product, quantity }) => <li key={product.id} className="flex flex-wrap items-center gap-3 py-4">
-            <span className="min-w-0 flex-1 font-semibold">{product.name}<span className="block text-sm text-zinc-400">Subtotal orientativo: {money.format(product.wholesalePrice * quantity)}</span></span>
-            <label className="text-sm text-zinc-300">Cantidad <input aria-label={`Cantidad de ${product.name}`} type="number" min={1} max={100} value={quantity} disabled={busy} onChange={event => onQuantityChange(product.id, Math.min(100, Math.max(1, Number(event.target.value) || 1)))} className="ml-2 min-h-11 w-20 rounded-lg border border-white/20 bg-black px-2 text-white" /></label>
-            <button type="button" disabled={busy} onClick={() => onQuantityChange(product.id, 0)} className="min-h-11 px-3 text-sm text-red-300 underline disabled:opacity-50">Quitar</button>
-          </li>)}
+        <ul className="mt-4 space-y-3">
+          {items.map(({ product, quantity }) => <WholesaleCartItem key={product.id} product={product} quantity={quantity} busy={busy} onQuantityChange={onQuantityChange} />)}
         </ul>
         <p className="mt-3 text-right text-lg font-bold">Total orientativo: {money.format(indicativeTotal)}</p>
         <p className="mt-2 text-sm leading-6 text-zinc-400">Enviar crea una solicitud para revisión. DCL debe verificar disponibilidad y confirmar las condiciones antes de que exista una compra confirmada.</p>

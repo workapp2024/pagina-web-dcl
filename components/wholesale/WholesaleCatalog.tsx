@@ -8,7 +8,7 @@ import { WholesaleProductCard } from "@/components/wholesale/WholesaleProductCar
 import { findWholesaleVehicleMatches, filterWholesaleCatalogProducts, getWholesaleCatalogView, productFromWholesaleItem, uniqueWholesaleCatalogProducts } from "@/lib/wholesale-catalog-search";
 import type { WholesaleVehicleMatch } from "@/lib/wholesale-catalog-search";
 import { getPublicVehicleTypes, searchPublicVehicleCompatibilities } from "@/lib/supabase/vehicle-compatibility";
-import { addWholesaleProduct, persistWholesaleSelection, restoreWholesaleSelection, restoreWholesaleSelectionFromStorage, serializeWholesaleSelection, setWholesaleQuantity, WHOLESALE_SELECTION_STORAGE_KEY } from "@/lib/wholesale-order-selection";
+import { addWholesaleProduct, getWholesaleSelectionTotals, persistWholesaleSelection, restoreWholesaleSelection, restoreWholesaleSelectionFromStorage, serializeWholesaleSelection, setWholesaleQuantity, WHOLESALE_SELECTION_STORAGE_KEY } from "@/lib/wholesale-order-selection";
 import type { WholesaleOrderAttempt, WholesaleOrderSelection } from "@/lib/wholesale-order-selection";
 import type { WholesaleCatalogItem } from "@/lib/wholesale-server";
 
@@ -37,6 +37,7 @@ export function WholesaleCatalog() {
   const [cartOpen, setCartOpen] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
   const [orderError, setOrderError] = useState("");
+  const [cartFeedback, setCartFeedback] = useState("");
   const submissionInFlight = useRef(false);
   const selectionVersionRef = useRef(0);
   const catalogRequestRef = useRef(0);
@@ -179,7 +180,7 @@ export function WholesaleCatalog() {
   const resultProducts = catalogView.products;
   const hasActiveSearch = catalogView.active;
   const compatibilityById = new Map((vehicleResults || []).map(result => [result.product.id, result.fitments.join(" · ")]));
-  const totalUnits = Object.values(selection).reduce((sum, item) => sum + item.quantity, 0);
+  const { totalUnits } = getWholesaleSelectionTotals(selection);
 
   function saveSelection(next: WholesaleOrderSelection) {
     selectionVersionRef.current += 1;
@@ -204,8 +205,13 @@ export function WholesaleCatalog() {
   function addProduct(product: WholesaleCatalogItem) {
     if (submissionInFlight.current) return;
     const result = addWholesaleProduct(selectionRef.current, product);
-    if (!result.changed) return;
+    if (!result.changed) {
+      if (selectionRef.current[product.id]?.quantity >= 100) setCartFeedback(`${product.name}: ya alcanzaste el máximo de 100 unidades.`);
+      return;
+    }
     saveSelection(result.selection);
+    const quantity = result.selection[product.id].quantity;
+    setCartFeedback(`${product.name}: ${quantity === 1 ? "agregado al carrito" : `cantidad actualizada a ${quantity}`}.`);
     setOrderError(""); setOrderMessage("");
   }
 
@@ -311,12 +317,13 @@ export function WholesaleCatalog() {
     <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.25em] text-red-300">DCL CREE LED</p><h1 className="mt-2 text-2xl font-black uppercase tracking-tight sm:text-4xl">Catálogo mayorista</h1><p className="mt-2 text-sm text-zinc-400">Precios exclusivos para clientes mayoristas.</p></div>
       <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
-        <button type="button" onClick={() => setCartOpen(true)} aria-haspopup="dialog" aria-expanded={cartOpen} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-red-400/60 px-3 text-sm font-bold text-white hover:bg-red-950/40 focus-visible:outline-2 focus-visible:outline-red-400 sm:flex-none sm:px-5">
+        <button type="button" onClick={() => setCartOpen(true)} aria-label={`Abrir carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`} aria-haspopup="dialog" aria-expanded={cartOpen} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-red-400/60 px-3 text-sm font-bold text-white hover:bg-red-950/40 focus-visible:outline-2 focus-visible:outline-red-400 sm:flex-none sm:px-5">
           <span>Carrito</span><span aria-label={`${totalUnits} unidades`} className="rounded-full bg-red-600 px-2 py-0.5 text-xs">{totalUnits}</span>
         </button>
         <button type="button" disabled={busy} onClick={() => void logout()} className="min-h-12 flex-1 rounded-full border border-white/20 px-3 text-sm font-semibold disabled:opacity-50 sm:flex-none sm:px-5">{busy ? "Saliendo…" : "Cerrar sesión"}</button>
       </div>
     </div>
+    {cartFeedback && <p role="status" aria-live="polite" className="-mt-2 mb-5 text-sm text-emerald-200">{cartFeedback}</p>}
 
     {(attempts.length > 0 || attemptsLoading || attemptsError) && <section aria-label="Solicitudes recuperables" className="mb-6 space-y-3">
       {attemptsLoading && <p role="status" className="text-sm text-zinc-400">Cargando intentos recuperables…</p>}
@@ -399,7 +406,7 @@ export function WholesaleCatalog() {
         {vehicleResults?.length ? <p className="mt-1 text-xs text-emerald-200">Compatibilidad encontrada en la base de vehículos.</p> : null}
       </div>
       {resultProducts.length > 0 ? <>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{resultProducts.map(product => <WholesaleProductCard key={product.id} product={product} compatibility={compatibilityById.get(product.id)} onAdd={addProduct} selected={Boolean(selection[product.id])} />)}</div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{resultProducts.map(product => <WholesaleProductCard key={product.id} product={product} compatibility={compatibilityById.get(product.id)} onAdd={addProduct} selected={Boolean(selection[product.id])} selectedQuantity={selection[product.id]?.quantity} />)}</div>
       </>
         : <div className="rounded-2xl border border-white/10 p-5 text-sm leading-6 text-zinc-300">
           <p>{uniqueProducts.length === 0 ? "Por el momento no hay productos con precio mayorista disponible." : appliedQuery ? "No encontramos productos ni compatibilidades para esta búsqueda." : "No hay productos para mostrar con esta categoría."}</p>
