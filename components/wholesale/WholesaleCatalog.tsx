@@ -313,22 +313,57 @@ export function WholesaleCatalog() {
     } finally { setBusy(false); }
   }
 
-  return <main className="mx-auto min-h-[70vh] max-w-7xl px-4 py-7 text-white sm:px-6 sm:py-10 lg:px-8">
-    <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.25em] text-red-300">DCL CREE LED</p><h1 className="mt-2 text-2xl font-black uppercase tracking-tight sm:text-4xl">Catálogo mayorista</h1><p className="mt-2 text-sm text-zinc-400">Precios exclusivos para clientes mayoristas.</p></div>
-      <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
-        <button type="button" onClick={() => setCartOpen(true)} aria-label={`Abrir carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`} aria-haspopup="dialog" aria-expanded={cartOpen} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-red-400/60 px-3 text-sm font-bold text-white hover:bg-red-950/40 focus-visible:outline-2 focus-visible:outline-red-400 sm:flex-none sm:px-5">
+  return <main className="mx-auto min-h-[70vh] max-w-7xl px-4 py-5 pb-[calc(env(safe-area-inset-bottom)+6rem)] text-white sm:px-6 sm:py-8 sm:pb-10 lg:px-8">
+    <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--red)]">DCL CREE LED <span className="text-zinc-400">· MAYORISTAS</span></p><h1 className="mt-1 text-2xl font-black tracking-tight sm:text-4xl">Catálogo</h1><p className="mt-1 text-sm text-zinc-400">Precios exclusivos para clientes mayoristas.</p></div>
+      <div className="flex w-full justify-end gap-2 sm:w-auto sm:shrink-0">
+        <button type="button" onClick={() => setCartOpen(true)} aria-label={`Abrir carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`} aria-haspopup="dialog" aria-expanded={cartOpen} className="hidden min-h-12 items-center justify-center gap-2 rounded-full border border-[var(--red)] px-3 text-sm font-bold text-white hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-[var(--red)] sm:inline-flex sm:px-5">
           <span>Carrito</span><span aria-label={`${totalUnits} unidades`} className="rounded-full bg-red-600 px-2 py-0.5 text-xs">{totalUnits}</span>
         </button>
-        <button type="button" disabled={busy} onClick={() => void logout()} className="min-h-12 flex-1 rounded-full border border-white/20 px-3 text-sm font-semibold disabled:opacity-50 sm:flex-none sm:px-5">{busy ? "Saliendo…" : "Cerrar sesión"}</button>
+        <button type="button" disabled={busy} onClick={() => void logout()} className="min-h-12 w-full rounded-full border border-white/20 px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-[var(--red)] disabled:opacity-50 sm:w-auto sm:flex-none sm:px-5">{busy ? "Saliendo…" : "Cerrar sesión"}</button>
       </div>
     </div>
     {cartFeedback && <p role="status" aria-live="polite" className="-mt-2 mb-5 text-sm text-emerald-200">{cartFeedback}</p>}
 
+    <section aria-label="Buscar productos mayoristas" className="mb-4 rounded-2xl border border-white/10 bg-zinc-950 p-3 sm:p-4">
+      <p className="mb-2 px-1 text-sm font-semibold text-white">Encontrá un producto o compatibilidad</p>
+      <form onSubmit={event => void search(event)}>
+        <label htmlFor="wholesale-search" className="sr-only">Buscar producto, conector o vehículo</label>
+        <div className="flex min-w-0 gap-2">
+          <input id="wholesale-search" type="search" value={query} onChange={event => { setQuery(event.target.value.slice(0, 120)); setAppliedQuery(""); setVehicleResults(null); setVehicleError(""); }} placeholder="Producto, conector o vehículo…" maxLength={120} className="min-h-12 min-w-0 flex-1 rounded-xl border border-white/15 bg-black px-3 text-base text-white placeholder:text-zinc-500 focus-visible:outline-2 focus-visible:outline-[var(--red)] sm:px-4" />
+          <button type="submit" disabled={loading || vehicleLoading} className="min-h-12 shrink-0 rounded-xl bg-[var(--red)] px-4 text-sm font-bold text-[var(--background)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50 sm:rounded-full sm:px-6">{vehicleLoading ? "Buscando…" : "Buscar"}</button>
+        </div>
+        {(query || appliedQuery || category || vehicleResults !== null) && <button type="button" onClick={clearSearch} className="mt-2 min-h-11 px-2 text-sm text-[var(--red)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-[var(--red)]">Limpiar búsqueda y filtros</button>}
+      </form>
+    </section>
+
+    <div className="mb-5 grid gap-2 sm:grid-cols-2">
+      {categories.length > 1 && <details className="min-w-0 rounded-xl border border-white/10 bg-zinc-950/60 px-3">
+        <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-[var(--red)]">Filtrar por categoría{category ? ` · ${category}` : ""}</summary>
+        <label htmlFor="wholesale-category" className="block pb-3 text-sm text-zinc-300">Categoría
+          <select id="wholesale-category" value={category} onChange={event => { setCategory(event.target.value); setAppliedQuery(query.trim()); setVehicleResults(null); setVehicleError(""); }} className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-zinc-950 px-3 text-base text-white focus-visible:outline-2 focus-visible:outline-[var(--red)]">
+            <option value="">Todas las categorías</option>
+            {categories.map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+      </details>}
+
+      <details className="min-w-0 rounded-xl border border-white/10 bg-zinc-950/60 px-3">
+        <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-[var(--red)]">Buscar por vehículo</summary>
+        <div className="pb-3 pt-1">
+          <p className="mb-3 text-sm text-zinc-400">Elegí tipo, marca, modelo, año y posición para ver productos mayoristas compatibles.</p>
+          <VehicleFinder products={uniqueProducts.map(productFromWholesaleItem)} wholesaleMode onWholesaleAdd={productId => {
+            const product = uniqueProducts.find(item => item.id === productId);
+            if (product) addProduct(product);
+          }} />
+        </div>
+      </details>
+    </div>
+
     {(attempts.length > 0 || attemptsLoading || attemptsError) && <section aria-label="Solicitudes recuperables" className="mb-6 space-y-3">
-      {attemptsLoading && <p role="status" className="text-sm text-zinc-400">Cargando intentos recuperables…</p>}
-      {attemptsError && <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-sm text-amber-100"><p role="alert">{attemptsError}</p><button type="button" onClick={() => void refreshAttempts()} className="mt-2 min-h-10 rounded-full border border-amber-200/40 px-4 font-semibold">Reintentar intentos</button></div>}
-      {attempts.map(attempt => attempt.status === "open" ? <article key={attempt.attemptId} className="rounded-2xl border border-amber-300/40 bg-amber-950/20 p-4 sm:p-5">
+      {attemptsLoading && <p role="status" className="rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-400">Cargando intentos recuperables…</p>}
+      {attemptsError && <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-sm text-amber-100 sm:p-4"><p role="alert">{attemptsError}</p><button type="button" onClick={() => void refreshAttempts()} className="mt-2 min-h-11 rounded-full border border-amber-200/40 px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]">Reintentar intentos</button></div>}
+      {attempts.map(attempt => attempt.status === "open" ? <article key={attempt.attemptId} className="rounded-2xl border border-amber-300/40 bg-amber-950/20 p-3 sm:p-4">
         <h2 className="font-bold text-amber-100">Hay una solicitud pendiente de envío</h2>
         <p className="mt-1 text-sm leading-6 text-zinc-300">Este intento conserva los artículos originales. El carrito actual se mantiene aparte; para enviar una selección diferente, cerrá explícitamente este intento primero. El cierre solo funciona si todavía no se creó un pedido.</p>
         <ul className="mt-3 space-y-1 text-sm text-zinc-200">{attempt.items.map(item => {
@@ -337,64 +372,34 @@ export function WholesaleCatalog() {
         })}</ul>
         {orderError && <p role="alert" className="mt-3 text-sm text-red-200">{orderError}</p>}
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={() => void retryAttempt(attempt.attemptId)} className="min-h-11 rounded-full bg-amber-700 px-4 text-sm font-semibold text-white disabled:opacity-50">Reintentar este intento</button>
-          <button type="button" disabled={busy} onClick={() => void closeAttempt(attempt.attemptId)} className="min-h-11 rounded-full border border-amber-200/40 px-4 text-sm font-semibold text-amber-100 disabled:opacity-50">Cerrar intento pendiente</button>
+          <button type="button" disabled={busy} onClick={() => void retryAttempt(attempt.attemptId)} className="min-h-11 rounded-full bg-amber-700 px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Reintentar este intento</button>
+          <button type="button" disabled={busy} onClick={() => void closeAttempt(attempt.attemptId)} className="min-h-11 rounded-full border border-amber-200/40 px-4 text-sm font-semibold text-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Cerrar intento pendiente</button>
         </div>
-      </article> : <article key={attempt.attemptId} className="rounded-2xl border border-emerald-300/40 bg-emerald-950/20 p-4 sm:p-5">
+      </article> : <article key={attempt.attemptId} className="rounded-2xl border border-emerald-300/40 bg-emerald-950/20 p-3 sm:p-4">
         <h2 className="font-bold text-emerald-100">Solicitud creada{attempt.order?.orderNumber ? ` · ${attempt.order.orderNumber}` : ""}</h2>
         <p className="mt-1 text-sm leading-6 text-zinc-300">El resultado se recuperó del servidor. Tu selección local permanece intacta hasta que decidas qué hacer.</p>
         {attempt.order?.items?.length ? <ul className="mt-3 space-y-1 text-sm text-zinc-200">{attempt.order.items.map(item => <li key={item.productId}>{item.quantity} × {item.name}</li>)}</ul> : null}
         {orderError && <p role="alert" className="mt-3 text-sm text-red-200">{orderError}</p>}
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={() => void acknowledgeAttempt(attempt.attemptId)} className="min-h-11 rounded-full border border-emerald-200/40 px-4 text-sm font-semibold text-emerald-100 disabled:opacity-50">Ya vi esta solicitud</button>
-          <button type="button" disabled={busy || !Object.keys(selection).length} onClick={() => void submitOrder(true)} className="min-h-11 rounded-full bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-50">Nueva solicitud con el carrito actual</button>
+          <button type="button" disabled={busy} onClick={() => void acknowledgeAttempt(attempt.attemptId)} className="min-h-11 rounded-full border border-emerald-200/40 px-4 text-sm font-semibold text-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Ya vi esta solicitud</button>
+          <button type="button" disabled={busy || !Object.keys(selection).length} onClick={() => void submitOrder(true)} className="min-h-11 rounded-full bg-emerald-700 px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Nueva solicitud con el carrito actual</button>
         </div>
       </article>)}
     </section>}
 
-    {(ordersLoading || ordersError) && <section aria-label="Estado del historial" className="mb-3 rounded-xl border border-white/10 px-4 py-3">
+    {(ordersLoading || ordersError) && <section aria-label="Estado del historial" className="mb-3 rounded-xl border border-white/10 px-3 py-2">
       {ordersLoading && <p role="status" className="text-sm text-zinc-400">Cargando historial…</p>}
       {ordersError && <div className="text-sm text-amber-100"><p role="alert">{ordersError}</p><button type="button" onClick={() => void refreshOrders()} className="mt-2 min-h-10 rounded-full border border-amber-200/40 px-4 font-semibold">Reintentar historial</button></div>}
     </section>}
-    {orders.length > 0 && <details className="mb-6 rounded-xl border border-white/10 px-4">
-      <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-red-300">Solicitudes anteriores</summary>
+    {orders.length > 0 && <details className="mb-4 rounded-xl border border-white/10 px-3">
+      <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-[var(--red)]">Solicitudes anteriores</summary>
       <ul className="divide-y divide-white/10 pb-2">{orders.map(order => <li key={order.id} className="py-3">
         <p className="font-semibold">{order.order_number} · {order.status}</p>
         <p className="mt-1 text-xs text-zinc-400">{new Date(order.created_at).toLocaleDateString("es-AR")} · {order.items.reduce((sum, item) => sum + item.quantity, 0)} unidades</p>
         <ul className="mt-2 space-y-1 text-sm text-zinc-300">{order.items.map(item => <li key={item.productId}>{item.quantity} × {item.name}</li>)}</ul>
       </li>)}</ul>
-      {Object.keys(selection).length > 0 && <button type="button" disabled={busy} onClick={() => void submitOrder(true)} className="mb-3 min-h-11 rounded-full border border-red-300/50 px-4 text-sm font-semibold text-red-100 disabled:opacity-50">Crear otra solicitud con el carrito actual</button>}
+      {Object.keys(selection).length > 0 && <button type="button" disabled={busy} onClick={() => void submitOrder(true)} className="mb-3 min-h-11 rounded-full border border-[color:var(--red)] px-4 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Crear otra solicitud con el carrito actual</button>}
     </details>}
-
-    <form onSubmit={event => void search(event)} className="mb-4 rounded-2xl border border-white/10 bg-zinc-950 p-3 sm:p-4">
-      <label htmlFor="wholesale-search" className="sr-only">Buscar producto, conector o vehículo</label>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <input id="wholesale-search" type="search" value={query} onChange={event => { setQuery(event.target.value.slice(0, 120)); setAppliedQuery(""); setVehicleResults(null); setVehicleError(""); }} placeholder="Buscá producto, conector o vehículo…" maxLength={120} className="min-h-12 min-w-0 flex-1 rounded-xl border border-white/15 bg-black px-4 text-base text-white placeholder:text-zinc-500 focus-visible:outline-2 focus-visible:outline-red-400" />
-        <button type="submit" disabled={loading || vehicleLoading} className="min-h-12 rounded-full bg-red-600 px-6 text-sm font-bold text-white disabled:opacity-50">{vehicleLoading ? "Buscando…" : "Buscar"}</button>
-      </div>
-      {(query || appliedQuery || category || vehicleResults !== null) && <button type="button" onClick={clearSearch} className="mt-3 min-h-11 px-2 text-sm text-red-300 underline">Limpiar búsqueda y filtros</button>}
-    </form>
-
-    {categories.length > 1 && <details className="mb-5 rounded-xl border border-white/10 px-4">
-      <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-red-300">Filtrar por categoría</summary>
-      <label htmlFor="wholesale-category" className="block pb-4 text-sm text-zinc-300">Categoría
-        <select id="wholesale-category" value={category} onChange={event => { setCategory(event.target.value); setAppliedQuery(query.trim()); setVehicleResults(null); setVehicleError(""); }} className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-zinc-950 px-3 text-base text-white sm:max-w-sm">
-          <option value="">Todas las categorías</option>
-          {categories.map(value => <option key={value} value={value}>{value}</option>)}
-        </select>
-      </label>
-    </details>}
-
-    <details className="mb-6 rounded-xl border border-white/10 px-4">
-      <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-red-300">Buscar por vehículo</summary>
-      <div className="pb-4 pt-2">
-        <p className="mb-4 text-sm text-zinc-400">Elegí tipo, marca, modelo, año y posición para ver productos mayoristas compatibles.</p>
-        <VehicleFinder products={uniqueProducts.map(productFromWholesaleItem)} wholesaleMode onWholesaleAdd={productId => {
-          const product = uniqueProducts.find(item => item.id === productId);
-          if (product) addProduct(product);
-        }} />
-      </div>
-    </details>
 
     {loading && <p role="status" className="py-5 text-sm text-zinc-400">Cargando catálogo…</p>}
     {error && <div className="rounded-xl border border-red-500/30 bg-red-950/30 p-4 text-sm text-red-200"><p role="alert">{error}</p><button type="button" onClick={() => { setError(""); setLoading(true); setCatalogRetry(value => value + 1); }} className="mt-2 min-h-10 rounded-full border border-red-200/40 px-4 font-semibold">Reintentar catálogo</button></div>}
@@ -406,7 +411,7 @@ export function WholesaleCatalog() {
         {vehicleResults?.length ? <p className="mt-1 text-xs text-emerald-200">Compatibilidad encontrada en la base de vehículos.</p> : null}
       </div>
       {resultProducts.length > 0 ? <>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{resultProducts.map(product => <WholesaleProductCard key={product.id} product={product} compatibility={compatibilityById.get(product.id)} onAdd={addProduct} selected={Boolean(selection[product.id])} selectedQuantity={selection[product.id]?.quantity} />)}</div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">{resultProducts.map(product => <WholesaleProductCard key={product.id} product={product} compatibility={compatibilityById.get(product.id)} onAdd={addProduct} selected={Boolean(selection[product.id])} selectedQuantity={selection[product.id]?.quantity} variant="wholesale" />)}</div>
       </>
         : <div className="rounded-2xl border border-white/10 p-5 text-sm leading-6 text-zinc-300">
           <p>{uniqueProducts.length === 0 ? "Por el momento no hay productos con precio mayorista disponible." : appliedQuery ? "No encontramos productos ni compatibilidades para esta búsqueda." : "No hay productos para mostrar con esta categoría."}</p>
@@ -414,6 +419,11 @@ export function WholesaleCatalog() {
         </div>}
     </>}
     {!loading && catalogLoaded && !hasActiveSearch && <p className="rounded-2xl border border-white/10 bg-zinc-950/60 p-5 text-sm leading-6 text-zinc-300">Buscá por producto, conector, categoría o vehículo para ver opciones mayoristas.</p>}
+    {!cartOpen && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[var(--background)] px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-2xl sm:hidden">
+      <button type="button" onClick={() => setCartOpen(true)} aria-label={`Abrir carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`} aria-haspopup="dialog" aria-expanded={cartOpen} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-full bg-[var(--red)] px-5 text-sm font-bold text-[var(--background)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]">
+        <span>Ver carrito</span><span>{totalUnits} {totalUnits === 1 ? "unidad" : "unidades"} · {Object.keys(selection).length} {Object.keys(selection).length === 1 ? "producto" : "productos"}</span>
+      </button>
+    </div>}
     <WholesaleCartDrawer open={cartOpen} onClose={() => setCartOpen(false)} selection={selection} busy={busy} error={orderError} message={orderMessage} onQuantityChange={updateQuantity} onSubmit={() => void submitOrder()} />
   </main>;
 }

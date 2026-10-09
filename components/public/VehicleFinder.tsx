@@ -11,10 +11,10 @@ import { vehiclePositions, vehicleProductMatches, vehicleReferenceLinks } from "
 import { groupWholesaleVehicleMatches } from "@/lib/wholesale-catalog-search";
 import type { Product } from "@/lib/site-data";
 
-const control = "min-h-12 min-w-0 text-base w-full rounded-xl border border-white/10 bg-zinc-900 px-3 text-white disabled:opacity-40";
 const sameName = (a: string, b: string) => a.trim().toLocaleLowerCase("es") === b.trim().toLocaleLowerCase("es");
 
 export function VehicleFinder({ initialType = "", products, wholesaleMode = false, onWholesaleAdd }: { initialType?: string; products: Product[]; wholesaleMode?: boolean; onWholesaleAdd?: (productId: string) => void }) {
+  const control = `min-h-12 min-w-0 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 text-base text-white disabled:opacity-40 ${wholesaleMode ? "focus-visible:outline-2 focus-visible:outline-[var(--red)]" : ""}`;
   const [type, setType] = useState(initialType);
   const [brands, setBrands] = useState<VehicleBrand[]>([]);
   const [brandName, setBrandName] = useState("");
@@ -75,7 +75,7 @@ export function VehicleFinder({ initialType = "", products, wholesaleMode = fals
       <Link href="/productos" className="mt-2 inline-flex min-h-12 max-w-full items-center gap-3 rounded-full border border-white/20 px-4 text-sm text-red-300" aria-label="Quitar contexto y ver todos los productos"><span>Quitar búsqueda</span><span aria-hidden="true">×</span></Link>
     </div>}
     <details key={matches === null ? "search" : "results"} open={matches === null} className="min-w-0">
-      <summary className={matches === null ? "hidden" : "min-h-12 cursor-pointer py-3 text-sm font-semibold text-red-300"}>Modificar búsqueda</summary>
+      <summary className={matches === null ? "hidden" : `min-h-12 cursor-pointer py-3 text-sm font-semibold ${wholesaleMode ? "text-[var(--red)] focus-visible:outline-2 focus-visible:outline-[var(--red)]" : "text-red-300"}`}>Modificar búsqueda</summary>
     <form onSubmit={event => { event.preventDefault(); void search(); }} className="rounded-[1.75rem] border border-white/10 bg-zinc-950/60 p-5 sm:p-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {!initialType && <label className="min-w-0 space-y-2 text-sm">Tipo de vehículo<select required value={type} className={control} onChange={event => { invalidate(); setType(event.target.value); setBrands([]); setBrandName(""); setModels([]); setModelName(""); setYear(""); setPosition(""); }}><option value="">Seleccioná</option>{VEHICLE_TYPES.map(value => <option key={value}>{value}</option>)}</select></label>}
@@ -85,12 +85,12 @@ export function VehicleFinder({ initialType = "", products, wholesaleMode = fals
         {/^\d{4}$/.test(year) && <label className="min-w-0 space-y-2 text-sm">¿Qué querés cambiar?<select value={position} className={control} onChange={event => { invalidate(); setPosition(event.target.value); }}><option value="">Todas las posiciones</option>{vehiclePositions.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>}
       </div>
       <p className="mt-3 text-xs text-zinc-400">Elegí una sugerencia o escribí tu marca/modelo si no aparece. Solo confirmamos productos con compatibilidad cargada para el año y la posición.</p>
-      {/^\d{4}$/.test(year) && <button type="submit" disabled={searching || !type || !brandName.trim() || !modelName.trim() || !/^\d{4}$/.test(year)} className="mt-5 min-h-12 rounded-full bg-red-600 px-8 text-sm font-bold disabled:opacity-40">{searching ? "Buscando…" : "Buscar"}</button>}
+      {/^\d{4}$/.test(year) && <button type="submit" disabled={searching || !type || !brandName.trim() || !modelName.trim() || !/^\d{4}$/.test(year)} className={`mt-5 min-h-12 rounded-full px-8 text-sm font-bold disabled:opacity-40 ${wholesaleMode ? "bg-[var(--red)] text-[var(--background)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]" : "bg-red-600"}`}>{searching ? "Buscando…" : "Buscar"}</button>}
     </form>
     </details>
     {matches !== null && <div aria-live="polite">
       <h3 className="mb-3 text-lg font-black">{(wholesaleMode ? wholesaleMatches.length : matches.length) ? "Productos compatibles" : "No encontramos esta referencia todavía."}</h3>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{wholesaleMode ? wholesaleMatches.map(({ product, fitments }) => <WholesaleProductCard key={product.id} onAdd={onWholesaleAdd ? () => onWholesaleAdd(product.id) : undefined} product={{
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${wholesaleMode ? "gap-3 lg:gap-4" : "gap-4"}`}>{wholesaleMode ? wholesaleMatches.map(({ product, fitments }) => <WholesaleProductCard key={product.id} variant="wholesale" onAdd={onWholesaleAdd ? () => onWholesaleAdd(product.id) : undefined} product={{
           id: product.id, name: product.name, description: product.description, imageUrl: product.image,
           category: product.category, connectorType: product.connectorType || null,
           functions: product.functions || [], vehicleTypes: product.vehicleTypes || [],
