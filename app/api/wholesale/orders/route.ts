@@ -2,23 +2,10 @@ import { NextResponse } from "next/server";
 import { getWholesaleSessionCustomerId } from "@/lib/wholesale-server";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { isSameOriginWrite } from "@/lib/store/buyer-session";
+import { isWholesaleUuid, wholesaleRpcErrorMessage } from "@/lib/wholesale-order-api";
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ITEM_ID_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}._:-]{0,63}$/u;
 const privateHeaders = { "Cache-Control": "no-store, private" };
-
-function errorResponse(error: string, status: number) {
-  return NextResponse.json({ ok: false, error }, { status, headers: privateHeaders });
-}
-
-function rpcError(error: { message?: string; code?: string }) {
-  const message = error.message || "";
-  if (message.includes("WHOLESALE_IDEMPOTENCY_CONFLICT")) return errorResponse("La clave de solicitud ya se usó con otros productos. Iniciá una nueva solicitud.", 409);
-  if (message.includes("WHOLESALE_PRODUCT_UNAVAILABLE")) return errorResponse("Uno o más productos ya no están disponibles para pedidos mayoristas. Actualizá el catálogo.", 422);
-  if (message.includes("WHOLESALE_CUSTOMER_UNAVAILABLE")) return errorResponse("El acceso mayorista ya no está activo. Volvé a ingresar.", 401);
-  if (message.includes("WHOLESALE_INVALID_ITEMS") || message.includes("WHOLESALE_INVALID_REQUEST")) return errorResponse("Revisá los productos y las cantidades e intentá nuevamente.", 400);
-  return errorResponse("No se pudo crear la solicitud. Intentá nuevamente.", 503);
-}
+const errorResponse = (error: string, status: number) => NextResponse.json({ ok: false, error }, { status, headers: privateHeaders });
 
 export async function POST(request: Request) {
   const customerId = await getWholesaleSessionCustomerId();
@@ -30,32 +17,60 @@ export async function POST(request: Request) {
   try { body = await request.json(); } catch { return errorResponse("El contenido de la solicitud no es JSON válido.", 400); }
   if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse("Revisá los productos e intentá nuevamente.", 400);
   const payload = body as Record<string, unknown>;
-  if (Object.keys(payload).sort().join(",") !== "idempotencyKey,items" || !UUID_PATTERN.test(String(payload.idempotencyKey))
-    || !Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 50) {
-    return errorResponse("Revisá los productos e intentá nuevamente.", 400);
-  }
-  const seen = new Set<string>();
-  const items: { productId: string; quantity: number }[] = [];
-  for (const entry of payload.items) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return errorResponse("Hay productos o cantidades inválidos.", 400);
-    const item = entry as Record<string, unknown>;
-    if (Object.keys(item).sort().join(",") !== "productId,quantity" || typeof item.productId !== "string"
-      || !ITEM_ID_PATTERN.test(item.productId) || !Number.isInteger(item.quantity) || Number(item.quantity) < 1 || Number(item.quantity) > 100
-      || seen.has(item.productId)) return errorResponse("Hay productos o cantidades inválidos.", 400);
-    seen.add(item.productId);
-    items.push({ productId: item.productId, quantity: Number(item.quantity) });
+  const legacy = Object.keys(payload).sort().join(",") === "idempotencyKey,items" && isWholesaleUuid(payload.idempotencyKey);
+  if (legacy) return errorResponse("Esta versión del portal ya no acepta envíos antiguos. Actualizá la página e intentá desde el carrito.", 409);
+  if (Object.keys(payload).join(",") !== "attemptId" || !isWholesaleUuid(payload.attemptId)) {
+    return errorResponse("El intento no es válido. Recuperalo e intentá nuevamente.", 400);
   }
   if (!isServiceRoleConfigured()) return errorResponse("El servicio de pedidos no está disponible. Intentá más tarde.", 503);
 
   try {
-    const { data, error } = await createAdminServerClient().rpc("create_wholesale_order" as never, {
-      p_customer: customerId,
-      p_items: items as never,
-      p_idempotency_key: payload.idempotencyKey as string,
-    } as never) as unknown as { data: string | null; error: { message?: string; code?: string } | null };
-    if (error || !data) return rpcError(error || { message: "empty response" });
+    const result = await createAdminServerClient().rpc("submit_wholesale_order_attempt" as never, {
+      p_customer: customerId, p_attempt: payload.attemptId,
+    } as never);
+    const { data, error } = result as unknown as { data: string | null; error: { message?: string } | null };
+    if (error || !data) {
+      const mapped = wholesaleRpcErrorMessage(error?.message || "empty response");
+      return errorResponse(mapped.error, mapped.status);
+    }
     return NextResponse.json({ ok: true, orderId: data }, { headers: privateHeaders });
   } catch {
     return errorResponse("No se pudo crear la solicitud. Intentá nuevamente.", 503);
+  }
+}
+
+export async function GET(request: Request) {
+  const customerId = await getWholesaleSessionCustomerId();
+  if (!customerId) return errorResponse("Ingresá a tu cuenta mayorista para consultar tus solicitudes.", 401);
+  if (!isServiceRoleConfigured()) return errorResponse("El servicio de pedidos no está disponible. Intentá más tarde.", 503);
+  const query = new URL(request.url).searchParams;
+  const limitValue = Number(query.get("limit") || 25);
+  const beforeCreatedAt = query.get("beforeCreatedAt");
+  const beforeId = query.get("beforeId");
+  if (!Number.isInteger(limitValue) || limitValue < 1 || limitValue > 100
+    || Boolean(beforeCreatedAt) !== Boolean(beforeId)
+    || (beforeId && !isWholesaleUuid(beforeId))
+    || (beforeCreatedAt && !Number.isFinite(Date.parse(beforeCreatedAt)))) {
+    return errorResponse("El cursor de solicitudes no es válido.", 400);
+  }
+  try {
+    const { data, error } = await createAdminServerClient().rpc("list_wholesale_customer_orders" as never, {
+      p_customer: customerId,
+      p_limit: limitValue,
+      p_before_created_at: beforeCreatedAt,
+      p_before_id: beforeId,
+    } as never) as unknown as { data: unknown; error: { message?: string } | null };
+    if (error) {
+      const mapped = wholesaleRpcErrorMessage(error.message || "order history unavailable");
+      return errorResponse(mapped.error, mapped.status);
+    }
+    const orders = Array.isArray(data) ? data : [];
+    const last = orders.at(-1) as { created_at?: string; id?: string } | undefined;
+    const nextCursor = orders.length === limitValue && last?.created_at && last.id
+      ? { beforeCreatedAt: last.created_at, beforeId: last.id }
+      : null;
+    return NextResponse.json({ ok: true, data: orders, nextCursor }, { headers: privateHeaders });
+  } catch {
+    return errorResponse("No se pudieron consultar las solicitudes. Intentá nuevamente.", 503);
   }
 }

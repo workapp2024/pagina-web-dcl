@@ -38,6 +38,20 @@ export function filterWholesaleCatalogProducts(
   return uniqueWholesaleCatalogProducts(products).filter(product => visibleIds.has(product.id));
 }
 
+export function getWholesaleCatalogView(
+  products: WholesaleCatalogItem[],
+  query: string,
+  category: string,
+  vehicleResults: WholesaleVehicleMatch[] | null,
+) {
+  const active = Boolean(query.trim() || category || vehicleResults !== null);
+  if (!active) return { active: false, products: [] as WholesaleCatalogItem[] };
+  if (vehicleResults !== null) {
+    return { active: true, products: uniqueWholesaleCatalogProducts(vehicleResults.map(result => result.product)) };
+  }
+  return { active: true, products: filterWholesaleCatalogProducts(products, query, category) };
+}
+
 export function uniqueWholesaleCatalogProducts(products: WholesaleCatalogItem[]) {
   const byId = new Map<string, WholesaleCatalogItem>();
   for (const product of products) {
