@@ -58,6 +58,7 @@ function createHarness(fetchImpl, storage = new Map()) {
     'next/navigation': { useRouter: () => router },
     '@/components/public/VehicleFinder': { VehicleFinder: () => null },
     '@/components/wholesale/WholesaleCartDrawer': { WholesaleCartDrawer: 'cart-drawer' },
+    '@/components/wholesale/WholesaleProductDetails': { WholesaleProductDetails: 'product-details' },
     '@/components/wholesale/WholesaleProductCard': { WholesaleProductCard: props => jsx('product-card', props) },
     '@/lib/wholesale-catalog-search': {
       uniqueWholesaleCatalogProducts: rows => rows,

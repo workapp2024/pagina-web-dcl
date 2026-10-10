@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { normalizeCommercialClassification } from "@/lib/product-taxonomy";
+import { sanitizeStoredImageUrl } from "@/lib/supabase/storage";
 import { hashWholesaleCode, hashWholesaleSessionToken, isValidManualWholesaleCode, normalizeWholesaleCode, verifyWholesaleHash } from "@/lib/wholesale-access";
 
 export const WHOLESALE_SESSION_COOKIE = "dcl_wholesale_session";
@@ -88,24 +89,31 @@ export async function isWholesaleSessionValid(token?: string | null) {
 export type WholesaleCatalogItem = {
   id: string; name: string; description: string; imageUrl: string; category: string;
   connectorType: string | null; functions: string[]; vehicleTypes: string[]; wholesalePrice: number;
+  images?: string[]; watts?: number | null; lumens?: number | null; voltage?: string | null;
+  colorTemperature?: string | null; canbus?: boolean | null; chipType?: string | null; warranty?: string | null;
+  warrantyDays?: number | null; integratedHighLow?: boolean;
 };
 
 export async function loadWholesaleCatalog(): Promise<WholesaleCatalogItem[]> {
   if (!isServiceRoleConfigured()) throw new Error("Wholesale catalog unavailable");
   const { data, error } = await createAdminServerClient().from("products")
-    .select("id,name,description,image_url,category,functions,connector_type,vehicle_types,wholesale_price")
+    .select("id,name,description,image_url,additional_image_urls,category,functions,connector_type,vehicle_types,wholesale_price,watts,lumens,voltage,color_temperature,canbus,chip_type,warranty,warranty_days,integrated_high_low")
     .eq("active", true).eq("show_in_catalog", true).not("wholesale_price", "is", null)
     .gt("wholesale_price", 0).order("sort_order", { ascending: true });
   if (error) throw new Error("Wholesale catalog unavailable");
-  const rows = (data || []) as unknown as { id: string; name: string; description: string | null; image_url: string | null; category: string | null; functions: string[] | null; connector_type: string | null; vehicle_types: string[] | null; wholesale_price: number | null }[];
+  const rows = (data || []) as unknown as { id: string; name: string; description: string | null; image_url: string | null; additional_image_urls: string[] | null; category: string | null; functions: string[] | null; connector_type: string | null; vehicle_types: string[] | null; wholesale_price: number | null; watts: number | null; lumens: number | null; voltage: string | null; color_temperature: string | null; canbus: boolean | null; chip_type: string | null; warranty: string | null; warranty_days: number | null; integrated_high_low: boolean | null }[];
   return rows.filter(row => Number.isFinite(Number(row.wholesale_price)) && Number(row.wholesale_price) > 0)
     .map(row => {
       const classification = normalizeCommercialClassification(row.category || "", row.functions || []);
       return {
-        id: row.id, name: row.name, description: row.description || "", imageUrl: row.image_url || "",
+        id: row.id, name: row.name, description: row.description || "", imageUrl: sanitizeStoredImageUrl(row.image_url),
         category: classification.category || "", connectorType: row.connector_type || null,
         functions: classification.functions,
         vehicleTypes: Array.isArray(row.vehicle_types) ? row.vehicle_types : [], wholesalePrice: Number(row.wholesale_price),
+        images: Array.isArray(row.additional_image_urls) ? row.additional_image_urls.map(sanitizeStoredImageUrl).filter(Boolean).slice(0, 2) : [],
+        watts: row.watts, lumens: row.lumens, voltage: row.voltage,
+        colorTemperature: row.color_temperature, canbus: row.canbus, chipType: row.chip_type, warranty: row.warranty,
+        warrantyDays: row.warranty_days, integratedHighLow: row.integrated_high_low === true,
       };
     });
 }

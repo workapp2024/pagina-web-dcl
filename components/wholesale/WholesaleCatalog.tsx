@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { VehicleFinder } from "@/components/public/VehicleFinder";
 import { WholesaleCartDrawer } from "@/components/wholesale/WholesaleCartDrawer";
 import { WholesaleProductCard } from "@/components/wholesale/WholesaleProductCard";
+import { WholesaleProductDetails } from "@/components/wholesale/WholesaleProductDetails";
 import { findWholesaleVehicleMatches, filterWholesaleCatalogProducts, getWholesaleCatalogView, productFromWholesaleItem, uniqueWholesaleCatalogProducts } from "@/lib/wholesale-catalog-search";
 import type { WholesaleVehicleMatch } from "@/lib/wholesale-catalog-search";
 import { getPublicVehicleTypes, searchPublicVehicleCompatibilities } from "@/lib/supabase/vehicle-compatibility";
@@ -38,6 +39,7 @@ export function WholesaleCatalog() {
   const [orderMessage, setOrderMessage] = useState("");
   const [orderError, setOrderError] = useState("");
   const [cartFeedback, setCartFeedback] = useState("");
+  const [detailsProduct, setDetailsProduct] = useState<{ product: WholesaleCatalogItem; compatibility?: string } | null>(null);
   const submissionInFlight = useRef(false);
   const selectionVersionRef = useRef(0);
   const catalogRequestRef = useRef(0);
@@ -180,7 +182,8 @@ export function WholesaleCatalog() {
   const resultProducts = catalogView.products;
   const hasActiveSearch = catalogView.active;
   const compatibilityById = new Map((vehicleResults || []).map(result => [result.product.id, result.fitments.join(" · ")]));
-  const { totalUnits } = getWholesaleSelectionTotals(selection);
+  const { totalUnits, indicativeTotal } = getWholesaleSelectionTotals(selection);
+  const money = useMemo(() => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }), []);
 
   function saveSelection(next: WholesaleOrderSelection) {
     selectionVersionRef.current += 1;
@@ -313,7 +316,7 @@ export function WholesaleCatalog() {
     } finally { setBusy(false); }
   }
 
-  return <main className="mx-auto min-h-[70vh] max-w-7xl px-4 py-5 pb-[calc(env(safe-area-inset-bottom)+6rem)] text-white sm:px-6 sm:py-8 sm:pb-10 lg:px-8">
+  return <main className="mx-auto min-h-[70vh] max-w-7xl px-4 py-5 pb-[calc(env(safe-area-inset-bottom)+7rem)] text-white sm:px-6 sm:py-8 sm:pb-10 lg:px-8">
     <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--red)]">DCL CREE LED <span className="text-zinc-400">· MAYORISTAS</span></p><h1 className="mt-1 text-2xl font-black tracking-tight sm:text-4xl">Catálogo</h1><p className="mt-1 text-sm text-zinc-400">Precios exclusivos para clientes mayoristas.</p></div>
       <div className="flex w-full justify-end gap-2 sm:w-auto sm:shrink-0">
@@ -411,7 +414,7 @@ export function WholesaleCatalog() {
         {vehicleResults?.length ? <p className="mt-1 text-xs text-emerald-200">Compatibilidad encontrada en la base de vehículos.</p> : null}
       </div>
       {resultProducts.length > 0 ? <>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">{resultProducts.map(product => <WholesaleProductCard key={product.id} product={product} compatibility={compatibilityById.get(product.id)} onAdd={addProduct} selected={Boolean(selection[product.id])} selectedQuantity={selection[product.id]?.quantity} variant="wholesale" />)}</div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">{resultProducts.map(product => <WholesaleProductCard key={product.id} product={product} compatibility={compatibilityById.get(product.id)} onAdd={addProduct} onQuantityChange={updateQuantity} onDetails={(item, compatibility) => setDetailsProduct({ product: item, compatibility })} selected={Boolean(selection[product.id])} selectedQuantity={selection[product.id]?.quantity} variant="wholesale" />)}</div>
       </>
         : <div className="rounded-2xl border border-white/10 p-5 text-sm leading-6 text-zinc-300">
           <p>{uniqueProducts.length === 0 ? "Por el momento no hay productos con precio mayorista disponible." : appliedQuery ? "No encontramos productos ni compatibilidades para esta búsqueda." : "No hay productos para mostrar con esta categoría."}</p>
@@ -420,10 +423,11 @@ export function WholesaleCatalog() {
     </>}
     {!loading && catalogLoaded && !hasActiveSearch && <p className="rounded-2xl border border-white/10 bg-zinc-950/60 p-5 text-sm leading-6 text-zinc-300">Buscá por producto, conector, categoría o vehículo para ver opciones mayoristas.</p>}
     {!cartOpen && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[var(--background)] px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-2xl sm:hidden">
-      <button type="button" onClick={() => setCartOpen(true)} aria-label={`Abrir carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`} aria-haspopup="dialog" aria-expanded={cartOpen} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-full bg-[var(--red)] px-5 text-sm font-bold text-[var(--background)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]">
-        <span>Ver carrito</span><span>{totalUnits} {totalUnits === 1 ? "unidad" : "unidades"} · {Object.keys(selection).length} {Object.keys(selection).length === 1 ? "producto" : "productos"}</span>
+      <button type="button" onClick={() => setCartOpen(true)} aria-label={`Abrir carrito, ${money.format(indicativeTotal)}, ${totalUnits} unidades, ${Object.keys(selection).length} productos`} aria-haspopup="dialog" aria-expanded={cartOpen} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-full bg-[var(--red)] px-4 text-sm font-bold text-[var(--background)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]">
+        <span className="text-left"><span className="block">{money.format(indicativeTotal)}</span><span className="block text-xs font-medium">{totalUnits} {totalUnits === 1 ? "unidad" : "unidades"} · {Object.keys(selection).length} {Object.keys(selection).length === 1 ? "producto" : "productos"}</span></span><span className="shrink-0">Ver carrito</span>
       </button>
     </div>}
     <WholesaleCartDrawer open={cartOpen} onClose={() => setCartOpen(false)} selection={selection} busy={busy} error={orderError} message={orderMessage} onQuantityChange={updateQuantity} onSubmit={() => void submitOrder()} />
+    <WholesaleProductDetails product={detailsProduct?.product ?? null} compatibility={detailsProduct?.compatibility} onClose={() => setDetailsProduct(null)} />
   </main>;
 }

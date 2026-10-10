@@ -159,6 +159,23 @@ test('top cart uses one drawer for quantity edits and order submission', () => {
   assert.match(drawer, /onClick=\{onSubmit\}/);
 });
 
+test('wholesale product details and catalog cards expose only safe detail and quantity controls', () => {
+  const catalog = fs.readFileSync('components/wholesale/WholesaleCatalog.tsx', 'utf8');
+  const card = fs.readFileSync('components/wholesale/WholesaleProductCard.tsx', 'utf8');
+  const details = fs.readFileSync('components/wholesale/WholesaleProductDetails.tsx', 'utf8');
+  const server = fs.readFileSync('lib/wholesale-server.ts', 'utf8');
+  assert.match(catalog, /onQuantityChange=\{updateQuantity\}[\s\S]*onDetails=\{\(item, compatibility\) => setDetailsProduct/);
+  assert.match(catalog, /money\.format\(indicativeTotal\)/);
+  assert.match(catalog, /env\(safe-area-inset-bottom\)/);
+  assert.match(card, /Disminuir cantidad de \$\{product\.name\}/);
+  assert.match(card, /Aumentar cantidad de \$\{product\.name\}/);
+  assert.match(details, /ProductImageGallery/);
+  assert.match(details, /Especificaciones técnicas/);
+  assert.match(details, /Confirmá la compatibilidad exacta/);
+  assert.match(server, /additional_image_urls,category,functions,connector_type,vehicle_types,wholesale_price,watts,lumens,voltage,color_temperature,canbus,chip_type,warranty,warranty_days,integrated_high_low/);
+  assert.doesNotMatch(server.slice(server.indexOf('export async function loadWholesaleCatalog')), /cost_price|margin_percentage|stock_min|\.select\("[^"]*price[^"]*price/);
+});
+
 test('catalog failure does not gate independent recovery and history requests', () => {
   const source = fs.readFileSync('components/wholesale/WholesaleCatalog.tsx', 'utf8');
   const catalogEffectStart = source.lastIndexOf('useEffect(() => {', source.indexOf('void fetch("/api/wholesale/catalog"'));
