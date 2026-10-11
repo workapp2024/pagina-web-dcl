@@ -140,12 +140,75 @@ test('add increments an existing product once, quantity updates reject invalid v
   assert.equal(removedProduct.changed, true);
   assert.equal(removedProduct.selection['h7-led'], undefined);
   const source = fs.readFileSync('components/wholesale/WholesaleCatalog.tsx', 'utf8');
-  assert.match(source, /setWholesaleQuantity\(selectionRef\.current, productId, quantity\)/);
+  assert.match(source, /setWholesaleQuantity\(selectionRef\.current, productId, quantity, product\)/);
   assert.match(source, /El carrito actual se mantiene aparte/);
   assert.match(source, /window\.addEventListener\("storage", syncSelection\)/);
   assert.match(source, /savedSelection !== serializeWholesaleSelection\(submitted\)/);
   assert.match(source, /cartFeedback/);
   assert.match(source, /selectedQuantity=\{selection\[product\.id\]\?\.quantity\}/);
+});
+
+test('catalog quantity controls add, update and remove products without changing other lines', () => {
+  let selection = {};
+  const update = (productId, quantity, item) => {
+    const result = selectionTools.setWholesaleQuantity(selection, productId, quantity, item);
+    selection = result.selection;
+    return result;
+  };
+  const { WholesaleProductCard } = load('components/wholesale/WholesaleProductCard.tsx', {
+    '@/components/ui/ManagedImage': { ManagedImage: 'managed-image' },
+    'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
+  });
+  const findNode = (node, predicate) => {
+    if (!node || typeof node !== 'object') return null;
+    if (predicate(node)) return node;
+    const children = node.props?.children;
+    for (const child of Array.isArray(children) ? children : [children]) {
+      const found = findNode(child, predicate);
+      if (found) return found;
+    }
+    return null;
+  };
+  const cardFor = item => WholesaleProductCard({ product: item, onQuantityChange: update, selectedQuantity: selection[item.id]?.quantity });
+  const button = (item, action) => findNode(cardFor(item), node => node.type === 'button' && node.props['aria-label'] === `${action} cantidad de ${item.name}`);
+
+  button(products[0], 'Aumentar').props.onClick();
+  assert.equal(selection['h7-led'].quantity, 1);
+  button(products[0], 'Aumentar').props.onClick();
+  assert.equal(selection['h7-led'].quantity, 2);
+  button(products[1], 'Aumentar').props.onClick();
+  button(products[1], 'Aumentar').props.onClick();
+  button(products[1], 'Aumentar').props.onClick();
+  assert.equal(selection['fog-led'].quantity, 3);
+
+  button(products[0], 'Disminuir').props.onClick();
+  assert.equal(selection['h7-led'].quantity, 1);
+  button(products[0], 'Disminuir').props.onClick();
+  assert.equal(selection['h7-led'], undefined);
+  assert.equal(selection['fog-led'].quantity, 3);
+  assert.deepEqual(plain(selectionTools.getWholesaleSelectionTotals(selection)), { totalUnits: 3, indicativeTotal: 54000 });
+
+  const values = new Map();
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  selectionTools.persistWholesaleSelection(storage, selection);
+  const restored = selectionTools.restoreWholesaleSelectionFromStorage(storage, products);
+  assert.deepEqual(Object.keys(restored), ['fog-led']);
+  assert.equal(restored['fog-led'].quantity, 3);
+
+  button(products[1], 'Disminuir').props.onClick();
+  button(products[1], 'Disminuir').props.onClick();
+  button(products[1], 'Disminuir').props.onClick();
+  assert.deepEqual(plain(selection), {});
+  assert.deepEqual(plain(selectionTools.getWholesaleSelectionTotals(selection)), { totalUnits: 0, indicativeTotal: 0 });
+  selectionTools.persistWholesaleSelection(storage, selection);
+  assert.equal(values.has(selectionTools.WHOLESALE_SELECTION_STORAGE_KEY), false);
+  assert.deepEqual(plain(selectionTools.restoreWholesaleSelectionFromStorage(storage, products)), {});
+
+  const cappedCard = WholesaleProductCard({ product: products[0], onQuantityChange: update, selectedQuantity: 100 });
+  assert.equal(findNode(cappedCard, node => node.type === 'button' && node.props['aria-label'] === `Aumentar cantidad de ${products[0].name}`).props.disabled, true);
+  const drawer = fs.readFileSync('components/wholesale/WholesaleCartDrawer.tsx', 'utf8');
+  assert.match(drawer, /items\.length \? <>/);
+  assert.match(drawer, /no agregaste productos/);
 });
 
 test('top cart uses one drawer for quantity edits and order submission', () => {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { boundedString, readJsonObject } from "@/lib/api";
 import { rateLimit } from "@/lib/rate-limit";
-import { isSameOriginWrite } from "@/lib/store/buyer-session";
+import { isWholesaleSessionWriteAllowed } from "@/lib/wholesale-session-origin";
 import { createWholesaleSessionToken, isValidManualWholesaleCode, normalizeWholesaleCode, verifyWholesaleCode } from "@/lib/wholesale-access";
 import {
   createWholesaleSession, findActiveWholesaleCustomerByCode, WHOLESALE_SESSION_COOKIE,
@@ -13,7 +13,7 @@ const invalidCode = () => NextResponse.json({ ok: false, error: "Código inváli
 export async function POST(request: Request) {
   const limited = rateLimit(request, "wholesale-access", { limit: 8, windowMs: 60_000 });
   if (limited) return limited;
-  if (!isSameOriginWrite(request)) return invalidCode();
+  if (!isWholesaleSessionWriteAllowed(request)) return invalidCode();
 
   const body = await readJsonObject(request);
   const code = boundedString(body?.code, 64, { required: true });

@@ -72,6 +72,29 @@ test('existing generated codes keep their case-sensitive hash and lookup behavio
   assert.equal(lookup.matchedCode, legacyCode);
 });
 
+test('wholesale login origin allows same-host localhost and private LAN requests only in development', () => {
+  const strictCheck = request => request.headers.get('origin') === new URL(request.url).origin
+    && request.headers.get('sec-fetch-site') !== 'cross-site';
+  const development = load('lib/wholesale-session-origin.ts', {
+    '@/lib/store/buyer-session': { isSameOriginWrite: strictCheck },
+  }, { process: { env: { NODE_ENV: 'development' } } });
+  const request = (url, host, origin, fetchSite = 'same-origin') => new Request(url, {
+    method: 'POST', headers: { host, origin, 'sec-fetch-site': fetchSite },
+  });
+
+  assert.equal(development.isWholesaleSessionWriteAllowed(request('http://localhost:3000/api/wholesale/session', 'localhost:3000', 'http://localhost:3000')), true);
+  assert.equal(development.isWholesaleSessionWriteAllowed(request('http://localhost:3000/api/wholesale/session', '192.168.100.3:3000', 'http://192.168.100.3:3000')), true);
+  assert.equal(development.isWholesaleSessionWriteAllowed(request('http://localhost:3000/api/wholesale/session', '192.168.100.3:3000', 'http://192.168.100.4:3000')), false);
+  assert.equal(development.isWholesaleSessionWriteAllowed(request('http://localhost:3000/api/wholesale/session', '192.168.100.3:3000', 'http://192.168.100.3:3000', 'cross-site')), false);
+  assert.equal(development.isWholesaleSessionWriteAllowed(request('http://localhost:3000/api/wholesale/session', 'example.com:3000', 'http://example.com:3000')), false);
+
+  const production = load('lib/wholesale-session-origin.ts', {
+    '@/lib/store/buyer-session': { isSameOriginWrite: strictCheck },
+  }, { process: { env: { NODE_ENV: 'production' } } });
+  assert.equal(production.isWholesaleSessionWriteAllowed(request('https://dcl.test/api/wholesale/session', 'dcl.test', 'https://dcl.test')), true);
+  assert.equal(production.isWholesaleSessionWriteAllowed(request('http://localhost:3000/api/wholesale/session', '192.168.100.3:3000', 'http://192.168.100.3:3000')), false);
+});
+
 const nextServerMock = { NextResponse: { json(body, init) { const response = Response.json(body, init); response.cookies = { set(name, value, options) { response.testCookie = { name, value, options }; } }; return response; } } };
 const req = (path, body) => new Request(`https://dcl.test${path}`, { method: 'POST', headers: { origin: 'https://dcl.test', 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
@@ -81,7 +104,7 @@ function sessionRouteHarness(customer) {
   return { calls, ...load('app/api/wholesale/session/route.ts', {
     'next/server': nextServerMock,
     '@/lib/rate-limit': { rateLimit: () => null },
-    '@/lib/store/buyer-session': { isSameOriginWrite: () => true },
+    '@/lib/wholesale-session-origin': { isWholesaleSessionWriteAllowed: () => true },
     '@/lib/wholesale-server': {
       findActiveWholesaleCustomerByCode: async code => { calls.push(['lookup', code]); const normalized = normalizeWholesaleCode(code); return { customer, matchedCode: customer?.wholesale_code_hash === hashWholesaleCode(normalized) ? normalized : code, unavailable: false }; },
       createWholesaleSession: async (...args) => { calls.push(['create', ...args]); return true; },

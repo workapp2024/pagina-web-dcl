@@ -218,9 +218,9 @@ export function WholesaleCatalog() {
     setOrderError(""); setOrderMessage("");
   }
 
-  function updateQuantity(productId: string, quantity: number) {
+  function updateQuantity(productId: string, quantity: number, product?: WholesaleCatalogItem) {
     if (submissionInFlight.current) return;
-    const result = setWholesaleQuantity(selectionRef.current, productId, quantity);
+    const result = setWholesaleQuantity(selectionRef.current, productId, quantity, product);
     if (!result.changed) return;
     saveSelection(result.selection);
     setOrderError(""); setOrderMessage("");
@@ -414,7 +414,7 @@ export function WholesaleCatalog() {
         {vehicleResults?.length ? <p className="mt-1 text-xs text-emerald-200">Compatibilidad encontrada en la base de vehículos.</p> : null}
       </div>
       {resultProducts.length > 0 ? <>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">{resultProducts.map(product => <WholesaleProductCard key={product.id} product={product} compatibility={compatibilityById.get(product.id)} onAdd={addProduct} onQuantityChange={updateQuantity} onDetails={(item, compatibility) => setDetailsProduct({ product: item, compatibility })} selected={Boolean(selection[product.id])} selectedQuantity={selection[product.id]?.quantity} variant="wholesale" />)}</div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">{resultProducts.map(product => <WholesaleProductCard key={product.id} product={product} compatibility={compatibilityById.get(product.id)} onQuantityChange={updateQuantity} onDetails={(item, compatibility) => setDetailsProduct({ product: item, compatibility })} selected={Boolean(selection[product.id])} selectedQuantity={selection[product.id]?.quantity} variant="wholesale" />)}</div>
       </>
         : <div className="rounded-2xl border border-white/10 p-5 text-sm leading-6 text-zinc-300">
           <p>{uniqueProducts.length === 0 ? "Por el momento no hay productos con precio mayorista disponible." : appliedQuery ? "No encontramos productos ni compatibilidades para esta búsqueda." : "No hay productos para mostrar con esta categoría."}</p>

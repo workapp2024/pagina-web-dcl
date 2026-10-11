@@ -102,12 +102,17 @@ export function setWholesaleQuantity(
   selection: WholesaleOrderSelection,
   productId: string,
   quantity: number,
+  product?: WholesaleCatalogItem,
 ) {
   const current = selection[productId];
   if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100) {
     return { selection, changed: false };
   }
-  if (!current || (quantity > 0 && current.quantity === quantity)) {
+  if (!current) {
+    if (quantity === 0 || !product || product.id !== productId) return { selection, changed: false };
+    return { selection: { ...selection, [productId]: { product, quantity } }, changed: true };
+  }
+  if (quantity === current.quantity) {
     return { selection, changed: false };
   }
   const next = { ...selection };
