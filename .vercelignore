@@ -2,7 +2,7 @@
 Referencia/
 .env*
 scripts/maintenance/
-supabase/
+/supabase/
 tests/
 docs/
 INFORME_*.md
