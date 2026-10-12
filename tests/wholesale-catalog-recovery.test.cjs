@@ -3,6 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const load = require('./load-ts.cjs');
 const selectionTools = load('lib/wholesale-order-selection.ts');
+const orderCardTools = load('lib/wholesale-customer-orders.ts');
 
 function createHarness(fetchImpl, storage = new Map()) {
   const slots = [];
@@ -44,6 +45,7 @@ function createHarness(fetchImpl, storage = new Map()) {
   const listeners = new Map();
   const router = { replace() {}, refresh() {} };
   const window = {
+    confirm: () => true,
     localStorage: {
       getItem: key => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, value),
@@ -69,8 +71,9 @@ function createHarness(fetchImpl, storage = new Map()) {
     },
     '@/lib/supabase/vehicle-compatibility': { getPublicVehicleTypes: async () => [], searchPublicVehicleCompatibilities: async () => [] },
     '@/lib/wholesale-order-selection': selectionTools,
+    '@/lib/wholesale-customer-orders': orderCardTools,
   };
-  const { WholesaleCatalog } = load('components/wholesale/WholesaleCatalog.tsx', mocks, { fetch: fetchImpl, window, Error });
+  const { WholesaleCatalog } = load('components/wholesale/WholesaleCatalog.tsx', mocks, { fetch: fetchImpl, window, URLSearchParams, Error });
 
   async function render() {
     cursor = 0;
@@ -120,15 +123,15 @@ test('catalog failure still displays recovered attempts and order history', asyn
   });
   await harness.render();
   await settle(harness);
+  assert.equal(JSON.stringify(harness.slots[17].map(item => item.id)), JSON.stringify(['order-1']));
   assert.ok(calls.includes('/api/wholesale/orders/attempts'), JSON.stringify(calls));
   assert.equal(harness.slots[14].length, 1, JSON.stringify(harness.slots[14]));
   assert.equal(harness.slots[14][0].status, 'open');
   assert.ok(JSON.stringify(harness.tree).includes('attempt-1'));
   const text = textContent(harness.tree);
   assert.match(text, /catalog offline/);
-  assert.match(text, /MW-000001/);
   assert.ok(calls.includes('/api/wholesale/orders/attempts'));
-  assert.ok(calls.includes('/api/wholesale/orders?limit=25'));
+  assert.ok(calls.includes('/api/wholesale/orders?limit=100'));
 });
 
 test('history failure leaves catalog usable and offers an isolated history retry', async () => {
@@ -150,7 +153,7 @@ test('history failure leaves catalog usable and offers an isolated history retry
   await settle(harness);
   assert.equal(calls.filter(url => url === '/api/wholesale/catalog').length, catalogCalls);
   assert.equal(calls.filter(url => url === '/api/wholesale/orders/attempts').length, 1);
-  assert.equal(calls.filter(url => url === '/api/wholesale/orders?limit=25').length, 2);
+  assert.equal(calls.filter(url => url === '/api/wholesale/orders?limit=100').length, 2);
   assert.ok(calls.every(url => !String(url).includes('submit')));
 });
 

@@ -41,8 +41,8 @@ test('EventOnMount effect replay does not duplicate product_viewed',()=>{
   assert.equal(calls.length,1);
 });
 test('CheckoutForm retains a retry key and rotates it on cart or method changes',async()=>{
-  const slots=[];let cursor=0,sequence=0;const posted=[],effects=[];
-  const cart={lines:[{id:'x',quantity:1}],total:100};
+  const memory=new Map();const slots=[];let cursor=0,sequence=0;const posted=[],effects=[];
+  const cart={lines:[{id:'x',quantity:1}],total:100,ready:true,consumePurchasedItems:async()=>{}};
   const context={distinct_id:require('node:crypto').randomUUID(),session_id:require('node:crypto').randomUUID()};
   const react={
     useRef:initial=>{const i=cursor++;return slots[i]??(slots[i]={current:initial});},
@@ -52,11 +52,11 @@ test('CheckoutForm retains a retry key and rotates it on cart or method changes'
   const {CheckoutForm}=load('components/store/CheckoutForm.tsx',{
     'posthog-js':{__loaded:true,get_distinct_id:()=>context.distinct_id,get_session_id:()=>context.session_id},
     react,'@/components/store/CartProvider':{useCart:()=>cart},'@/components/store/MercadoPagoBrick':{MercadoPagoBrick:()=>null},
-    '@/lib/analytics':{analyticsEvents:{},capture:()=>{},captureOnce:()=>{}},'@/lib/client-uuid':{createClientUuid:()=>`key-${++sequence}`},
-  },{fetch:async(url,init)=>{posted.push(JSON.parse(init.body));return Response.json({orderId:'order',total:100,publicKey:null});}});
+    '@/lib/analytics':{analyticsEvents:{},capture:()=>{},captureOnce:()=>{}},'@/lib/client-uuid':{createClientUuid:()=>{sequence++;return require('node:crypto').randomUUID();}},
+  },{localStorage:{getItem:key=>memory.get(key)??null,setItem:(key,value)=>memory.set(key,value),removeItem:key=>memory.delete(key)},navigator:{},crypto:require('node:crypto').webcrypto,TextEncoder,fetch:async(url,init)=>{if(url.endsWith('buyer-session'))return Response.json({ok:true});if(url.endsWith('recover'))return Response.json({ok:true,orderNumber:null});posted.push(JSON.parse(init.body));return Response.json({ok:false,error:'Simulated lost response'},{status:503});}});
   const render=()=>{cursor=0;return CheckoutForm({transfer:{alias:'test',cbuCvu:'',holder:'test',institution:'test',instructions:''}});};
   function nodes(node,type) {if(!node||typeof node!=='object')return [];if(Array.isArray(node))return node.flatMap(x=>nodes(x,type));return [...(node.type===type?[node]:[]),...nodes(node.props?.children,type)];}
-  let tree=render();nodes(tree,'button')[1].props.onClick(); // Card, then provider config error keeps form available.
+  let tree=render();effects.shift()();await new Promise(resolve=>setImmediate(resolve));tree=render();nodes(tree,'button')[1].props.onClick(); // Card, then provider config error keeps form available.
   for(let n=0;n<2;n++){context.session_id=require('node:crypto').randomUUID();tree=render();await nodes(tree,'form')[0].props.onSubmit({preventDefault(){}});}
   assert.equal(posted[0].idempotencyKey,posted[1].idempotencyKey);
   assert.deepEqual(posted[1].analytics_context,context);

@@ -38,13 +38,13 @@ export async function POST(request: Request) {
       image_url: vehicleCategory.image || "",
       href: vehicleCategory.href || "/vehiculos",
       active: Boolean(vehicleCategory.active),
-      sort_order: Number((vehicleCategory as any).order) || 0,
+      sort_order: Number((vehicleCategory as VehicleCategory & { order?: number }).order) || 0,
     };
 
     const supabase = createAdminServerClient();
     const { data, error } = await supabase
       .from("vehicle_categories")
-      .upsert(categoryRow as any, { onConflict: "id" })
+      .upsert(categoryRow as never, { onConflict: "id" })
       .select("*")
       .single();
 

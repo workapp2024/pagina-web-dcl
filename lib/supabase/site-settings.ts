@@ -7,6 +7,7 @@ import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "./database.types";
 import { isThemePreset } from "@/lib/theme";
 import { pickSiteSettings, type SiteSettingsSection } from "@/lib/site-settings-patch";
+import { normalizePaymentPresentationMethods } from "@/lib/payment-presentation";
 
 export type SiteSettingsRow = Database["public"]["Tables"]["site_settings"]["Row"];
 
@@ -64,6 +65,13 @@ export async function getSupabaseSiteSettings(): Promise<Partial<SiteSettings> |
     settings.transferHolder = row.transfer_holder || "";
     settings.transferInstitution = row.transfer_institution || "";
     settings.transferInstructions = row.transfer_instructions || "";
+    settings.paymentPresentationEnabled = row.payment_presentation_enabled;
+    settings.paymentPresentationTitle = row.payment_presentation_title;
+    settings.paymentPresentationDescription = row.payment_presentation_description;
+    settings.paymentPresentationMethods = normalizePaymentPresentationMethods(row.payment_presentation_methods);
+    settings.paymentPresentationHome = row.payment_presentation_home;
+    settings.paymentPresentationWholesale = row.payment_presentation_wholesale;
+    settings.paymentPresentationCheckout = row.payment_presentation_checkout;
 
     return settings;
   } catch (err) {

@@ -391,6 +391,13 @@ export interface Database {
           transfer_holder: string;
           transfer_institution: string;
           transfer_instructions: string;
+          payment_presentation_enabled: boolean;
+          payment_presentation_title: string;
+          payment_presentation_description: string;
+          payment_presentation_methods: Json;
+          payment_presentation_home: boolean;
+          payment_presentation_wholesale: boolean;
+          payment_presentation_checkout: boolean;
           updated_at: string;
         };
         Insert: {
@@ -422,6 +429,13 @@ export interface Database {
           transfer_holder?: string;
           transfer_institution?: string;
           transfer_instructions?: string;
+          payment_presentation_enabled?: boolean;
+          payment_presentation_title?: string;
+          payment_presentation_description?: string;
+          payment_presentation_methods?: Json;
+          payment_presentation_home?: boolean;
+          payment_presentation_wholesale?: boolean;
+          payment_presentation_checkout?: boolean;
           updated_at?: string;
         };
         Update: {
@@ -453,6 +467,13 @@ export interface Database {
           transfer_holder?: string;
           transfer_institution?: string;
           transfer_instructions?: string;
+          payment_presentation_enabled?: boolean;
+          payment_presentation_title?: string;
+          payment_presentation_description?: string;
+          payment_presentation_methods?: Json;
+          payment_presentation_home?: boolean;
+          payment_presentation_wholesale?: boolean;
+          payment_presentation_checkout?: boolean;
           updated_at?: string;
         };
       };

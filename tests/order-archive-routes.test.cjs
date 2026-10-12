@@ -56,7 +56,7 @@ function ui(eligible = true) {
     useState(initial){const i=cursor++;if(!(i in states))states[i]=initial;return [states[i],v=>{states[i]=typeof v==='function'?v(states[i]):v;}];},
     useRef(initial){const i=refCursor++;return refs[i]||={current:initial};},useCallback:fn=>fn,useEffect(){},
   };
-  const { OrdersManager } = load('components/admin/OrdersManager.tsx',{react},{URLSearchParams,window:{confirm:message=>{confirmations.push(message);return confirm;}},fetch:async(url,init)=>{
+  const { OrdersManager } = load('components/admin/OrdersManager.tsx', { react, '@/components/admin/AdminIdentityProvider': { useIsOwner: () => true } },{URLSearchParams,window:{confirm:message=>{confirmations.push(message);return confirm;}},fetch:async(url,init)=>{
     requests.push({url,body:init?JSON.parse(init.body):null});
     if(init){const body=JSON.parse(init.body);fixture.archived_at=body.archive?'2026-09-13T12:00:00Z':null;fixture.operationalHistory.unshift({id:fixture.operationalHistory.length+1,action:body.archive?'archive':'restore',previous_status:'delivered',new_status:'delivered',created_at:'2026-09-13T12:00:00Z',actor:'admin',source:'admin',note:''});return Response.json({ok:true});}
     const archived=new URL(url,'https://test.invalid').searchParams.get('view')==='archived';

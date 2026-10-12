@@ -101,7 +101,7 @@ test('resolution modal explains external refund and retries with the same key af
     payment: { status: 'approved', provider: 'mercadopago', sale_id: null }, resolutions: [] };
   const react = { useState(initial) { const i = cursor++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = typeof value === 'function' ? value(states[i]) : value; }]; },
     useRef(initial) { const i = refCursor++; return refs[i] ||= { current: initial }; }, useEffect() {}, useCallback: fn => fn };
-  const { OrdersManager } = load('components/admin/OrdersManager.tsx', { react }, { URLSearchParams,
+  const { OrdersManager } = load('components/admin/OrdersManager.tsx', { react, '@/components/admin/AdminIdentityProvider': { useIsOwner: () => true } }, { URLSearchParams,
     crypto: { randomUUID: () => key }, window: { confirm: () => true },
     fetch: async (url, init) => {
       if (!init) return Response.json({ data: [fixture], pagination: { total: 1 } });

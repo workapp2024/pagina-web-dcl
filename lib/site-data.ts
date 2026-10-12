@@ -101,7 +101,17 @@ export type SiteSettings = {
   transferHolder: string;
   transferInstitution: string;
   transferInstructions: string;
+  paymentPresentationEnabled: boolean;
+  paymentPresentationTitle: string;
+  paymentPresentationDescription: string;
+  paymentPresentationMethods: PaymentPresentationMethod[];
+  paymentPresentationHome: boolean;
+  paymentPresentationWholesale: boolean;
+  paymentPresentationCheckout: boolean;
 };
+
+export type PaymentCardBrand = { id: "visa" | "mastercard" | "american_express" | "naranja_x" | "cabal"; name: string; logoUrl: string; enabled: boolean; sortOrder: number };
+export type PaymentPresentationMethod = { id: "mercadopago" | "card" | "transfer"; name: string; logoUrl: string; enabled: boolean; showHome: boolean; showWholesale: boolean; showCheckout: boolean; sortOrder: number; cardBrands?: PaymentCardBrand[] };
 
 export type SiteContent = {
   products: Product[];
@@ -176,6 +186,23 @@ export const defaultSiteContent: SiteContent = {
     transferHolder: "",
     transferInstitution: "",
     transferInstructions: "Enviá el comprobante por WhatsApp indicando el número de pedido.",
+    paymentPresentationEnabled: true,
+    paymentPresentationTitle: "Pagá como más te convenga",
+    paymentPresentationDescription: "Aceptamos tarjetas, transferencias bancarias y medios de pago digitales.",
+    paymentPresentationMethods: [
+      { id: "mercadopago", name: "Mercado Pago", logoUrl: "", enabled: true, showHome: true, showWholesale: true, showCheckout: true, sortOrder: 10 },
+      { id: "card", name: "Tarjetas · Mercado Pago", logoUrl: "", enabled: true, showHome: true, showWholesale: true, showCheckout: true, sortOrder: 20, cardBrands: [
+        { id: "visa", name: "Visa", logoUrl: "", enabled: false, sortOrder: 10 },
+        { id: "mastercard", name: "Mastercard", logoUrl: "", enabled: false, sortOrder: 20 },
+        { id: "american_express", name: "American Express", logoUrl: "", enabled: false, sortOrder: 30 },
+        { id: "naranja_x", name: "Naranja X", logoUrl: "", enabled: false, sortOrder: 40 },
+        { id: "cabal", name: "Cabal", logoUrl: "", enabled: false, sortOrder: 50 },
+      ] },
+      { id: "transfer", name: "Transferencia bancaria", logoUrl: "", enabled: false, showHome: true, showWholesale: true, showCheckout: true, sortOrder: 30 },
+    ],
+    paymentPresentationHome: true,
+    paymentPresentationWholesale: true,
+    paymentPresentationCheckout: true,
   },
   vehicleCategories: [
     { id: "auto", title: "Auto", description: "Iluminación para tu auto.", image: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80", href: "/vehiculos", active: true },

@@ -77,7 +77,7 @@ test('progressive fitment fields reuse selected type, clear dependent values and
       searchPublicVehicleCompatibilities: async (...args) => { calls.push(args); return [{ id: 'fitment', brandName: 'Volkswagen', modelName: 'Bora', yearFrom: 2015, yearTo: 2018, connectorHigh: 'H7' }]; },
     },
   });
-  const render = () => { h.reset(); return VehicleFinder({ initialType: 'Auto' }); };
+  const render = () => { h.reset(); return VehicleFinder({ initialType: 'Auto', products }); };
   const flush = async () => { render(); await h.flush(); render(); };
   const inputs = () => nodes(render()).filter(n => n.type === 'input');
   const change = async (index, value) => { inputs()[index].props.onChange({ target: { value } }); await flush(); };

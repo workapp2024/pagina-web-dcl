@@ -11,10 +11,10 @@ const plain = value => JSON.parse(JSON.stringify(value));
 const request = (body, method = 'POST') => new Request('https://test.invalid/api/admin/test', { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 function harness(role = 'VENDEDOR') {
-  const state = { profile: { id, role, active: true, session_version: 1, email: 'staff@example.test', display_name: 'Staff' }, cookie: '', writes: [], calls: [] };
+  const state = { profile: { id, role, active: true, session_version: 1, email: 'staff@example.test', display_name: 'Staff' }, profileError: null, cookie: '', writes: [], calls: [] };
   const db = { from(table) {
     const call = { table, filters: [] }; state.calls.push(call);
-    const result = () => ({ data: table === 'admin_profiles' ? state.profile : [], error: null });
+    const result = () => ({ data: table === 'admin_profiles' ? state.profile : [], error: state.profileError });
     const chain = {
       select() { return chain; }, eq(...args) { call.filters.push(args); return chain; }, order() { return Promise.resolve(result()); },
       maybeSingle: async () => result(), single: async () => result(),
@@ -61,6 +61,52 @@ test('individual login validates Auth and active profile; client-supplied role c
   assert.equal((await login('')).status, 401);
   h.state.profile.active = false; assert.equal((await login()).status, 401);
   h.env.ADMIN_AUTH_MODE = 'legacy'; assert.equal((await login('')).status, 200);
+});
+
+test('individual login emits fixed stage labels without exposing request data or Supabase errors', async () => {
+  const originalInfo = console.info;
+  const logs = [];
+  console.info = (...args) => logs.push(args.join(' '));
+  const email = 'private-login-email@example.test';
+  const password = 'private-login-password';
+  const internalError = 'private-supabase-error-detail';
+
+  async function attempt({ authResult, authThrow, profile, profileError, profileThrow, expectedStatus, expectedMessage, expectedLog }) {
+    const h = harness();
+    h.state.profile = profile === undefined ? h.state.profile : profile;
+    h.state.profileError = profileError ?? null;
+    h.mocks['@/lib/supabase/server'].createServerClient = () => ({ auth: { signInWithPassword: async () => {
+      if (authThrow) throw new Error(internalError);
+      return authResult;
+    } } });
+    if (profileThrow) h.mocks['@/lib/supabase/server'].createAdminServerClient = () => ({ from() { throw new Error(internalError); } });
+    h.mocks['next/server'] = { NextResponse: { json: (body, init) => {
+      const response = Response.json(body, init);
+      response.cookies = { set() {} };
+      return response;
+    } } };
+    const api = load('app/api/admin/login/route.ts', h.mocks, { process: { env: h.env } });
+    const form = new FormData(); form.set('email', email); form.set('password', password);
+    const response = await api.POST(new Request('https://test.invalid/api/admin/login', { method: 'POST', body: form }));
+    const body = await response.json();
+    assert.equal(response.status, expectedStatus);
+    if (expectedMessage) assert.equal(body.message, expectedMessage);
+    assert.deepEqual(logs.splice(0), [`[admin-login] ${expectedLog}`]);
+    assert.doesNotMatch(JSON.stringify({ body, logs }), new RegExp(`${email}|${password}|${internalError}`));
+  }
+
+  try {
+    await attempt({ authResult: { data: { user: null }, error: { message: internalError } }, expectedStatus: 401, expectedMessage: 'Credenciales inválidas o usuario inactivo.', expectedLog: 'auth_rejected' });
+    await attempt({ authThrow: true, expectedStatus: 401, expectedMessage: 'No se pudo iniciar sesión.', expectedLog: 'auth_rejected' });
+    await attempt({ authResult: { data: { user: { id } }, error: null }, profileError: { message: internalError }, expectedStatus: 401, expectedMessage: 'Credenciales inválidas o usuario inactivo.', expectedLog: 'profile_query_error' });
+    await attempt({ authResult: { data: { user: { id } }, error: null }, profileThrow: true, expectedStatus: 401, expectedMessage: 'No se pudo iniciar sesión.', expectedLog: 'profile_query_error' });
+    await attempt({ authResult: { data: { user: { id } }, error: null }, profile: null, expectedStatus: 401, expectedMessage: 'Credenciales inválidas o usuario inactivo.', expectedLog: 'profile_missing' });
+    await attempt({ authResult: { data: { user: { id } }, error: null }, profile: { ...harness().state.profile, active: false }, expectedStatus: 401, expectedMessage: 'Credenciales inválidas o usuario inactivo.', expectedLog: 'profile_inactive' });
+    await attempt({ authResult: { data: { user: { id } }, error: null }, profile: { ...harness().state.profile, role: 'OWNER' }, expectedStatus: 401, expectedMessage: 'Credenciales inválidas o usuario inactivo.', expectedLog: 'profile_role_rejected' });
+    await attempt({ authResult: { data: { user: { id } }, error: null }, profile: { ...harness('ADMIN').state.profile }, expectedStatus: 200, expectedLog: 'login_success' });
+  } finally {
+    console.info = originalInfo;
+  }
 });
 
 test('ADMIN retains all pages; seller page allowlist excludes owner modules and unknown routes', () => {

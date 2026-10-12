@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWholesaleSessionCustomerId } from "@/lib/wholesale-server";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
-import { isSameOriginWrite } from "@/lib/store/buyer-session";
+import { isWholesaleSessionWriteAllowed } from "@/lib/wholesale-session-origin";
 import { parseWholesaleRequestItems, wholesaleRpcErrorMessage } from "@/lib/wholesale-order-api";
 
 const privateHeaders = { "Cache-Control": "no-store, private" };
@@ -28,7 +28,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const customerId = await getWholesaleSessionCustomerId();
   if (!customerId) return errorResponse("Ingresá a tu cuenta mayorista para iniciar una solicitud.", 401);
-  if (!isSameOriginWrite(request)) return errorResponse("No se pudo validar el origen de la solicitud.", 403);
+  if (!isWholesaleSessionWriteAllowed(request)) return errorResponse("No se pudo validar el origen de la solicitud.", 403);
   if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) return errorResponse("El formato de la solicitud no es válido.", 400);
   let body: unknown;
   try { body = await request.json(); } catch { return errorResponse("El contenido no es JSON válido.", 400); }

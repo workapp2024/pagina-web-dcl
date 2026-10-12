@@ -11,6 +11,7 @@ import type { WholesaleVehicleMatch } from "@/lib/wholesale-catalog-search";
 import { getPublicVehicleTypes, searchPublicVehicleCompatibilities } from "@/lib/supabase/vehicle-compatibility";
 import { addWholesaleProduct, getWholesaleSelectionTotals, persistWholesaleSelection, restoreWholesaleSelection, restoreWholesaleSelectionFromStorage, serializeWholesaleSelection, setWholesaleQuantity, WHOLESALE_SELECTION_STORAGE_KEY } from "@/lib/wholesale-order-selection";
 import type { WholesaleOrderAttempt, WholesaleOrderSelection } from "@/lib/wholesale-order-selection";
+import { buildWholesaleCustomerOrderCards, getOpenWholesaleAttempts, isWholesaleOrderActive, newRequestConfirmation, recoveredOrderMessage, wholesaleOrderNextAction, wholesaleOrderStatusLabel, wholesaleSelectionMatchesAttempt, wholesaleSelectionMatchesOrder } from "@/lib/wholesale-customer-orders";
 import type { WholesaleCatalogItem } from "@/lib/wholesale-server";
 
 export function WholesaleCatalog() {
@@ -32,12 +33,13 @@ export function WholesaleCatalog() {
   const [attempts, setAttempts] = useState<WholesaleOrderAttempt[]>([]);
   const [attemptsLoading, setAttemptsLoading] = useState(true);
   const [attemptsError, setAttemptsError] = useState("");
-  const [orders, setOrders] = useState<Array<{ id: string; order_number: string; status: string; created_at: string; confirmed_at: string | null; total_amount: number; currency: string; items: Array<{ productId: string; name: string; quantity: number; unitPrice: number; lineTotal: number; currency: string }> }>>([]);
+  const [orders, setOrders] = useState<Array<{ id: string; order_number: string; status: string; created_at: string; confirmed_at: string | null; total_amount: number | null; currency: string; revision_id?: string; revision_version?: number; revision_status?: string; requires_customer_approval?: boolean; commercial_conditions?: string; items: Array<{ productId: string; name: string; quantity: number; unitPrice: number; lineTotal: number; currency: string }> }>>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
   const [orderMessage, setOrderMessage] = useState("");
   const [orderError, setOrderError] = useState("");
+  const [proposalResponseBusy, setProposalResponseBusy] = useState<string | null>(null);
   const [cartFeedback, setCartFeedback] = useState("");
   const [detailsProduct, setDetailsProduct] = useState<{ product: WholesaleCatalogItem; compatibility?: string } | null>(null);
   const submissionInFlight = useRef(false);
@@ -70,11 +72,26 @@ export function WholesaleCatalog() {
     const requestId = ++ordersRequestRef.current;
     setOrdersLoading(true); setOrdersError("");
     try {
-      const response = await fetch("/api/wholesale/orders?limit=25", { cache: "no-store", signal });
-      if (response.status === 401) { router.replace("/mayoristas/ingresar"); return; }
-      const body = await response.json();
-      if (!response.ok || !body.ok || !Array.isArray(body.data)) throw new Error(body.error || "No se pudo cargar el historial.");
-      if (requestId === ordersRequestRef.current) setOrders(body.data);
+      const allOrders: typeof orders = [];
+      let cursor: { beforeCreatedAt: string; beforeId: string } | null = null;
+      const seenCursors = new Set<string>();
+      do {
+        const params = new URLSearchParams({ limit: "100" });
+        if (cursor) { params.set("beforeCreatedAt", cursor.beforeCreatedAt); params.set("beforeId", cursor.beforeId); }
+        const response = await fetch(`/api/wholesale/orders?${params.toString()}`, { cache: "no-store", signal });
+        if (response.status === 401) { router.replace("/mayoristas/ingresar"); return; }
+        const body = await response.json();
+        if (!response.ok || !body.ok || !Array.isArray(body.data)) throw new Error(body.error || "No se pudo cargar el historial.");
+        allOrders.push(...body.data);
+        const nextCursor = body.nextCursor;
+        if (!nextCursor || typeof nextCursor.beforeCreatedAt !== "string" || typeof nextCursor.beforeId !== "string") cursor = null;
+        else {
+          const key = `${nextCursor.beforeCreatedAt}:${nextCursor.beforeId}`;
+          if (seenCursors.has(key)) cursor = null;
+          else { seenCursors.add(key); cursor = nextCursor; }
+        }
+      } while (cursor && !signal?.aborted && requestId === ordersRequestRef.current);
+      if (requestId === ordersRequestRef.current && !signal?.aborted) setOrders(allOrders);
     } catch (cause) {
       if (!signal?.aborted && requestId === ordersRequestRef.current) setOrdersError(cause instanceof Error ? cause.message : "No se pudo cargar el historial.");
     } finally { if (!signal?.aborted && requestId === ordersRequestRef.current) setOrdersLoading(false); }
@@ -184,6 +201,9 @@ export function WholesaleCatalog() {
   const compatibilityById = new Map((vehicleResults || []).map(result => [result.product.id, result.fitments.join(" · ")]));
   const { totalUnits, indicativeTotal } = getWholesaleSelectionTotals(selection);
   const money = useMemo(() => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }), []);
+  const orderCards = buildWholesaleCustomerOrderCards(orders, attempts);
+  const openAttempts = getOpenWholesaleAttempts(attempts);
+  const activeOrderNumbers = orderCards.filter(({ order }) => isWholesaleOrderActive(order.status)).map(({ order }) => order.order_number);
 
   function saveSelection(next: WholesaleOrderSelection) {
     selectionVersionRef.current += 1;
@@ -243,17 +263,30 @@ export function WholesaleCatalog() {
     setBusy(true); setOrderError(""); setOrderMessage("");
     try {
       if (!await postAttempt(attemptId)) return;
-      setOrderMessage("Solicitud creada. El carrito actual se conservó por separado.");
+      setOrderMessage("El envío se completó. Revisá Mis pedidos para consultar el número y el estado; el carrito actual se conservó por separado.");
       await Promise.all([refreshAttempts(), refreshOrders()]);
     } catch (cause) {
       setOrderError(cause instanceof Error ? cause.message : "No se pudo enviar la solicitud. Intentá nuevamente.");
-      void refreshAttempts().catch(() => undefined);
+      void Promise.all([refreshAttempts(), refreshOrders()]).catch(() => undefined);
     } finally { submissionInFlight.current = false; setBusy(false); }
   }
 
   async function submitOrder(newIntent = false) {
     const currentSelection = selectionRef.current;
     if (submissionInFlight.current || !Object.keys(currentSelection).length) return;
+    const pendingAttempt = openAttempts[0];
+    if (pendingAttempt && !wholesaleSelectionMatchesAttempt(currentSelection, pendingAttempt.items)) {
+      setOrderError("Hay una solicitud pendiente de envío con otros artículos. Reintentala o cerrala antes de enviar esta selección.");
+      setCartOpen(true);
+      return;
+    }
+    if (pendingAttempt && newIntent) {
+      setOrderError("Primero reintentá o cerrá la solicitud pendiente. Después podrás iniciar una solicitud independiente.");
+      return;
+    }
+    const matchesExistingOrder = orderCards.some(({ order }) => wholesaleSelectionMatchesOrder(currentSelection, order.items));
+    const confirmation = newRequestConfirmation(activeOrderNumbers, newIntent);
+    if (confirmation && (newIntent || !matchesExistingOrder) && !window.confirm(confirmation)) return;
     submissionInFlight.current = true;
     setBusy(true); setOrderError(""); setOrderMessage("");
     const items = Object.values(currentSelection).map(({ product, quantity }) => ({ productId: product.id, quantity }));
@@ -268,19 +301,20 @@ export function WholesaleCatalog() {
       const attemptId = attemptBody.data?.attemptId;
       if (typeof attemptId !== "string") throw new Error("No se pudo recuperar el intento del servidor.");
       if (attemptBody.data?.recovered === true) {
-        setOrderMessage(`Esta selección ya corresponde a la solicitud ${attemptBody.data.orderId || "existente"}. No se creó otra solicitud. Revisá las solicitudes recuperables o el historial.`);
+        const recoveredOrder = orderCards.find(({ order }) => order.id === attemptBody.data.orderId)?.order;
+        setOrderMessage(recoveredOrderMessage(recoveredOrder?.order_number));
         setCartOpen(true);
         await Promise.all([refreshAttempts(), refreshOrders()]);
         return;
       }
       if (!await postAttempt(attemptId)) return;
       clearSubmittedSelection(currentSelection);
-      setOrderMessage("Solicitud creada. DCL debe verificar disponibilidad y confirmar las condiciones antes de que exista una compra confirmada.");
+      setOrderMessage("El envío se completó. DCL debe verificar disponibilidad y confirmar las condiciones antes de que exista una compra confirmada. Consultá el estado en Mis pedidos.");
       setCartOpen(true);
       await Promise.all([refreshAttempts(), refreshOrders()]);
     } catch (cause) {
       setOrderError(cause instanceof Error ? cause.message : "No se pudo enviar la solicitud. Intentá nuevamente.");
-      void refreshAttempts().catch(() => undefined);
+      void Promise.all([refreshAttempts(), refreshOrders()]).catch(() => undefined);
     } finally { submissionInFlight.current = false; setBusy(false); }
   }
 
@@ -314,6 +348,33 @@ export function WholesaleCatalog() {
       setOrderError(cause instanceof Error ? cause.message : "No se pudo reconocer el resultado.");
       await refreshAttempts().catch(() => undefined);
     } finally { setBusy(false); }
+  }
+
+  async function respondToProposal(order: (typeof orders)[number], decision: "accept" | "reject") {
+    if (!order.revision_id || proposalResponseBusy) return;
+    const prompt = decision === "accept"
+      ? "¿Aceptar esta propuesta comercial? Esto no confirma el pedido ni registra pagos o entregas."
+      : "¿Rechazar esta propuesta? El pedido volverá a revisión de DCL; no se cancela la solicitud."
+    if (!window.confirm(prompt)) return;
+    setProposalResponseBusy(order.id);
+    setOrderError("");
+    setOrderMessage("");
+    try {
+      const response = await fetch(`/api/wholesale/orders/${order.id}/proposal-response`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ revisionId: order.revision_id, decision }),
+      });
+      const body = await response.json();
+      if (response.status === 401) { router.replace("/mayoristas/ingresar"); return; }
+      if (!response.ok || !body.ok) throw new Error(body.error || "No se pudo registrar la respuesta.");
+      setOrderMessage(decision === "accept"
+        ? "Aceptaste la propuesta. El pedido todavía debe ser confirmado por DCL."
+        : "Rechazaste la propuesta. El pedido volvió a revisión de DCL.");
+      await refreshOrders();
+    } catch (cause) {
+      setOrderError(cause instanceof Error ? cause.message : "No se pudo confirmar el resultado. Actualizá el pedido antes de volver a intentar.");
+      await refreshOrders().catch(() => undefined);
+    } finally { setProposalResponseBusy(null); }
   }
 
   return <main className="mx-auto min-h-[70vh] max-w-7xl px-4 py-5 pb-[calc(env(safe-area-inset-bottom)+7rem)] text-white sm:px-6 sm:py-8 sm:pb-10 lg:px-8">
@@ -363,12 +424,12 @@ export function WholesaleCatalog() {
       </details>
     </div>
 
-    {(attempts.length > 0 || attemptsLoading || attemptsError) && <section aria-label="Solicitudes recuperables" className="mb-6 space-y-3">
+    {(openAttempts.length > 0 || attemptsLoading || attemptsError) && <section aria-label="Solicitudes pendientes de envío" className="mb-6 space-y-3">
       {attemptsLoading && <p role="status" className="rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-400">Cargando intentos recuperables…</p>}
       {attemptsError && <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-sm text-amber-100 sm:p-4"><p role="alert">{attemptsError}</p><button type="button" onClick={() => void refreshAttempts()} className="mt-2 min-h-11 rounded-full border border-amber-200/40 px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]">Reintentar intentos</button></div>}
-      {attempts.map(attempt => attempt.status === "open" ? <article key={attempt.attemptId} className="rounded-2xl border border-amber-300/40 bg-amber-950/20 p-3 sm:p-4">
+      {openAttempts.map(attempt => <article key={attempt.attemptId} className="rounded-2xl border border-amber-300/40 bg-amber-950/20 p-3 sm:p-4">
         <h2 className="font-bold text-amber-100">Hay una solicitud pendiente de envío</h2>
-        <p className="mt-1 text-sm leading-6 text-zinc-300">Este intento conserva los artículos originales. El carrito actual se mantiene aparte; para enviar una selección diferente, cerrá explícitamente este intento primero. El cierre solo funciona si todavía no se creó un pedido.</p>
+        <p className="mt-1 text-sm leading-6 text-zinc-300">Todavía no hay un pedido registrado para esta solicitud. Este intento conserva sus artículos originales. Podés reintentar el envío o cerrarlo si querés empezar otra solicitud; el carrito actual se mantiene aparte.</p>
         <ul className="mt-3 space-y-1 text-sm text-zinc-200">{attempt.items.map(item => {
           const product = uniqueProducts.find(candidate => candidate.id === item.productId);
           return <li key={item.productId}>{item.quantity} × {product?.name || item.productId}</li>;
@@ -378,31 +439,42 @@ export function WholesaleCatalog() {
           <button type="button" disabled={busy} onClick={() => void retryAttempt(attempt.attemptId)} className="min-h-11 rounded-full bg-amber-700 px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Reintentar este intento</button>
           <button type="button" disabled={busy} onClick={() => void closeAttempt(attempt.attemptId)} className="min-h-11 rounded-full border border-amber-200/40 px-4 text-sm font-semibold text-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Cerrar intento pendiente</button>
         </div>
-      </article> : <article key={attempt.attemptId} className="rounded-2xl border border-emerald-300/40 bg-emerald-950/20 p-3 sm:p-4">
-        <h2 className="font-bold text-emerald-100">Solicitud creada{attempt.order?.orderNumber ? ` · ${attempt.order.orderNumber}` : ""}</h2>
-        <p className="mt-1 text-sm leading-6 text-zinc-300">El resultado se recuperó del servidor. Tu selección local permanece intacta hasta que decidas qué hacer.</p>
-        {attempt.order?.items?.length ? <ul className="mt-3 space-y-1 text-sm text-zinc-200">{attempt.order.items.map(item => <li key={item.productId}>{item.quantity} × {item.name}</li>)}</ul> : null}
-        {orderError && <p role="alert" className="mt-3 text-sm text-red-200">{orderError}</p>}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={() => void acknowledgeAttempt(attempt.attemptId)} className="min-h-11 rounded-full border border-emerald-200/40 px-4 text-sm font-semibold text-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Ya vi esta solicitud</button>
-          <button type="button" disabled={busy || !Object.keys(selection).length} onClick={() => void submitOrder(true)} className="min-h-11 rounded-full bg-emerald-700 px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Nueva solicitud con el carrito actual</button>
-        </div>
       </article>)}
     </section>}
 
+    {(orderMessage || orderError) && <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${orderError ? "border-red-400/30 bg-red-950/30 text-red-100" : "border-emerald-300/30 bg-emerald-950/20 text-emerald-100"}`}>
+      {orderError ? <p role="alert">{orderError}</p> : <p role="status">{orderMessage}</p>}
+    </div>}
     {(ordersLoading || ordersError) && <section aria-label="Estado del historial" className="mb-3 rounded-xl border border-white/10 px-3 py-2">
       {ordersLoading && <p role="status" className="text-sm text-zinc-400">Cargando historial…</p>}
       {ordersError && <div className="text-sm text-amber-100"><p role="alert">{ordersError}</p><button type="button" onClick={() => void refreshOrders()} className="mt-2 min-h-10 rounded-full border border-amber-200/40 px-4 font-semibold">Reintentar historial</button></div>}
     </section>}
-    {orders.length > 0 && <details className="mb-4 rounded-xl border border-white/10 px-3">
-      <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-[var(--red)]">Solicitudes anteriores</summary>
-      <ul className="divide-y divide-white/10 pb-2">{orders.map(order => <li key={order.id} className="py-3">
-        <p className="font-semibold">{order.order_number} · {order.status}</p>
-        <p className="mt-1 text-xs text-zinc-400">{new Date(order.created_at).toLocaleDateString("es-AR")} · {order.items.reduce((sum, item) => sum + item.quantity, 0)} unidades</p>
-        <ul className="mt-2 space-y-1 text-sm text-zinc-300">{order.items.map(item => <li key={item.productId}>{item.quantity} × {item.name}</li>)}</ul>
-      </li>)}</ul>
-      {Object.keys(selection).length > 0 && <button type="button" disabled={busy} onClick={() => void submitOrder(true)} className="mb-3 min-h-11 rounded-full border border-[color:var(--red)] px-4 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Crear otra solicitud con el carrito actual</button>}
-    </details>}
+    {(orderCards.length > 0 || ordersLoading) && <section aria-label="Mis pedidos" className="mb-6 space-y-3">
+      <h2 className="text-lg font-bold text-white">Mis pedidos</h2>
+      {orderCards.map(({ order, recoveryAttempt }) => <article key={order.id} className="min-w-0 rounded-2xl border border-white/10 bg-zinc-950/70 p-4 sm:p-5">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0"><p className="break-words text-base font-bold text-white">{order.order_number}</p><p className="mt-1 text-sm font-semibold text-[var(--red)]">{wholesaleOrderStatusLabel(order.status, order.revision_status)}</p></div>
+          <p className="shrink-0 text-right text-sm font-bold text-white">{order.total_amount == null ? "Total a confirmar" : money.format(order.total_amount)}</p>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-zinc-300">{wholesaleOrderNextAction(order.status, order.revision_status)}</p>
+        {order.status === "awaiting_customer" && order.requires_customer_approval && order.revision_id && <section aria-label={`Propuesta vigente ${order.order_number}`} className="mt-4 rounded-xl border border-amber-300/30 bg-amber-950/20 p-4">
+          <h3 className="font-semibold text-amber-100">Propuesta recibida{order.revision_version ? ` · revisión v${order.revision_version}` : ""}: revisá y respondé</h3>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">{order.commercial_conditions || "La propuesta no incluye condiciones comerciales adicionales."}</p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <button type="button" disabled={Boolean(proposalResponseBusy)} onClick={() => void respondToProposal(order, "accept")} className="min-h-11 rounded-full bg-emerald-700 px-5 text-sm font-semibold text-white disabled:opacity-50">{proposalResponseBusy === order.id ? "Registrando…" : "Aceptar propuesta"}</button>
+            <button type="button" disabled={Boolean(proposalResponseBusy)} onClick={() => void respondToProposal(order, "reject")} className="min-h-11 rounded-full border border-red-300/40 px-5 text-sm font-semibold text-red-100 disabled:opacity-50">Rechazar propuesta</button>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-zinc-400">Aceptar no confirma el pedido, no registra un pago y no acredita una entrega. DCL debe confirmar el pedido comercial.</p>
+        </section>}
+        <ul className="mt-3 space-y-2 border-t border-white/10 pt-3 text-sm text-zinc-200">{order.items.map(item => <li key={item.productId} className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1"><span className="min-w-0 break-words">{item.quantity} × {item.name}</span><span className="shrink-0 text-zinc-300">{money.format(item.lineTotal)}</span></li>)}</ul>
+        {recoveryAttempt && <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-950/20 p-3">
+          <p className="text-sm leading-6 text-emerald-100">Este pedido ya figura en Mis pedidos. La recuperación se vinculó aquí; no es una solicitud adicional.</p>
+          <button type="button" disabled={busy} onClick={() => void acknowledgeAttempt(recoveryAttempt.attemptId)} className="mt-3 min-h-10 rounded-full border border-emerald-200/40 px-4 text-sm font-semibold text-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Cerrar este aviso de recuperación</button>
+          <p className="mt-2 text-xs leading-5 text-zinc-400">Esto cierra el aviso de recuperación; no modifica ni cancela el pedido.</p>
+        </div>}
+      </article>)}
+      {Object.keys(selection).length > 0 && <button type="button" disabled={busy} onClick={() => void submitOrder(true)} className="min-h-11 rounded-full border border-[color:var(--red)] px-4 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Crear una solicitud independiente con el carrito</button>}
+    </section>}
 
     {loading && <p role="status" className="py-5 text-sm text-zinc-400">Cargando catálogo…</p>}
     {error && <div className="rounded-xl border border-red-500/30 bg-red-950/30 p-4 text-sm text-red-200"><p role="alert">{error}</p><button type="button" onClick={() => { setError(""); setLoading(true); setCatalogRetry(value => value + 1); }} className="mt-2 min-h-10 rounded-full border border-red-200/40 px-4 font-semibold">Reintentar catálogo</button></div>}

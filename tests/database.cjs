@@ -6,7 +6,7 @@ const path = require('node:path');
 // Ephemeral database only: no .env, connection URL, sockets or persisted data.
 module.exports = async function database() {
   const db = new PGlite();
-  await db.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;');
+  await db.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS; CREATE SCHEMA auth; CREATE TABLE auth.users(id UUID PRIMARY KEY);');
   // Supabase platform defaults (not repository migrations). Start permissive
   // so the corrective migration must actually revoke these inherited grants.
   await db.exec('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;');

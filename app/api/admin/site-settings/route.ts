@@ -32,6 +32,19 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminServerClient();
+    if (body.section === "payments") {
+      const methods = (row as { payment_presentation_methods?: unknown }).payment_presentation_methods;
+      const advertisesTransfer = Array.isArray(methods) && methods.some((method) =>
+        Boolean(method && typeof method === "object" && "id" in method && method.id === "transfer" && "enabled" in method && method.enabled === true));
+      if (advertisesTransfer) {
+        const { data: rawCurrent, error: settingsError } = await supabase.from("site_settings").select("transfer_alias,transfer_cbu_cvu,transfer_holder,transfer_institution").eq("id", 1).maybeSingle();
+        const current = rawCurrent as unknown as { transfer_alias?: string; transfer_cbu_cvu?: string; transfer_holder?: string; transfer_institution?: string } | null;
+        if (settingsError) return NextResponse.json({ ok: false, message: "No se pudo verificar la configuración de transferencia." }, { status: 503 });
+        if (!current || (!(current.transfer_alias?.trim() || current.transfer_cbu_cvu?.trim()) || !current.transfer_holder?.trim() || !current.transfer_institution?.trim())) {
+          return NextResponse.json({ ok: false, message: "Configurá alias o CBU/CVU, titular e institución antes de publicar transferencias." }, { status: 409 });
+        }
+      }
+    }
     const { data, error } = await supabase
       .from("site_settings")
       .update(row as never)

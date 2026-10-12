@@ -83,7 +83,7 @@ test('integrated beams persist through classification PATCH and new-product crea
     assert.equal((await api.PATCH(request({ id: 'p1', classification: { integratedHighLow } }))).status, 200);
     assert.deepEqual(writes[0].value, { integrated_high_low: integratedHighLow });
   }
-  const product = { id: 'p1', name: 'H4', category: 'Iluminación frontal', connectorType: 'H4', integratedHighLow: true, functions: [] };
+  const product = { id: 'p1', name: 'H4', price: 100, category: 'Iluminación frontal', connectorType: 'H4', integratedHighLow: true, functions: [] };
   const fresh = apiHarness({ current: null });
   assert.equal((await fresh.api.POST(request({ product }))).status, 200);
   assert.equal(fresh.writes[0].value.integrated_high_low, true);
@@ -106,7 +106,7 @@ test('PATCH rejects invalid values and unauthorized requests without writes; mis
 });
 
 test('ordinary existing-product saves cannot roll back classification; new products receive validated classification', async () => {
-  const product = { id: 'p1', name: 'Example', category: 'General', vehicleTypes: [], functions: [] };
+  const product = { id: 'p1', name: 'Example', price: 100, category: 'General', vehicleTypes: [], functions: [] };
   const existing = apiHarness();
   assert.equal((await existing.api.POST(request({ product }))).status, 200);
   for (const field of ['category', 'vehicle_types', 'functions', 'stock']) assert.equal(Object.hasOwn(existing.writes[0].value, field), false);

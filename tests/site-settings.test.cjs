@@ -90,6 +90,26 @@ test('appearance and transfer send only their own columns', async () => {
   assert.deepEqual(transfer.calls[0], ['update', { transfer_alias: 'alias', transfer_cbu_cvu: '', transfer_holder: 'holder', transfer_institution: 'bank', transfer_instructions: 'instructions' }]);
 });
 
+test('payment presentation remains separate from checkout enablement and validates its public data', () => {
+  const methods = [
+    { id: 'mercadopago', name: 'Mercado Pago', logoUrl: '', enabled: true, showHome: true, showWholesale: true, showCheckout: true, sortOrder: 10 },
+    { id: 'card', name: 'Tarjetas · Mercado Pago', logoUrl: '/brand/card.png', enabled: true, showHome: true, showWholesale: false, showCheckout: true, sortOrder: 20 },
+  ];
+  const patch = buildSiteSettingsPatch('payments', { paymentPresentationEnabled: true, paymentPresentationTitle: 'Pagá como más te convenga', paymentPresentationDescription: 'Medios disponibles', paymentPresentationMethods: methods, paymentPresentationHome: true, paymentPresentationWholesale: true, paymentPresentationCheckout: true });
+  assert.equal(patch.payment_presentation_enabled, true);
+  const cardBrands = [
+    { id: 'visa', name: 'Visa', logoUrl: '', enabled: false, sortOrder: 10 },
+    { id: 'mastercard', name: 'Mastercard', logoUrl: '', enabled: false, sortOrder: 20 },
+    { id: 'american_express', name: 'American Express', logoUrl: '', enabled: false, sortOrder: 30 },
+    { id: 'naranja_x', name: 'Naranja X', logoUrl: '', enabled: false, sortOrder: 40 },
+    { id: 'cabal', name: 'Cabal', logoUrl: '', enabled: false, sortOrder: 50 },
+  ];
+  assert.deepEqual(plain(patch.payment_presentation_methods), methods.map(method => method.id === 'card' ? { ...method, cardBrands } : method));
+  assert.equal(patch.payment_presentation_methods[1].showWholesale, false);
+  assert.throws(() => buildSiteSettingsPatch('payments', { paymentPresentationMethods: [...methods, { ...methods[0], id: 'visa' }] }), /medios|nombres|logos/i);
+  assert.throws(() => buildSiteSettingsPatch('payments', { paymentPresentationMethods: [{ ...methods[0], logoUrl: 'javascript:alert(1)' }] }), /medios|logos/i);
+});
+
 test('corrective migration is guarded, transactional and only replaces the named CHECK (static audit, no execution)', () => {
   const sql = fs.readFileSync('supabase/migrations/20260906010000_reconcile_site_settings_theme_preset.sql', 'utf8').replace(/--[^\n]*/g, '').trim();
   assert.ok(sql.startsWith('BEGIN;') && sql.endsWith('COMMIT;'));
@@ -139,6 +159,17 @@ test('route updates id=1 with the exact social patch and no theme, radio or bank
   const { POST, calls } = route();
   assert.equal((await POST(request({ section: 'configuration', siteSettings: { instagram: 'https://instagram.com/example', facebook: 'https://facebook.com/example' } }))).status, 200);
   assert.deepEqual(calls, [['update', { instagram: 'https://instagram.com/example', facebook: 'https://facebook.com/example' }], ['eq', 'id', 1]]);
+});
+
+test('payment advertising cannot publish bank transfer before its checkout details are complete', async () => {
+  const methods = [{ id: 'transfer', name: 'Transferencia bancaria', logoUrl: '', enabled: true, showHome: true, showWholesale: true, showCheckout: true, sortOrder: 1 }];
+  const body = { section: 'payments', siteSettings: { paymentPresentationEnabled: true, paymentPresentationTitle: 'Pagá como más te convenga', paymentPresentationDescription: 'Medios habilitados', paymentPresentationMethods: methods, paymentPresentationHome: true, paymentPresentationWholesale: true, paymentPresentationCheckout: true } };
+  const unconfigured = route({ data: { transfer_alias: '', transfer_cbu_cvu: '', transfer_holder: '', transfer_institution: '' }, error: null });
+  assert.equal((await unconfigured.POST(request(body))).status, 409);
+  assert.equal(unconfigured.calls.some(call => call[0] === 'update'), false);
+  const configured = route({ data: { transfer_alias: 'dcl.alias', transfer_cbu_cvu: '', transfer_holder: 'DCL', transfer_institution: 'Banco' }, error: null });
+  assert.equal((await configured.POST(request(body))).status, 200);
+  assert.ok(configured.calls.some(call => call[0] === 'update'));
 });
 
 test('route cannot insert/reset missing settings, bypass auth or silently repair constraint errors', async () => {

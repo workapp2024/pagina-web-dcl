@@ -86,14 +86,19 @@ test('transfer declaration and confirmation repeat safely; cancellation after sa
   assert.equal(await scalar('SELECT stock FROM products WHERE id=$1',[p]),3);
   assert.equal(await scalar('SELECT cancel_public_order($1)',[a]),false);
 });
-test('expired and cancelled transfers cannot sell',async()=>{
+test('late declared transfers use available stock without reactivating expired reservations; cancelled transfers cannot sell',async()=>{
   const p=await product(),a=await order([{productId:p,quantity:1}],'transfer');
   await scalar('SELECT declare_manual_transfer($1)',[a]); await expire(a);
-  assert.equal(await scalar('SELECT complete_manual_transfer($1)',[a]),null);
-  assert.equal(await scalar('SELECT cancel_public_order($1)',[a]),true);
-  await assert.rejects(scalar('SELECT complete_manual_transfer($1)',[a]),/no verificable/);
-  assert.equal(await scalar('SELECT stock FROM products WHERE id=$1',[p]),5);
+  const sale=await scalar('SELECT complete_manual_transfer($1)',[a]);assert.ok(sale);
+  assert.equal(await scalar('SELECT complete_manual_transfer($1)',[a]),sale);
+  assert.equal(await scalar('SELECT stock FROM products WHERE id=$1',[p]),4);
+  assert.equal(await scalar("SELECT count(*)::int FROM inventory_reservations WHERE order_id=$1 AND status='active'",[a]),0);
+  const cancelled=await order([{productId:p,quantity:1}],'transfer');await scalar('SELECT declare_manual_transfer($1)',[cancelled]);
+  assert.equal(await scalar('SELECT cancel_public_order($1)',[cancelled]),true);
+  await assert.rejects(scalar('SELECT complete_manual_transfer($1)',[cancelled]),/no verificable/);
+  assert.equal(await scalar('SELECT stock FROM products WHERE id=$1',[p]),4);
 });
+
 test('all admin sale signatures resolve to reservation-aware implementation; direct adjustment guarded',async()=>{
   const signatures=(await db.query("SELECT pronargs FROM pg_proc WHERE proname='create_sale_with_inventory'")).rows;
   assert.deepEqual(signatures,[{pronargs:9}]);

@@ -15,12 +15,20 @@ module.exports = function loadTs(file, mocks = {}, globals = {}) {
     if (Object.hasOwn(mocks, name)) return mocks[name];
     if (name === 'server-only') return {}; // Build-time boundary marker, not executable in this VM.
     if (name === 'next/server') return { NextResponse: { json: (body, init) => Response.json(body, init) } };
-    if (name.startsWith('@/')) return module.exports(name.slice(2) + '.ts', mocks, globals);
-    if (name.startsWith('.')) return module.exports(path.resolve(path.dirname(filename), name) + '.ts', mocks, globals);
+    if (name.startsWith('@/') || name.startsWith('.')) {
+      const base = path.resolve(name.startsWith('@/') ? process.cwd() : path.dirname(filename), name.startsWith('@/') ? name.slice(2) : name);
+      const candidates = path.extname(base)
+        ? [base]
+        : ['.ts', '.tsx', '.js', '.jsx', '.cjs', '.json'].map(extension => base + extension).concat(['index.ts', 'index.tsx', 'index.js', 'index.cjs'].map(index => path.join(base, index)));
+      const resolved = candidates.find(candidate => fs.existsSync(candidate));
+      if (!resolved) throw new Error(`Cannot resolve test module ${name} imported by ${filename}`);
+      if (/\.(?:cjs|js|json)$/.test(resolved)) return require(resolved);
+      return module.exports(resolved, mocks, globals);
+    }
     return require(name);
   };
   vm.runInNewContext(code, { exports, require: localRequire, Request, Response, URL, Headers, console,
     process: { env: { NODE_ENV: 'test' } }, fetch: async () => { throw new Error('Network forbidden in tests'); },
-    setTimeout, clearTimeout, AbortController, ...globals }, { filename });
+    setTimeout, clearTimeout, AbortController, AbortSignal, ...globals }, { filename });
   return exports;
 };

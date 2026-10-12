@@ -106,7 +106,7 @@ test('responsive rules stack mobile cards and bound long content; no reference i
 test('incremental SQL loads defaults, validates cards and preserves existing settings', async () => {
   const db = new PGlite();
   try {
-    await db.exec("CREATE TABLE public.site_settings(id integer primary key, why_us_enabled boolean, why_us_section_title text, why_us_display_mode text, why_us_text text); INSERT INTO site_settings VALUES(1,false,'Existing title','text','Previous text');");
+    await db.exec("CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid primary key); CREATE TABLE public.site_settings(id integer primary key, why_us_enabled boolean, why_us_section_title text, why_us_display_mode text, why_us_text text); INSERT INTO site_settings VALUES(1,false,'Existing title','text','Previous text');");
     await db.exec(fs.readFileSync('supabase/migrations/20261001010000_why_us_editable_cards.sql', 'utf8'));
     const row = (await db.query('SELECT * FROM site_settings')).rows[0];
     assert.deepEqual(row.why_us_cards, defaults()); assert.equal(row.why_us_enabled, false); assert.equal(row.why_us_section_title, 'Existing title'); assert.equal(row.why_us_text, 'Previous text');

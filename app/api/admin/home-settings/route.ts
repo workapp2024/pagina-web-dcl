@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const supabase = createAdminServerClient();
     const { data, error } = await supabase
       .from("home_settings")
-      .upsert(row as any, { onConflict: "id" })
+      .upsert(row as never, { onConflict: "id" })
       .select("*")
       .single();
 

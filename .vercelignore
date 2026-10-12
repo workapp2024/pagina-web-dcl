@@ -1,0 +1,12 @@
+.local-postgres/
+Referencia/
+.env*
+scripts/maintenance/
+supabase/
+tests/
+docs/
+INFORME_*.md
+*.dump
+*.zip
+*.crt
+*.pem

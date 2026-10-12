@@ -147,7 +147,7 @@ test('completed sale reads historical sale_items and snapshot; current catalog/c
   assert.ok(reads.some(r => r.table === 'sale_items'));
   assert.doesNotMatch(JSON.stringify(result), new RegExp([f.order, f.product, sale, f.context.distinct_id, f.params[1]].join('|')));
   assert.doesNotMatch(JSON.stringify(result), /customer_id|sale_id|unit_cost|email|document|address|external_payment|snapshot|notes/);
-  assert.deepEqual((await db.query('SELECT event_type FROM analytics_outbox WHERE order_id=$1 ORDER BY occurred_at,id', [f.order])).rows.map(r => r.event_type), ['order_created', 'payment_approved', 'purchase_completed']);
+  assert.deepEqual((await db.query('SELECT event_type FROM analytics_outbox WHERE order_id=$1 ORDER BY occurred_at, CASE event_type WHEN \'order_created\' THEN 0 WHEN \'payment_approved\' THEN 1 WHEN \'purchase_completed\' THEN 2 END,id', [f.order])).rows.map(r => r.event_type), ['order_created', 'payment_approved', 'purchase_completed']);
 });
 
 test('without a historical sale, pending/approved/stock-unavailable/refund-required/refunded cannot produce receipt', async () => {
@@ -317,7 +317,7 @@ test('Orders modal link is gated by server availability and remains offered on a
     const selected = { id: randomUUID(), order_number: 'DCL-900999', receipt_available: available, status: 'refunded', operational_status: 'cancelled', archived_at: '2026-09-24T12:00:00Z', created_at: '2026-09-23T21:36:00Z', total: 200.3, payment_method: 'transfer', fulfillment_method: 'pickup', customer: {}, items: [], internalNotes: [], operationalHistory: [], resolutions: [], payment: { sale_id: randomUUID(), sale_status: 'cancelled', status: 'refunded' } };
     const states = [], refs = []; let cursor = 0, refCursor = 0;
     const react = { useState(initial) { const i = cursor++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = typeof value === 'function' ? value(states[i]) : value; }]; }, useRef(initial) { const i = refCursor++; return refs[i] ||= { current: initial }; }, useEffect() {}, useCallback: fn => fn };
-    const { OrdersManager } = load('components/admin/OrdersManager.tsx', { react }, { URLSearchParams,
+    const { OrdersManager } = load('components/admin/OrdersManager.tsx', { react, '@/components/admin/AdminIdentityProvider': { useIsOwner: () => true } }, { URLSearchParams,
       fetch: async () => Response.json({ data: [selected], pagination: { total: 1 } }),
     });
     const render = () => { cursor = 0; refCursor = 0; return OrdersManager(); };

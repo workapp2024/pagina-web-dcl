@@ -3,6 +3,7 @@ import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "@/lib/supabase/database.types";
 import { isThemePreset } from "@/lib/theme";
 import { configuredWhatsAppNumber } from "@/lib/whatsapp";
+import { normalizePaymentPresentationMethods, isSafeLogoUrl } from "@/lib/payment-presentation";
 
 // Each editor owns only these columns. Never send a full cached SiteSettings row.
 export const siteSettingsSections = {
@@ -10,6 +11,7 @@ export const siteSettingsSections = {
   home: ["logo", "vehicleSectionTitle", "needsSectionTitle", "whyUsSectionTitle", "whyUsEnabled", "whyUsCards", "productsSectionTitle", "promotionsSectionTitle"],
   appearance: ["themePreset"],
   transfer: ["transferAlias", "transferCbuCvu", "transferHolder", "transferInstitution", "transferInstructions"],
+  payments: ["paymentPresentationEnabled", "paymentPresentationTitle", "paymentPresentationDescription", "paymentPresentationMethods", "paymentPresentationHome", "paymentPresentationWholesale", "paymentPresentationCheckout"],
 } as const satisfies Record<string, readonly (keyof SiteSettings)[]>;
 
 export type SiteSettingsSection = keyof typeof siteSettingsSections;
@@ -43,6 +45,7 @@ export function buildSiteSettingsPatch(section: unknown, settings: unknown): Set
   if (!entries.length) throw new Error("No hay cambios para guardar.");
   const row: Record<string, string> = {};
   const flags: Pick<SettingsUpdate, "why_us_enabled" | "why_us_cards"> = {};
+  const extra: Partial<SettingsUpdate> = {};
   for (const [key, value] of entries) {
     if (!allowed.includes(key)) throw new Error(`El campo ${key} no pertenece a esta sección.`);
     if (key === "whyUsEnabled") {
@@ -52,6 +55,26 @@ export function buildSiteSettingsPatch(section: unknown, settings: unknown): Set
     }
     if (key === "whyUsCards") {
       flags.why_us_cards = validateWhyUsCards(value);
+      continue;
+    }
+    if (key === "paymentPresentationEnabled" || key === "paymentPresentationHome" || key === "paymentPresentationWholesale" || key === "paymentPresentationCheckout") {
+      if (typeof value !== "boolean") throw new Error("Las opciones de visibilidad deben ser booleanas.");
+      const columns = { paymentPresentationEnabled: "payment_presentation_enabled", paymentPresentationHome: "payment_presentation_home", paymentPresentationWholesale: "payment_presentation_wholesale", paymentPresentationCheckout: "payment_presentation_checkout" } as const;
+      extra[columns[key]] = value;
+      continue;
+    }
+    if (key === "paymentPresentationMethods") {
+      const normalized = normalizePaymentPresentationMethods(value);
+      if (!Array.isArray(value) || value.length > 3 || normalized.length !== value.length) throw new Error("Revisá los medios, sus nombres, logos y orden.");
+      if (new Set(value.map((item: { id?: string }) => item.id)).size !== value.length) throw new Error("No repitas un medio de pago.");
+      if (normalized.some(method => method.logoUrl && !isSafeLogoUrl(method.logoUrl))) throw new Error("El logo debe usar HTTPS o una ruta local segura.");
+      extra.payment_presentation_methods = normalized as unknown as SettingsUpdate["payment_presentation_methods"];
+      continue;
+    }
+    if (key === "paymentPresentationTitle" || key === "paymentPresentationDescription") {
+      const limit = key === "paymentPresentationTitle" ? 120 : 240;
+      if (typeof value !== "string" || !value.trim() || value.length > limit) throw new Error("El título y la descripción son obligatorios y deben respetar el límite de caracteres.");
+      extra[key === "paymentPresentationTitle" ? "payment_presentation_title" : "payment_presentation_description"] = value.trim();
       continue;
     }
     const [column, limit] = fields[key as keyof typeof fields];
@@ -85,5 +108,5 @@ export function buildSiteSettingsPatch(section: unknown, settings: unknown): Set
       throw new Error("Para habilitar transferencia indicá alias o CBU/CVU, titular e institución.");
     }
   }
-  return { ...row, ...flags } as SettingsUpdate;
+  return { ...row, ...flags, ...extra } as SettingsUpdate;
 }

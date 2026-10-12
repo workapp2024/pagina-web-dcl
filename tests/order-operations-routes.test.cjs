@@ -55,16 +55,16 @@ test('admin list forwards commercial search and operational filter to the new RP
 test('public status exposes commercial reference and separate states without changing payment result', async () => {
   for (const [technical, financial, result] of [['completed','approved','approved'],['stock_unavailable','approved','review'],['pending_manual_verification','pending','pending'],['rejected','rejected','rejected']]) {
     const db = { from(table) {
-      const value = table === 'orders' ? { status: technical, payment_method: 'transfer', total: 200, currency: 'ARS', order_number: 'DCL-000123', operational_status: 'received' } : { status: financial };
+      const value = table === 'orders' ? { status: technical, payment_method: 'transfer', total: 200, currency: 'ARS', order_number: 'DCL-000123', operational_status: 'received' } : table === 'payment_transactions' ? { status: financial, amount: 200, currency: 'ARS', provider: 'transfer' } : table === 'order_items' ? [{ product_name: 'Historical item', quantity: 2, unit_price: 100, line_total: 200 }] : { transfer_alias: 'test', transfer_cbu_cvu: '', transfer_holder: 'Test', transfer_institution: 'Test', transfer_instructions: '' };
       const chain = { then: resolve => Promise.resolve({ data: value }).then(resolve) };
       for (const method of ['select','eq','single','order','limit','maybeSingle']) chain[method] = () => chain;
       return chain;
     } };
-    const { GET } = load('app/api/store/orders/[id]/status/route.ts', { '@/lib/rate-limit': { rateLimit: () => null }, '@/lib/supabase/server': { createAdminServerClient: () => db } });
-    const response = await GET(new Request('https://test.invalid'), { params: Promise.resolve({ id }) });
+    const { GET } = load('app/api/store/orders/[id]/status/route.ts', { '@/lib/store/buyer-session': { authorizedBuyerOrder: async number => number === 'DCL-000123' ? id : null, buyerNotFound: () => Response.json({ ok: false }, { status: 404 }) }, '@/lib/rate-limit': { rateLimit: () => null }, '@/lib/supabase/server': { createAdminServerClient: () => db } });
+    const response = await GET(new Request('https://test.invalid'), { params: Promise.resolve({ id: 'DCL-000123' }) });
     const body = await response.json();
-    assert.equal(body.reference, 'DCL-000123'); assert.equal(body.result, result);
-    assert.equal(body.operationalStatus, 'received'); assert.equal(body.paymentStatus, financial);
+    assert.equal(body.orderNumber, 'DCL-000123'); assert.equal(body.result, result);
+    assert.equal(Object.hasOwn(body,'operationalStatus'), false); assert.equal(body.paymentStatus, financial);
   }
 });
 
@@ -96,7 +96,7 @@ test('Admin renders separate order/payment, submits the expected transition and 
     useRef(initial) { const i = refCursor++; return refs[i] ||= { current: initial }; },
     useEffect() {}, useCallback: fn => fn,
   };
-  const { OrdersManager } = load('components/admin/OrdersManager.tsx', { react }, {
+  const { OrdersManager } = load('components/admin/OrdersManager.tsx', { react, '@/components/admin/AdminIdentityProvider': { useIsOwner: () => true } }, {
     URLSearchParams, window: { confirm: () => true }, fetch: async (url, init) => {
       if (init) { calls.push({ url, body: JSON.parse(init.body) }); return Response.json({ ok: true }); }
       return Response.json({ data: [fixture], pagination: { total: 1 } });

@@ -7,7 +7,7 @@ const { PGlite } = require('@electric-sql/pglite');
 const migration = '20260923010000_commercial_analytics_outbox.sql';
 let db, legacy;
 const scalar = async (sql, args = []) => Object.values((await db.query(sql, args)).rows[0])[0];
-const events = async order => (await db.query('SELECT * FROM analytics_outbox WHERE order_id=$1 ORDER BY occurred_at,id', [order])).rows;
+const events = async order => (await db.query('SELECT * FROM analytics_outbox WHERE order_id=$1 ORDER BY occurred_at, CASE event_type WHEN \'order_created\' THEN 0 WHEN \'payment_approved\' THEN 1 WHEN \'purchase_completed\' THEN 2 END,id', [order])).rows;
 async function fixture(method = 'mercadopago', context = null, old = false) {
   const product = randomUUID(), key = randomUUID(), customer = randomUUID();
   await db.query('INSERT INTO products(id,name,slug,price,stock) VALUES($1,$1,$1,100,10)', [product]);

@@ -73,7 +73,7 @@ test('vehicle UI queries loaded compatibility IDs, accepts unknown vehicles and 
     '@/lib/supabase/vehicle-compatibility': { VEHICLE_TYPES: ['Auto'], getPublicVehicleBrands: async () => [{ id: 'brand', name: 'Marca' }], getPublicVehicleModels: async () => [{ id: 'model', name: 'Modelo' }], searchPublicVehicleCompatibilities: async (...args) => { calls.push(args); return [fitment({ connectorHigh: 'H7' })]; } },
   });
   const nodes = n => !n || typeof n !== 'object' ? [] : Array.isArray(n) ? n.flatMap(nodes) : [n, ...nodes(n.props?.children)];
-  const render = () => { cursor = refCursor = effectCursor = 0; return VehicleFinder(); };
+  const render = () => { cursor = refCursor = effectCursor = 0; return VehicleFinder({ products: [lamp('seven', 'H7')] }); };
   const flush = async () => { render(); while (effects.length) effects.shift()(); await new Promise(r => setImmediate(r)); render(); };
   const change = async (type, index, value) => { nodes(render()).filter(n => n.type === type)[index].props.onChange({ target: { value } }); await flush(); };
   assert.ok(!nodes(render()).some(n => n.type === 'option' && n.props.value === 'high'));

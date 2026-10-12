@@ -29,10 +29,10 @@ export async function POST(request: Request) {
   const saleItemId = String(body.saleItemId ?? "");
   if (!saleItemId) return NextResponse.json({ ok: false, error: "Seleccioná un producto vendido." }, { status: 400 });
   const db = createAdminServerClient();
-  const item: any = await db.from("sale_items").select("id,sales(customer_id,customer_vehicle_id)").eq("id", saleItemId).single();
+  const item = await db.from("sale_items").select("id,sales(customer_id,customer_vehicle_id)").eq("id", saleItemId).single() as unknown as { data: { sales: { customer_id: string; customer_vehicle_id: string | null } } | null; error: { message: string } | null };
   const sale = item.data?.sales;
   if (item.error || !sale?.customer_id) return NextResponse.json({ ok: false, error: "Venta no encontrada." }, { status: 404 });
-  const result: any = await db
+  const result = await db
     .from("warranties")
     .insert({
       sale_item_id: saleItemId,
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       notes: String(body.notes ?? ""),
     } as never)
     .select("id")
-    .single();
+    .single() as unknown as { data: { id: string }; error: { message: string } | null };
   return result.error
     ? NextResponse.json({ ok: false, error: result.error.message }, { status: 500 })
     : NextResponse.json({ ok: true, id: result.data.id });

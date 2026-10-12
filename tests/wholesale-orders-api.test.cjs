@@ -5,20 +5,47 @@ const fs = require('node:fs');
 const load = require('./load-ts.cjs');
 const customerId = '11111111-1111-4111-8111-111111111111';
 const key = '22222222-2222-4222-8222-222222222222';
-const request = body => new Request('https://dcl.test/api/wholesale/orders', {
-  method: 'POST', headers: { origin: 'https://dcl.test', 'content-type': 'application/json' }, body,
+const request = (body, { url = 'https://dcl.test/api/wholesale/orders', origin = 'https://dcl.test', host = new URL(url).host } = {}) => new Request(url, {
+  method: 'POST', headers: { origin, host, 'content-type': 'application/json' }, body,
 });
 
-function harness({ session = customerId, rpcError = null } = {}) {
+function harness({ session = customerId, rpcError = null, nodeEnv = 'test' } = {}) {
   const calls = [];
   const { POST } = load('app/api/wholesale/orders/route.ts', {
     'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
     '@/lib/wholesale-server': { getWholesaleSessionCustomerId: async () => session },
     '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ rpc: async (...args) => { calls.push(args); return { data: '33333333-3333-4333-8333-333333333333', error: rpcError }; } }) },
-    '@/lib/store/buyer-session': { isSameOriginWrite: () => true },
-  });
+    '@/lib/store/buyer-session': { isSameOriginWrite: request => request.headers.get('origin') === new URL(request.url).origin && request.headers.get('sec-fetch-site') !== 'cross-site' },
+  }, { process: { env: { NODE_ENV: nodeEnv } } });
   return { POST, calls };
 }
+
+test('submission accepts the authorized private LAN origin in development', async () => {
+  const h = harness({ nodeEnv: 'development' });
+  const response = await h.POST(request(JSON.stringify({ attemptId: key }), {
+    url: 'http://192.168.100.3:3000/api/wholesale/orders',
+    origin: 'http://192.168.100.3:3000',
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(h.calls.length, 1);
+});
+
+test('submission accepts a valid same-origin production request', async () => {
+  const h = harness({ nodeEnv: 'production' });
+  const response = await h.POST(request(JSON.stringify({ attemptId: key })));
+  assert.equal(response.status, 200);
+  assert.equal(h.calls.length, 1);
+});
+
+test('submission rejects an external origin before invoking the RPC', async () => {
+  const h = harness({ nodeEnv: 'development' });
+  const response = await h.POST(request(JSON.stringify({ attemptId: key }), {
+    url: 'http://192.168.100.3:3000/api/wholesale/orders',
+    origin: 'https://attacker.example',
+  }));
+  assert.equal(response.status, 403);
+  assert.equal(h.calls.length, 0);
+});
 
 test('wholesale order endpoint requires server session and ignores any customer_id supplied by browser', async () => {
   const unauthenticated = harness({ session: null });
@@ -90,7 +117,7 @@ test('new UI starts and retries attempts by ID while keeping pending and current
   assert.match(source, /body: JSON\.stringify\(\{ attemptId \}\)/);
   assert.match(source, /attempt\.items\.map/);
   assert.match(source, /Reintentar este intento/);
-  assert.match(source, /cerrá explícitamente este intento primero/);
+  assert.match(source, /cerrá la solicitud pendiente/);
   assert.match(source, /if \(!response\.ok \|\| !body\.ok\) throw/);
   assert.ok(source.indexOf('if (attemptBody.data?.recovered === true)') < source.indexOf('clearSubmittedSelection(currentSelection)'));
   assert.match(source, /newIntent: true/);
@@ -131,6 +158,49 @@ test('attempt creation API passes only server session identity to RPC and reject
     '@/lib/store/buyer-session': { isSameOriginWrite: () => true },
   });
   assert.equal((await anonymousRoute.POST(valid)).status, 401);
+});
+
+test('attempt creation accepts the authorized private LAN origin in development', async () => {
+  const calls = [];
+  const route = load('app/api/wholesale/orders/attempts/route.ts', {
+    'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
+    '@/lib/wholesale-server': { getWholesaleSessionCustomerId: async () => customerId },
+    '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ rpc: async (...args) => {
+      calls.push(args);
+      return { data: { attemptId: key, status: 'open' }, error: null };
+    } }) },
+    '@/lib/store/buyer-session': { isSameOriginWrite: request => request.headers.get('origin') === new URL(request.url).origin && request.headers.get('sec-fetch-site') !== 'cross-site' },
+  }, { process: { env: { NODE_ENV: 'development' } } });
+  const lanRequest = new Request('http://192.168.100.3:3000/api/wholesale/orders/attempts', {
+    method: 'POST',
+    headers: { origin: 'http://192.168.100.3:3000', host: '192.168.100.3:3000', 'content-type': 'application/json' },
+    body: JSON.stringify({ items: [{ productId: 'p1', quantity: 1 }] }),
+  });
+
+  assert.equal((await route.POST(lanRequest)).status, 200);
+  assert.equal(calls.length, 1);
+});
+
+test('attempt creation rejects an external origin before invoking the RPC', async () => {
+  const calls = [];
+  const route = load('app/api/wholesale/orders/attempts/route.ts', {
+    'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
+    '@/lib/wholesale-server': { getWholesaleSessionCustomerId: async () => customerId },
+    '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ rpc: async (...args) => {
+      calls.push(args);
+      return { data: { attemptId: key, status: 'open' }, error: null };
+    } }) },
+    '@/lib/store/buyer-session': { isSameOriginWrite: request => request.headers.get('origin') === new URL(request.url).origin && request.headers.get('sec-fetch-site') !== 'cross-site' },
+  }, { process: { env: { NODE_ENV: 'development' } } });
+  const externalRequest = new Request('http://192.168.100.3:3000/api/wholesale/orders/attempts', {
+    method: 'POST',
+    headers: { origin: 'https://attacker.example', host: '192.168.100.3:3000', 'content-type': 'application/json' },
+    body: JSON.stringify({ items: [{ productId: 'p1', quantity: 1 }] }),
+  });
+
+  const response = await route.POST(externalRequest);
+  assert.equal(response.status, 403);
+  assert.equal(calls.length, 0);
 });
 
 test('attempt recovery API returns original item IDs and quantities without the private idempotency key', async () => {

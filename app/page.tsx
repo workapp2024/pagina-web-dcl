@@ -20,12 +20,15 @@ import { getPremiumProductIds } from "@/lib/supabase/premium";
 import { resolvePremiumProducts } from "@/lib/premium";
 import { PremiumProducts } from "@/components/sections/PremiumProducts";
 import { WholesaleCTA } from "@/components/sections/WholesaleCTA";
+import { PaymentMethods } from "@/components/sections/PaymentMethods";
+import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
+import { defaultSiteContent } from "@/lib/site-data";
 
 // Se revalida periódicamente para reflejar altas/bajas de productos hechas desde el panel sin necesidad de un nuevo deploy.
 export const revalidate = 60;
 
 export default async function Home() {
-  const [products, gallery, remoteStations, premiumIds] = await Promise.all([getSupabaseProducts(), getPublicGallery(16), getPublicRadioStations(), getPremiumProductIds()]);
+  const [products, gallery, remoteStations, premiumIds, remoteSettings] = await Promise.all([getSupabaseProducts(), getPublicGallery(16), getPublicRadioStations(), getPremiumProductIds(), getSupabaseSiteSettings()]);
   const premiumProducts = resolvePremiumProducts(premiumIds, products ?? []);
   const stations = remoteStations.length ? remoteStations : [DEFAULT_RADIO_STATION];
 
@@ -36,6 +39,7 @@ export default async function Home() {
 
         <main>
           <Hero />
+          <PaymentMethods settings={{ ...defaultSiteContent.siteSettings, ...remoteSettings }} surface="home" />
           <PremiumProducts products={premiumProducts} />
           <WholesaleCTA />
           <VehicleSelector homeVisibility />

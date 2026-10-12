@@ -141,7 +141,7 @@ test('add increments an existing product once, quantity updates reject invalid v
   assert.equal(removedProduct.selection['h7-led'], undefined);
   const source = fs.readFileSync('components/wholesale/WholesaleCatalog.tsx', 'utf8');
   assert.match(source, /setWholesaleQuantity\(selectionRef\.current, productId, quantity, product\)/);
-  assert.match(source, /El carrito actual se mantiene aparte/);
+  assert.match(source, /carrito actual se mantiene aparte/);
   assert.match(source, /window\.addEventListener\("storage", syncSelection\)/);
   assert.match(source, /savedSelection !== serializeWholesaleSelection\(submitted\)/);
   assert.match(source, /cartFeedback/);
@@ -247,7 +247,7 @@ test('catalog failure does not gate independent recovery and history requests', 
   assert.doesNotMatch(catalogEffect, /refreshAttempts|refreshOrders/);
   assert.match(source, /useEffect\(\(\) => \{\s*const controller = new AbortController\(\);\s*void Promise\.resolve\(\)\.then\(\(\) => refreshAttempts\(controller\.signal\)\)/);
   assert.match(source, /useEffect\(\(\) => \{\s*const controller = new AbortController\(\);\s*void Promise\.resolve\(\)\.then\(\(\) => refreshOrders\(controller\.signal\)\)/);
-  assert.match(source, /aria-label="Solicitudes recuperables"/);
+  assert.match(source, /aria-label="Solicitudes pendientes de envío"/);
   assert.match(source, /aria-label="Estado del historial"/);
 });
 
@@ -258,13 +258,13 @@ test('history and attempts show separate retryable errors without clearing recov
   assert.match(attemptsLoader, /setAttempts\(body\.data/);
   assert.match(attemptsLoader, /setAttemptsError\(/);
   assert.doesNotMatch(attemptsLoader, /setAttempts\(\[\]\)|setSelection|persistWholesaleSelection/);
-  assert.match(ordersLoader, /setOrders\(body\.data\)/);
+  assert.match(ordersLoader, /setOrders\(allOrders\)/);
   assert.match(ordersLoader, /setOrdersError\(/);
   assert.doesNotMatch(ordersLoader, /setOrders\(\[\]\)|setSelection|persistWholesaleSelection/);
   assert.match(source, /onClick=\{\(\) => void refreshAttempts\(\)\}[^>]*>Reintentar intentos/);
   assert.match(source, /onClick=\{\(\) => void refreshOrders\(\)\}[^>]*>Reintentar historial/);
   assert.match(attemptsLoader, /fetch\("\/api\/wholesale\/orders\/attempts"/);
-  assert.match(ordersLoader, /fetch\("\/api\/wholesale\/orders\?limit=25"/);
+  assert.match(ordersLoader, /fetch\(`\/api\/wholesale\/orders\?\$\{params\.toString\(\)\}`/);
   assert.doesNotMatch(attemptsLoader + ordersLoader, /start_wholesale_order_attempt|submit_wholesale_order_attempt/);
 });
 

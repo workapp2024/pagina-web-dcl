@@ -7,6 +7,8 @@ const { PGlite } = require('@electric-sql/pglite');
 const load = require('./load-ts.cjs');
 
 const migration = fs.readFileSync('supabase/migrations/20261008020000_wholesale_orders_base.sql', 'utf8');
+const expectedRevisionMigration = fs.readFileSync('supabase/migrations/20261011010000_wholesale_revision_expected.sql', 'utf8');
+const customerProposalResponsesMigration = fs.readFileSync('supabase/migrations/20261012010000_wholesale_customer_proposal_responses.sql', 'utf8');
 let db;
 let customer1;
 let customer2;
@@ -50,6 +52,8 @@ before(async () => {
       VALUES ('p1','S6 HD','Iluminación','H7',15000,11000),('p2','F10X','Auxiliar','H11',9000,NULL);
   `);
   await db.exec(migration);
+  await db.exec(expectedRevisionMigration);
+  await db.exec(customerProposalResponsesMigration);
 });
 after(async () => { await db?.close(); });
 
@@ -74,6 +78,7 @@ test('migration creates only the four private wholesale request tables with requ
     sales: 'sales', payments: 'payment_transactions', movements: 'inventory_movements', reservations: 'inventory_reservations',
   });
 });
+
 
 test('request creation snapshots current wholesale price and reference cost, and retries are idempotent', async () => {
   const request = await createOrder(customer1, [{ productId: 'p1', quantity: 10 }, { productId: 'p2', quantity: 4 }]);
@@ -121,13 +126,78 @@ test('a changed proposal keeps original snapshots and requires approval of the e
   assert.deepEqual(oldLine.rows[0], { quantity: 10, unit_price: '20000.00' });
   await assert.rejects(db.query('SELECT public.confirm_wholesale_order_revision($1,$2,$3)', [request.id, revisionId, actor]), /WHOLESALE_REVISION_NOT_CONFIRMABLE/);
   await db.query('SELECT public.approve_wholesale_order_revision_portal($1,$2,$3)', [request.id, customer1, revisionId]);
+  await db.query('SELECT public.approve_wholesale_order_revision_portal($1,$2,$3)', [request.id, customer1, revisionId]);
   await db.query('SELECT public.confirm_wholesale_order_revision($1,$2,$3)', [request.id, revisionId, actor]);
   const confirmed = await db.query('SELECT status,confirmed_revision_id,confirmed_at FROM public.wholesale_orders WHERE id=$1', [request.id]);
   assert.equal(confirmed.rows[0].status, 'confirmed');
   assert.equal(confirmed.rows[0].confirmed_revision_id, revisionId);
   assert.ok(confirmed.rows[0].confirmed_at);
+  await assert.rejects(
+    db.query(`SELECT public.propose_wholesale_order_revision_if_current($1,$2,$3::JSONB,$4,$5,$6,'')`, [
+      request.id, revisionId, items([{ productId: 'p1', quantity: 9 }]), randomUUID(), actor, 'Pago total antes de la entrega',
+    ]), /WHOLESALE_ORDER_INVALID_STATE/,
+  );
+  const stillConfirmed = await db.query('SELECT status,current_revision_id,confirmed_revision_id FROM public.wholesale_orders WHERE id=$1', [request.id]);
+  assert.deepEqual(stillConfirmed.rows[0], { status: 'confirmed', current_revision_id: revisionId, confirmed_revision_id: revisionId });
   await assert.rejects(db.query('UPDATE public.wholesale_order_revision_items SET quantity=99 WHERE revision_id=$1', [revisionId]), /WHOLESALE_REVISION_ITEM_IMMUTABLE/);
   await assert.rejects(db.query('UPDATE public.wholesale_orders SET customer_id=$2 WHERE id=$1', [request.id, customer2]), /WHOLESALE_ORDER_IMMUTABLE_FIELD/);
+});
+
+test('after rejection, an identical proposal still requires customer approval; rejection and proposal retries remain safe', async () => {
+  const request = await createOrder(customer1, [{ productId: 'p1', quantity: 2 }]);
+  await db.query('SELECT public.start_wholesale_order_review($1,$2)', [request.id, adminActor]);
+  const original = await db.query('SELECT current_revision_id FROM public.wholesale_orders WHERE id=$1', [request.id]);
+  const key = randomUUID();
+  const proposal = await db.query(`SELECT public.propose_wholesale_order_revision_if_current($1,$2,$3::JSONB,$4,$5,$6,$7) AS id`, [
+    request.id, original.rows[0].current_revision_id, items([{ productId: 'p1', quantity: 3 }]), key, adminActor, 'Pago total antes de la entrega', 'Nota interna no pública',
+  ]);
+  const proposalId = proposal.rows[0].id;
+
+  await assert.rejects(
+    db.query('SELECT public.reject_wholesale_order_revision_portal($1,$2,$3)', [request.id, customer2, proposalId]),
+    /WHOLESALE_ORDER_NOT_FOUND/,
+  );
+  await assert.rejects(
+    db.query('SELECT public.reject_wholesale_order_revision_portal($1,$2,$3)', [request.id, customer1, original.rows[0].current_revision_id]),
+    /WHOLESALE_REVISION_STALE/,
+  );
+  await db.query('SELECT public.reject_wholesale_order_revision_portal($1,$2,$3)', [request.id, customer1, proposalId]);
+  await db.query('SELECT public.reject_wholesale_order_revision_portal($1,$2,$3)', [request.id, customer1, proposalId]);
+  const rejected = await db.query(`SELECT o.status,r.status AS revision_status,
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_events e WHERE e.revision_id=r.id AND e.event_type='revision_rejected') AS rejections,
+    (SELECT e.actor_id FROM public.wholesale_order_events e WHERE e.revision_id=r.id AND e.event_type='revision_rejected') AS actor_id
+    FROM public.wholesale_orders o JOIN public.wholesale_order_revisions r ON r.id=o.current_revision_id WHERE o.id=$1`, [request.id]);
+  assert.deepEqual(rejected.rows[0], { status: 'in_review', revision_status: 'rejected', rejections: 1, actor_id: customer1 });
+
+  const next = await db.query(`SELECT public.propose_wholesale_order_revision_if_current($1,$2,$3::JSONB,$4,$5,$6,'') AS id`, [
+    request.id, proposalId, items([{ productId: 'p1', quantity: 3 }]), randomUUID(), adminActor, 'Pago total antes de la entrega',
+  ]);
+  assert.ok(next.rows[0].id);
+  const old = await db.query('SELECT status FROM public.wholesale_order_revisions WHERE id=$1', [proposalId]);
+  assert.equal(old.rows[0].status, 'superseded');
+  const resent = await db.query('SELECT status,requires_customer_approval FROM public.wholesale_order_revisions WHERE id=$1', [next.rows[0].id]);
+  assert.deepEqual(resent.rows[0], { status: 'awaiting_customer', requires_customer_approval: true });
+  await assert.rejects(
+    db.query(`SELECT public.propose_wholesale_order_revision_if_current($1,$2,$3::JSONB,$4,$5,$6,'')`, [
+      request.id, next.rows[0].id, items([{ productId: 'p1', quantity: 3 }]), randomUUID(), adminActor, 'Pago total antes de la entrega',
+    ]), /WHOLESALE_PROPOSAL_UNCHANGED/,
+  );
+});
+
+test('customer proposal history includes current terms but never internal event notes', async () => {
+  const request = await createOrder(customer1, [{ productId: 'p1', quantity: 1 }]);
+  await db.query('SELECT public.start_wholesale_order_review($1,$2)', [request.id, adminActor]);
+  const current = await db.query('SELECT current_revision_id FROM public.wholesale_orders WHERE id=$1', [request.id]);
+  await db.query(`SELECT public.propose_wholesale_order_revision_if_current($1,$2,$3::JSONB,$4,$5,$6,$7)`, [
+    request.id, current.rows[0].current_revision_id, items([{ productId: 'p1', quantity: 2 }]), randomUUID(), adminActor, 'Pago al momento de la entrega', 'Nota secreta de administración',
+  ]);
+  const result = await db.query('SELECT public.list_wholesale_customer_orders($1,25,NULL,NULL) AS data', [customer1]);
+  const order = result.rows[0].data[0];
+  assert.equal(order.status, 'awaiting_customer');
+  assert.equal(order.revision_status, 'awaiting_customer');
+  assert.equal(order.requires_customer_approval, true);
+  assert.equal(order.commercial_conditions, 'Pago al momento de la entrega');
+  assert.doesNotMatch(JSON.stringify(order), /Nota secreta|internal_note/i);
 });
 
 test('portal approval is owner-scoped and WhatsApp approval records channel, actor, time, and note', async () => {
@@ -217,6 +287,103 @@ test('administrative workflow RPCs reject VENDEDOR and accept an active ADMIN ac
   await db.query("SELECT public.close_wholesale_order($1,'cancel',$2,'')", [request.id, adminActor]);
 });
 
+async function createExpectedRevisionProposal(orderId, expectedRevision, entries, key = randomUUID(), actor = adminActor, conditions = null, internalNote = '') {
+  const result = await db.query(`SELECT public.propose_wholesale_order_revision_if_current($1,$2,$3::JSONB,$4,$5,$6,$7) AS id`, [
+    orderId, expectedRevision, items(entries), key, actor, conditions, internalNote,
+  ]);
+  return { id: result.rows[0].id, key };
+}
+
+test('expected-revision proposal requires the still-current revision and writes nothing on stale input', async () => {
+  const request = await createOrder(customer1, [{ productId: 'p1', quantity: 3 }]);
+  await db.query('SELECT public.start_wholesale_order_review($1,$2)', [request.id, adminActor]);
+  const initial = await db.query('SELECT current_revision_id FROM public.wholesale_orders WHERE id=$1', [request.id]);
+  const proposal = await createExpectedRevisionProposal(request.id, initial.rows[0].current_revision_id, [{ productId: 'p1', quantity: 2 }]);
+  const before = await db.query(`SELECT
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_revisions WHERE order_id=$1) AS revisions,
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_events WHERE order_id=$1) AS events`, [request.id]);
+  await assert.rejects(
+    createExpectedRevisionProposal(request.id, initial.rows[0].current_revision_id, [{ productId: 'p1', quantity: 1 }]),
+    /WHOLESALE_REVISION_STALE/,
+  );
+  const after = await db.query(`SELECT o.current_revision_id,
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_revisions WHERE order_id=$1) AS revisions,
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_events WHERE order_id=$1) AS events
+    FROM public.wholesale_orders o WHERE o.id=$1`, [request.id]);
+  assert.equal(after.rows[0].current_revision_id, proposal.id);
+  assert.equal(after.rows[0].revisions, before.rows[0].revisions);
+  assert.equal(after.rows[0].events, before.rows[0].events);
+});
+
+test('competing proposals in the single-session PGlite test leave one current revision', async () => {
+  const request = await createOrder(customer2, [{ productId: 'p2', quantity: 4 }]);
+  await db.query('SELECT public.start_wholesale_order_review($1,$2)', [request.id, adminActor]);
+  const current = await db.query('SELECT current_revision_id FROM public.wholesale_orders WHERE id=$1', [request.id]);
+  const attempts = await Promise.allSettled([
+    createExpectedRevisionProposal(request.id, current.rows[0].current_revision_id, [{ productId: 'p2', quantity: 3 }]),
+    createExpectedRevisionProposal(request.id, current.rows[0].current_revision_id, [{ productId: 'p2', quantity: 2 }]),
+  ]);
+  assert.equal(attempts.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal(attempts.filter(result => result.status === 'rejected' && /WHOLESALE_REVISION_STALE/.test(result.reason.message)).length, 1);
+  const state = await db.query(`SELECT
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_revisions WHERE order_id=$1) AS revisions,
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_events WHERE order_id=$1 AND event_type='revision_proposed') AS proposals,
+    current_revision_id
+    FROM public.wholesale_orders WHERE id=$1`, [request.id]);
+  assert.equal(state.rows[0].revisions, 2);
+  assert.equal(state.rows[0].proposals, 1);
+  assert.notEqual(state.rows[0].current_revision_id, current.rows[0].current_revision_id);
+});
+
+test('expected-revision proposal enforces ADMIN, is idempotent, and preserves revision and event trace', async () => {
+  const request = await createOrder(customer1, [{ productId: 'p1', quantity: 5 }]);
+  await db.query('SELECT public.start_wholesale_order_review($1,$2)', [request.id, adminActor]);
+  const current = await db.query('SELECT current_revision_id FROM public.wholesale_orders WHERE id=$1', [request.id]);
+  const key = randomUUID();
+  const entries = [{ productId: 'p1', quantity: 4 }];
+  await assert.rejects(
+    createExpectedRevisionProposal(request.id, current.rows[0].current_revision_id, entries, randomUUID(), sellerActor),
+    /WHOLESALE_ADMIN_REQUIRED/,
+  );
+  const proposal = await createExpectedRevisionProposal(request.id, current.rows[0].current_revision_id, entries, key, adminActor, 'Entrega acordada', 'Confirmar disponibilidad con proveedor');
+  const retry = await createExpectedRevisionProposal(request.id, current.rows[0].current_revision_id, entries, key, adminActor, 'Entrega acordada', 'Nota distinta que el reintento no debe duplicar');
+  assert.equal(retry.id, proposal.id);
+  await assert.rejects(
+    createExpectedRevisionProposal(request.id, current.rows[0].current_revision_id, [{ productId: 'p1', quantity: 1 }], key),
+    /WHOLESALE_IDEMPOTENCY_CONFLICT/,
+  );
+  const result = await db.query(`SELECT o.status,o.current_revision_id,r.status AS revision_status,r.version_number,
+      r.total_amount,r.commercial_conditions,r.requires_customer_approval,r.created_by,
+      (SELECT count(*)::INTEGER FROM public.wholesale_order_events e WHERE e.order_id=o.id AND e.revision_id=r.id) AS event_count,
+      (SELECT string_agg(DISTINCT e.internal_note, '|' ORDER BY e.internal_note) FROM public.wholesale_order_events e WHERE e.order_id=o.id AND e.revision_id=r.id) AS internal_notes
+    FROM public.wholesale_orders o JOIN public.wholesale_order_revisions r ON r.id=o.current_revision_id WHERE o.id=$1`, [request.id]);
+  assert.deepEqual(result.rows[0], {
+    status: 'awaiting_customer', current_revision_id: proposal.id, revision_status: 'awaiting_customer',
+    version_number: 2, total_amount: '80000.00', commercial_conditions: 'Entrega acordada',
+    requires_customer_approval: true, created_by: adminActor, event_count: 2,
+    internal_notes: 'Confirmar disponibilidad con proveedor',
+  });
+  const permissions = await db.query(`SELECT
+    has_function_privilege('anon','public.propose_wholesale_order_revision_if_current(uuid,uuid,jsonb,uuid,uuid,text,text)','EXECUTE') AS anon_exec,
+    has_function_privilege('authenticated','public.propose_wholesale_order_revision_if_current(uuid,uuid,jsonb,uuid,uuid,text,text)','EXECUTE') AS authenticated_exec,
+    has_function_privilege('service_role','public.propose_wholesale_order_revision_if_current(uuid,uuid,jsonb,uuid,uuid,text,text)','EXECUTE') AS service_exec`);
+  assert.deepEqual(permissions.rows[0], { anon_exec: false, authenticated_exec: false, service_exec: true });
+});
+
+test('expected-revision proposal rejects overlong internal notes without writing rows', async () => {
+  const request = await createOrder(customer2, [{ productId: 'p2', quantity: 1 }]);
+  await db.query('SELECT public.start_wholesale_order_review($1,$2)', [request.id, adminActor]);
+  const current = await db.query('SELECT current_revision_id FROM public.wholesale_orders WHERE id=$1', [request.id]);
+  const before = await db.query(`SELECT (SELECT count(*)::INTEGER FROM public.wholesale_order_revisions WHERE order_id=$1) AS revisions,
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_events WHERE order_id=$1) AS events`, [request.id]);
+  await assert.rejects(createExpectedRevisionProposal(
+    request.id, current.rows[0].current_revision_id, [{ productId: 'p2', quantity: 1 }], randomUUID(), adminActor, null, 'x'.repeat(1001),
+  ), /WHOLESALE_INVALID_REQUEST/);
+  const after = await db.query(`SELECT (SELECT count(*)::INTEGER FROM public.wholesale_order_revisions WHERE order_id=$1) AS revisions,
+    (SELECT count(*)::INTEGER FROM public.wholesale_order_events WHERE order_id=$1) AS events`, [request.id]);
+  assert.deepEqual(after.rows[0], before.rows[0]);
+});
+
 test('cancellation preserves event history and confirmation creates no sale, payment, or stock effect', async () => {
   const request = await createOrder(customer1, [{ productId: 'p2', quantity: 3 }]);
   const actor = adminActor;
@@ -242,10 +409,14 @@ test('wholesale tables deny direct client access and only service_role can execu
     has_table_privilege('service_role','public.wholesale_orders','INSERT') AS service_insert,
     has_function_privilege('anon','public.create_wholesale_order(uuid,jsonb,uuid)','EXECUTE') AS anon_exec,
     has_function_privilege('authenticated','public.create_wholesale_order(uuid,jsonb,uuid)','EXECUTE') AS authenticated_exec,
-    has_function_privilege('service_role','public.create_wholesale_order(uuid,jsonb,uuid)','EXECUTE') AS service_exec`);
+    has_function_privilege('service_role','public.create_wholesale_order(uuid,jsonb,uuid)','EXECUTE') AS service_exec,
+    has_function_privilege('anon','public.reject_wholesale_order_revision_portal(uuid,uuid,uuid)','EXECUTE') AS anon_reject_exec,
+    has_function_privilege('authenticated','public.reject_wholesale_order_revision_portal(uuid,uuid,uuid)','EXECUTE') AS authenticated_reject_exec,
+    has_function_privilege('service_role','public.reject_wholesale_order_revision_portal(uuid,uuid,uuid)','EXECUTE') AS service_reject_exec`);
   assert.deepEqual(permissions.rows[0], {
     anon_select: false, authenticated_select: false, service_select: true, service_insert: false,
     anon_exec: false, authenticated_exec: false, service_exec: true,
+    anon_reject_exec: false, authenticated_reject_exec: false, service_reject_exec: true,
   });
 });
 

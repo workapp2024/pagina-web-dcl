@@ -3,6 +3,7 @@ import { CheckoutForm } from "@/components/store/CheckoutForm";
 import { defaultSiteContent } from "@/lib/site-data";
 import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
 import { isMaintenanceMode, MAINTENANCE_MESSAGE } from "@/lib/maintenance-mode";
+import { PaymentMethods } from "@/components/sections/PaymentMethods";
 
 export default async function CheckoutPage() {
   // Read current transfer settings per request instead of freezing them at build time.
@@ -17,5 +18,5 @@ export default async function CheckoutPage() {
   }
   const remote = await getSupabaseSiteSettings();
   const settings = { ...defaultSiteContent.siteSettings, ...remote };
-  return <CheckoutForm transfer={{ alias: settings.transferAlias, cbuCvu: settings.transferCbuCvu, holder: settings.transferHolder, institution: settings.transferInstitution, instructions: settings.transferInstructions }}/>;
+  return <><PaymentMethods settings={settings} surface="checkout"/><CheckoutForm transfer={{ alias: settings.transferAlias, cbuCvu: settings.transferCbuCvu, holder: settings.transferHolder, institution: settings.transferInstitution, instructions: settings.transferInstructions }}/></>;
 }

@@ -12,7 +12,7 @@ test('Home contains the existing appearance editor closed by default; Configurat
     'next/navigation': { redirect: () => { throw new Error('redirect'); } },
     '@/components/admin/EditorForms': { AdminHomeEditor: () => React.createElement('div', null, 'Home editor'), AdminSiteSettingsForm: () => React.createElement('div', null, 'Contact editor') },
     '@/components/admin/PremiumManager': { PremiumManager: () => React.createElement('div', null, 'Premium editor') },
-    '@/components/admin/AppearanceSettings': { AppearanceSettings: () => React.createElement('div', null, 'Appearance editor'), TransferSettings: () => React.createElement('div', null, 'Transfer editor') },
+    '@/components/admin/AppearanceSettings': { AppearanceSettings: () => React.createElement('div', null, 'Appearance editor'), TransferSettings: () => React.createElement('div', null, 'Transfer editor'), PaymentPresentationSettings: () => React.createElement('div', null, 'Payment presentation editor') },
   };
   const home = renderToStaticMarkup(await load('app/admin/home/page.tsx', mocks).default());
   assert.match(home, /<details[^>]*><summary[^>]*>Apariencia de la tienda<\/summary><div>Appearance editor<\/div><\/details>/);

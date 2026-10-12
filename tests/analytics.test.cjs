@@ -169,7 +169,7 @@ async function vehicleRun(rows, reject = false, lookupFailure = false, found = [
     '@/lib/supabase/vehicle-compatibility': { VEHICLE_TYPES: ['Auto'], getPublicVehicleBrands: async () => null, getPublicVehicleModels: async () => [], searchPublicVehicleCompatibilities: async () => { if (reject) throw new Error('private backend details'); return rows; } },
     '@/lib/vehicle-product-search': { vehicleReferenceLinks: () => ({}), vehiclePositions: [], vehicleProductMatches: () => found },
   });
-  const tree = VehicleFinder();
+  const tree = VehicleFinder({ products: [] });
   await new Promise(resolve => setImmediate(resolve));
   nodes(tree).find(n => n.type === 'form').props.onSubmit({ preventDefault() {} });
   await new Promise(resolve => setImmediate(resolve));
