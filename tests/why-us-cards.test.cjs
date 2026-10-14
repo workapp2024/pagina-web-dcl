@@ -65,6 +65,7 @@ test('existing site settings API persists ADMIN edits and denies VENDEDOR withou
     const writes = [];
     const chain = { update: patch => { writes.push(plain(patch)); return chain; }, eq: () => chain, select: () => chain, maybeSingle: async () => ({ data: { id: 1 }, error: null }) };
     const api = load('app/api/admin/site-settings/route.ts', {
+    'next/cache': { revalidatePath: () => {} },
       '@/lib/admin-auth': { isAdminAuthenticated: async () => load('lib/admin-permissions.ts').hasAdminPermission(role) },
       '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ from: () => chain }) },
     });

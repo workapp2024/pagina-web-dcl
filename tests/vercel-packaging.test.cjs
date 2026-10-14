@@ -9,7 +9,7 @@ test('Vercel excludes root database tooling while retaining application Supabase
   for (const file of fs.readdirSync('lib/supabase')) {
     assert.equal(filter.ignores('lib/supabase/' + file), false, file);
   }
-  for (const file of ['supabase/migrations/example.sql', '.env.local', '.local-postgres/cluster/PG_VERSION', 'scripts/maintenance/database.dump', 'backup.dump', 'backup.zip', 'certificate.crt']) {
+  for (const file of ['supabase/migrations/example.sql', '.env.local', '.local-postgres/cluster/PG_VERSION', '.local-test-regularization/final-20261013/production-before.json', '.local-test-regularization/final-20261013/execute.cjs', 'scripts/maintenance/database.dump', 'backup.dump', 'backup.zip', 'certificate.crt']) {
     assert.equal(filter.ignores(file), true, file);
   }
   // Reproduce the exact defect: the old unanchored rule excludes runtime modules.

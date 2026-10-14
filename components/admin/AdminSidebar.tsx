@@ -8,14 +8,20 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const groups = [
-  { label: "Operaciones", icon: "✓", items: [{ href: "/admin/pedidos", label: "Pedidos", icon: "□" }, { href: "/admin/pedidos-mayoristas", label: "Pedidos mayoristas", icon: "▣" }, { href: "/admin/ventas", label: "Ventas", icon: "↗" }, { href: "/admin/clientes", label: "Clientes", icon: "○" }, { href: "/admin/instalaciones", label: "Instalaciones", icon: "⌁" }, { href: "/admin/garantias", label: "Garantías y reclamos", icon: "!" }] },
-  { label: "Catálogo", icon: "◇", items: [{ href: "/admin/productos", label: "Productos", icon: "◇" }, { href: "/admin/inventario", label: "Inventario", icon: "≡" }, { href: "/admin/inventario-mayorista", label: "Inventario mayorista", icon: "≋" }, { href: "/admin/compatibilidades", label: "Compatibilidades", icon: "⌘" }] },
-  { label: "Tienda y marketing", icon: "✦", items: [{ href: "/admin/home", label: "Página web / Home", icon: "⌂" }, { href: "/admin/promociones", label: "Promociones", icon: "✦" }, { href: "/admin/galeria", label: "Galería", icon: "▣" }, { href: "/admin/music", label: "DCL Music", icon: "♫" }, { href: "/admin/vehiculos", label: "Tarjetas de vehículos", icon: "▱" }] },
-  { label: "Gestión", icon: "↗", items: [{ href: "/admin/finanzas", label: "Finanzas", icon: "$" }, { href: "/admin/analitica", label: "Analítica", icon: "↗" }] },
+  { label: "Minoristas", icon: "□", items: [{ href: "/admin/minoristas", label: "Inicio", icon: "□" }, { href: "/admin/minoristas/pedidos", label: "Pedidos", icon: "□" }, { href: "/admin/minoristas/clientes", label: "Clientes", icon: "□" }, { href: "/admin/minoristas/finanzas", label: "Finanzas", icon: "$" }] },
+  { label: "Mayoristas", icon: "□", items: [{ href: "/admin/mayoristas", label: "Inicio", icon: "□" }, { href: "/admin/mayoristas/pedidos", label: "Pedidos", icon: "□" }, { href: "/admin/mayoristas/clientes", label: "Clientes", icon: "□" }, { href: "/admin/mayoristas/finanzas", label: "Finanzas", icon: "$" }] },
+  { label: "Catálogo compartido", icon: "+", items: [{ href: "/admin/productos", label: "Productos", icon: "+" }, { href: "/admin/inventario", label: "Inventario minorista", icon: "+" }, { href: "/admin/inventario-mayorista", label: "Inventario mayorista", icon: "+" }, { href: "/admin/compatibilidades", label: "Compatibilidades", icon: "+" }] },
+  { label: "Herramientas compartidas", icon: "+", items: [{ href: "/admin/finanzas", label: "Finanzas generales", icon: "$" }, { href: "/admin/ventas", label: "Ventas", icon: "+" }, { href: "/admin/instalaciones", label: "Instalaciones", icon: "+" }, { href: "/admin/garantias", label: "Garantías y reclamos", icon: "!" }, { href: "/admin/analitica", label: "Analítica", icon: "+" }, { href: "/admin/home", label: "Tienda / Home", icon: "+" }, { href: "/admin/promociones", label: "Promociones", icon: "+" }, { href: "/admin/galeria", label: "Galería", icon: "+" }, { href: "/admin/music", label: "DCL Music", icon: "+" }, { href: "/admin/vehiculos", label: "Tarjetas de vehículos", icon: "+" }] },
   { label: "Administración", icon: "⚙", items: [{ href: "/admin/usuarios", label: "Usuarios", icon: "○" }, { href: "/admin/configuracion", label: "Configuración", icon: "⚙" }] },
 ];
-const frequent = [{ href: "/admin", label: "Inicio", icon: "⌂" }, { href: "/admin/pedidos", label: "Pedidos", icon: "□" }, { href: "/admin/ventas", label: "Ventas", icon: "↗" }];
+const frequent = [{ href: "/admin/minoristas", label: "Minoristas", icon: "□" }, { href: "/admin/mayoristas", label: "Mayoristas", icon: "□" }, { href: "/admin/finanzas", label: "Finanzas", icon: "$" }];
 const account = { href: "/admin/mi-cuenta", label: "Mi cuenta", icon: "○" };
+function navigationPermissionPath(path: string) {
+  if (path === "/admin/minoristas") return "/admin/pedidos";
+  if (path.startsWith("/admin/minoristas/")) return path.replace("/admin/minoristas/", "/admin/");
+  if (path.startsWith("/admin/mayoristas/")) return path.endsWith("/pedidos") ? "/admin/pedidos-mayoristas" : path.replace("/admin/mayoristas/", "/admin/");
+  return path;
+}
 type NavigationItem = typeof account;
 
 function NavigationLink({ item, close }: { item: NavigationItem; close?: () => void }) {
@@ -28,12 +34,11 @@ function NavigationLink({ item, close }: { item: NavigationItem; close?: () => v
 function NavigationGroups({ close }: { close?: () => void }) {
   const role = useAdminIdentity()?.role;
   const pathname = usePathname();
-  const activeGroup = groups.find(group => group.items.some(item => pathname === item.href))?.label;
+  const activeGroup = groups.find(group => group.items.some(item => pathname === item.href.split("?")[0]))?.label;
   const [open, setOpen] = useState<string | null>(activeGroup ?? null);
   useEffect(() => { setOpen(activeGroup ?? null); }, [activeGroup]);
-  const visibleGroups = groups.map(group => ({ ...group, items: group.items.filter(item => role && canVisitAdminPage(role, item.href)) })).filter(group => group.items.length);
+  const visibleGroups = groups.map(group => ({ ...group, items: group.items.filter(item => (group.label !== "Mayoristas" || role === "ADMIN") && role && canVisitAdminPage(role, navigationPermissionPath(item.href))) })).filter(group => group.items.length);
   return <nav aria-label="Navegación administrativa" className="min-w-0 space-y-2">
-    {role && canVisitAdminPage(role, frequent[0].href) && <NavigationLink item={frequent[0]} close={close} />}
     {visibleGroups.map(group => {
       const expanded = open === group.label;
       return <section key={group.label} className="min-w-0 rounded-xl border border-white/10">
@@ -91,7 +96,10 @@ export function AdminSidebar() {
   const close = useCallback(() => setMoreOpen(false), []);
   useEffect(() => { close(); }, [pathname, close]);
   const logout = async () => { await fetch("/api/admin/logout", { method: "POST" }); router.push("/admin/login"); router.refresh(); };
-  const visibleFrequent = frequent.filter(item => identity && canVisitAdminPage(identity.role, item.href));
+  const sector = pathname.startsWith("/admin/mayoristas") || pathname === "/admin/pedidos-mayoristas" ? "mayoristas"
+    : pathname.startsWith("/admin/minoristas") || ["/admin/pedidos", "/admin/clientes"].includes(pathname) ? "minoristas" : null;
+  const shortcuts = sector ? [{ href: `/admin/${sector}`, label: "Inicio", icon: "⌂" }, { href: `/admin/${sector}/pedidos`, label: "Pedidos", icon: "□" }, { href: `/admin/${sector}/clientes`, label: "Clientes", icon: "○" }] : frequent;
+  const visibleFrequent = shortcuts.filter(item => identity && (sector !== "mayoristas" || identity.role === "ADMIN") && (item.href !== "/admin/mayoristas" || identity.role === "ADMIN") && canVisitAdminPage(identity.role, navigationPermissionPath(item.href)));
   return <>
     <aside className="hidden w-72 shrink-0 rounded-3xl border border-white/10 bg-zinc-950/80 p-4 lg:sticky lg:top-4 lg:block lg:h-fit" aria-label="Panel administrativo">
       <div className="mb-5 flex items-center gap-3 border-b border-white/10 pb-4"><div className="flex h-11 w-11 items-center justify-center rounded-full border border-red-500/60 bg-red-600/10 text-xs font-black text-red-400">DCL</div><div><small className="uppercase tracking-[.2em] text-zinc-400">Cree LED</small><b className="block text-lg">Panel</b></div></div>

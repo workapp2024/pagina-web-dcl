@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } from "@/lib/api";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
+import { retailNeedsAttention } from "@/lib/admin-order-attention";
+import type { OperationalOrder } from "@/lib/store/order-operations";
 import { isOperationalStatus } from "@/lib/store/order-operations";
 import { getOrderReceiptAvailability } from "@/lib/store/order-receipt";
 
@@ -28,12 +30,24 @@ export async function GET(request: Request) {
     const view = params.get("view") || "active";
     const q = boundedString(params.get("q"), 80);
     if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
-      !["all", "attention", "pending", "transfer", "paid", "delivery", "completed", "cancelled"].includes(status) ||
+      !["all", "needs_attention", "attention", "pending", "transfer", "paid", "delivery", "completed", "cancelled"].includes(status) ||
       !["all", "today", "week", "month"].includes(period) || !["active", "archived"].includes(view) || (operational !== "all" && !isOperationalStatus(operational)) || q === null) return apiError("BAD_REQUEST", "Filtros invalidos.", 400);
     const db = createAdminServerClient();
-    const result = await db.rpc("list_admin_operational_orders" as never, { p_q: q, p_status: view === "archived" ? "all" : status, p_since: periodStart(period), p_page: page, p_limit: limit, p_operational: view === "archived" ? "all" : operational, p_archived: view === "archived" } as never) as unknown as { data: { data: unknown[]; pagination: { total: number; page: number; limit: number } } | null; error: { message: string } | null };
+    let result = await db.rpc("list_admin_operational_orders" as never, { p_q: q, p_status: view === "archived" || status === "needs_attention" ? "all" : status, p_since: periodStart(period), p_page: page, p_limit: limit, p_operational: view === "archived" ? "all" : operational, p_archived: view === "archived" } as never) as unknown as { data: { data: unknown[]; pagination: { total: number; page: number; limit: number } } | null; error: { message: string } | null };
     if (result.error || !result.data) throw new Error(result.error?.message || "No se pudieron consultar los pedidos.");
-    const rows = result.data.data as { id: string; order_number?: string; payment?: Record<string, unknown> | null }[];
+    if (status === "needs_attention" && view === "active") {
+      const candidates: OperationalOrder[] = [];
+      for (let cursor = 1; ; cursor++) {
+        const batch = await db.rpc("list_admin_operational_orders" as never, { p_q: q, p_status: "all", p_since: periodStart(period), p_page: cursor, p_limit: 100, p_operational: operational, p_archived: false } as never) as unknown as { data: { data: OperationalOrder[]; pagination: { total: number } } | null; error: unknown };
+        if (batch.error || !batch.data) throw new Error("No se pudieron consultar los pendientes.");
+        candidates.push(...batch.data.data);
+        if (candidates.length >= batch.data.pagination.total) break;
+        if (!batch.data.data.length) throw new Error("La consulta de pendientes quedó incompleta.");
+      }
+      const pending = candidates.filter(retailNeedsAttention);
+      result = { error: null, data: { data: pending.slice((page - 1) * limit, page * limit), pagination: { total: pending.length, page, limit } } };
+    }
+    const rows = result.data!.data as { id: string; order_number?: string; payment?: Record<string, unknown> | null }[];
     const ids = rows.map(row => row.id);
     if (!ids.length) return NextResponse.json({ ok: true, ...result.data }, { headers: { "Cache-Control": "no-store" } });
     const [payments, resolutions] = await Promise.all([
@@ -48,7 +62,7 @@ export async function GET(request: Request) {
     const resolutionsByOrder = new Map<string, Resolution[]>();
     for (const entry of (resolutions.data || []) as Resolution[]) resolutionsByOrder.set(entry.order_id, [...(resolutionsByOrder.get(entry.order_id) || []), entry]);
     const receiptAvailability = await getOrderReceiptAvailability(rows.flatMap(row => row.order_number ? [row.order_number] : []));
-    return NextResponse.json({ ok: true, ...result.data, data: rows.map(row => ({ ...row,
+    return NextResponse.json({ ok: true, ...result.data!, data: rows.map(row => ({ ...row,
       receipt_available: Boolean(row.order_number && receiptAvailability[row.order_number]),
       payment: paymentByOrder.has(row.id) ? { ...row.payment, ...paymentByOrder.get(row.id) } : row.payment,
       resolutions: resolutionsByOrder.get(row.id) || [],

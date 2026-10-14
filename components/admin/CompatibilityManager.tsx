@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import { SearchableList } from "@/components/admin/SearchableList";
 import { useEffect, useState } from "react";
 import {
   deleteAdminVehicleCompatibility,
@@ -61,7 +62,7 @@ export function AdminCompatibilityManager() {
       return;
     }
 
-    setStatus({ type: "saving", message: "Guardando en Supabase..." });
+    setStatus({ type: "saving", message: "Guardando..." });
 
     const result = await upsertAdminVehicleCompatibility({
       vehicleType: form.vehicleType,
@@ -132,7 +133,7 @@ export function AdminCompatibilityManager() {
       <div>
         <h1 className="text-3xl font-black uppercase tracking-[-0.06em] text-white">Compatibilidades</h1>
         <p className="mt-2 text-sm text-zinc-400">
-          Relación Tipo → Marca → Modelo → Año → Conector, utilizada por el buscador de LED público.
+          Conectores y luces para cada vehículo.
         </p>
       </div>
 
@@ -143,6 +144,58 @@ export function AdminCompatibilityManager() {
           desde el SQL Editor de Supabase y volvé a cargar esta página.
         </div>
       ) : null}
+
+      <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
+        <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">Compatibilidades cargadas</h2>
+        <SearchableList rows={rows} label="Compatibilidades" placeholder="Tipo, marca, modelo, año, posición o conector" loading={loading} searchText={row => [row.vehicleType, row.brandName, row.modelName, row.version, row.notes, row.yearFrom, row.yearTo, ...Array.from({ length: Math.max(0, Math.min(300, (row.yearTo ?? new Date().getFullYear()) - row.yearFrom + 1)) }, (_, index) => row.yearFrom + index), row.connectorLow && `baja ${row.connectorLow}`, (row.combinedHighLow ? row.connectorLow : row.connectorHigh) && `alta ${row.combinedHighLow ? row.connectorLow : row.connectorHigh}`, row.connectorFog && `antiniebla ${row.connectorFog}`, row.connectorAux && `auxiliar posición ${row.connectorAux}`]}>
+          {rows => (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm text-zinc-300">
+              <thead>
+                <tr className="border-b border-white/10 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
+                  <th className="py-2 pr-3">Tipo</th>
+                  <th className="py-2 pr-3">Marca / Modelo</th>
+                  <th className="py-2 pr-3">Años</th>
+                  <th className="py-2 pr-3">Baja / Alta / Antiniebla / Aux</th>
+                  <th className="py-2 pr-3">Estado</th>
+                  <th className="py-2 pr-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-b border-white/5">
+                    <td className="py-2 pr-3">{row.vehicleType}</td>
+                    <td className="py-2 pr-3 font-semibold text-white">{row.brandName} {row.modelName}</td>
+                    <td className="py-2 pr-3">{row.yearFrom}{row.yearTo ? `–${row.yearTo}` : "+"}</td>
+                    <td className="py-2 pr-3">
+                      {row.combinedHighLow ? `Alta y baja: ${row.connectorLow}` : [row.connectorLow, row.connectorHigh, row.connectorFog, row.connectorAux].filter(Boolean).join(" / ") || "—"}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span className={row.active ? "text-emerald-300" : "text-zinc-500"}>{row.active ? "Activa" : "Inactiva"}</span>
+                    </td>
+                    <td className="py-2 pr-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(row)}
+                        className="mr-2 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-200 hover:border-white/40"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(row.id)}
+                        className="rounded-full border border-red-500/40 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-red-300 hover:bg-red-600/10"
+                      >
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>          )}
+        </SearchableList>
+      </section>
 
       <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
         <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">
@@ -311,60 +364,7 @@ export function AdminCompatibilityManager() {
         </div>
       </section>
 
-      <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
-        <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">Compatibilidades cargadas</h2>
-        {loading ? (
-          <p className="mt-4 text-sm text-zinc-400">Cargando...</p>
-        ) : rows.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-400">Todavía no hay compatibilidades cargadas.</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm text-zinc-300">
-              <thead>
-                <tr className="border-b border-white/10 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                  <th className="py-2 pr-3">Tipo</th>
-                  <th className="py-2 pr-3">Marca / Modelo</th>
-                  <th className="py-2 pr-3">Años</th>
-                  <th className="py-2 pr-3">Baja / Alta / Antiniebla / Aux</th>
-                  <th className="py-2 pr-3">Estado</th>
-                  <th className="py-2 pr-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-white/5">
-                    <td className="py-2 pr-3">{row.vehicleType}</td>
-                    <td className="py-2 pr-3 font-semibold text-white">{row.brandName} {row.modelName}</td>
-                    <td className="py-2 pr-3">{row.yearFrom}{row.yearTo ? `–${row.yearTo}` : "+"}</td>
-                    <td className="py-2 pr-3">
-                      {row.combinedHighLow ? `Alta y baja: ${row.connectorLow}` : [row.connectorLow, row.connectorHigh, row.connectorFog, row.connectorAux].filter(Boolean).join(" / ") || "—"}
-                    </td>
-                    <td className="py-2 pr-3">
-                      <span className={row.active ? "text-emerald-300" : "text-zinc-500"}>{row.active ? "Activa" : "Inactiva"}</span>
-                    </td>
-                    <td className="py-2 pr-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(row)}
-                        className="mr-2 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-200 hover:border-white/40"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(row.id)}
-                        className="rounded-full border border-red-500/40 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-red-300 hover:bg-red-600/10"
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+
     </div>
   );
 }

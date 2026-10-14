@@ -68,9 +68,13 @@ test('public and admin reads carry additions, tolerate pending migration, and pu
 
 test('compact manager searches loaded products, opens one editor, cancels drafts and saves a new product only once', async () => {
   const h = hooks(), writes = []; let succeed = true;
+  const listHooks = hooks();
+  const List = () => null;
+  const { SearchableList } = load('components/admin/SearchableList.tsx', { react: { ...listHooks.react, useId: () => 'products-list' } });
   const originals = [{ id: 'a', name: 'Alpha', price: 150, stock: 4, active: true, image: '/main.webp', images: ['/second.webp'], category: 'General' }, { id: 'b', name: 'Beta', price: 90, stock: 2, active: false }];
   const Dialog = () => null, Classification = () => null;
   const { AdminProductsManager } = load('components/admin/EditorForms.tsx', {
+    '@/components/admin/SearchableList': { SearchableList: List },
     '@/components/admin/ProductPricingFields': { ProductPricingFields: () => null },
     '@/components/admin/WhyUsCardsEditor': { WhyUsCardsEditor: () => null },
     react: h.react, '@/components/admin/ProductEditorDialog': { ProductEditorDialog: Dialog }, '@/components/admin/ProductClassificationEditor': { ProductClassificationEditor: Classification },
@@ -79,10 +83,18 @@ test('compact manager searches loaded products, opens one editor, cancels drafts
     '@/lib/supabase/products': { getAdminSupabaseProducts: async () => ({ success: true, products: originals }), upsertSupabaseProduct: async p => { writes.push(plain(p)); await settle(); return { success: succeed, error: 'Save failed' }; } },
     '@/lib/supabase/promotions': {}, '@/lib/supabase/vehicle-categories': {}, '@/lib/supabase/site-settings': {}, '@/lib/site-settings-patch': {}, '@/lib/supabase/home-settings': {},
   }, { window: { confirm: () => true }, setTimeout: () => 0 });
-  const render = () => { h.reset(); return AdminProductsManager(); };
+  const expandList = node => {
+    if (!node || typeof node !== 'object') return node;
+    if (Array.isArray(node)) return node.map(expandList);
+    if (node.type === List) { listHooks.reset(); return SearchableList(node.props); }
+    return { ...node, props: { ...node.props, children: expandList(node.props?.children) } };
+  };
+  const render = () => { h.reset(); return expandList(AdminProductsManager()); };
   const button = label => nodes(render()).find(n => n.type === 'button' && text(n) === label);
   render(); h.effects[0](); await settle();
   assert.equal(nodes(render()).filter(n => n.type === Dialog).length, 0);
+  assert.equal(nodes(render()).filter(n => n.type === 'article').length, 0);
+  button('Ver todos los productos').props.onClick();
   assert.ok(text(render()).includes('Stock: 4')); assert.ok(text(render()).includes('Inactivo'));
   nodes(render()).find(n => n.type === 'input' && n.props.type === 'search').props.onChange({ target: { value: 'BETA' } });
   assert.equal(nodes(render()).filter(n => n.type === 'article').length, 1);

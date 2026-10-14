@@ -1,1 +1,7 @@
-import {redirect} from "next/navigation";import {isAdminAuthenticated} from "@/lib/admin-auth";import {FinancesManager} from "@/components/admin/FinancesManager";export default async function Page(){if(!(await isAdminAuthenticated()))redirect("/admin/login");return <FinancesManager/>}
+import { redirect } from "next/navigation";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { FinanceOverview } from "@/components/admin/FinanceOverview";
+export default async function Page() {
+  if (!(await isAdminAuthenticated())) redirect("/admin/login");
+  return <FinanceOverview />;
+}

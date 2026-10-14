@@ -42,6 +42,7 @@ yarn-error.log*
 
 # Portable PostgreSQL tools and isolated local test cluster
 /.local-postgres/
+/.local-test-regularization/
 
 # Local duplicate with an invalid Supabase migration timestamp; the equivalent
 # service-role grant is already in 20260830000000_vehicle_compatibility.sql.

@@ -1,4 +1,5 @@
 "use client";
+import { SearchableList } from "@/components/admin/SearchableList";
 import { WhyUsCardsEditor } from "@/components/admin/WhyUsCardsEditor";
 
 import { useEffect, useRef, useState } from "react";
@@ -266,11 +267,11 @@ export function AdminProductsManager() {
     setEditingProduct(null); setNewProduct(null); setDirty(false);
   };
   const selectedProduct = newProduct ?? editingProduct;
-  const visibleProducts = products.filter(product => product.name.toLocaleLowerCase("es").includes(search.trim().toLocaleLowerCase("es")));
+
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black uppercase tracking-[-0.06em] text-white">Productos</h1>
           <p className="mt-2 text-sm text-zinc-400">Administrá precios, imágenes, categorías y estado de cada producto.</p>
@@ -291,12 +292,14 @@ export function AdminProductsManager() {
 
       {isLoadingProducts ? <p className="text-sm text-zinc-400">Cargando productos administrativos...</p> : null}
 
-      <label className="block text-sm text-zinc-300">Buscar producto…<input type="search" placeholder="Buscar producto…" value={search} onChange={event => setSearch(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-zinc-950 px-4 text-base" /></label>
+      <SearchableList rows={products} label="Productos" placeholder="Nombre, código, conector o categoría" query={search} onQueryChange={setSearch} loading={isLoadingProducts} searchText={product => [product.name, product.id, product.description, product.category, product.connectorType, ...(product.functions ?? []), ...(product.vehicleTypes ?? []), product.watts, product.voltage, product.chipType]}>
+        {visibleProducts => (
       <div className="space-y-3">{visibleProducts.map(product => <article key={product.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-zinc-950 p-4">
         <div className="min-w-0"><h2 className="break-words font-bold text-white">{product.name}</h2><p className="mt-1 text-sm text-zinc-300">{new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(product.price)} · Stock: {product.stock ?? 0} · {product.active ? "Activo" : "Inactivo"}</p></div>
         <button type="button" onClick={() => { setEditingProduct({ ...product }); setPricingInvalid(false); setDirty(false); setClassificationPending(false); }} className="min-h-11 rounded-full border border-red-500/50 px-5 text-sm font-bold text-red-300">Editar</button>
       </article>)}</div>
-      {!isLoadingProducts && !visibleProducts.length && <p className="text-sm text-zinc-400">No se encontraron productos.</p>}
+        )}
+      </SearchableList>
       {(selectedProduct ? [selectedProduct] : []).map((product) => {
         const statusInfo = productStatuses[product.id];
 

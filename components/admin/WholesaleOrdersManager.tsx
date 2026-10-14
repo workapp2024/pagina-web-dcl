@@ -1,7 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { wholesaleAdminLabel, wholesaleNextAction } from "@/lib/admin-order-attention";
+import { WholesaleConfirmation } from "@/components/admin/WholesaleConfirmation";
 import { WholesaleOrderLedger } from "@/components/admin/WholesaleOrderLedger";
 import {
   getWholesaleAdvancePercent,
@@ -21,6 +23,7 @@ type WholesaleProduct = {
 type Order = {
   id: string;
   orderNumber: string;
+  revisionStatus?: string;
   customerName: string;
   status: string;
   createdAt: string;
@@ -120,7 +123,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(0);
-  const [filters, setFilters] = useState<Filters>({ status: "all", customer: "", from: "", to: "" });
+  const [filters, setFilters] = useState<Filters>({ status: "attention", customer: "", from: "", to: "" });
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [processing, setProcessing] = useState<Action | null>(null);
@@ -144,6 +147,13 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
   const [deliveryQuantities, setDeliveryQuantities] = useState<Record<string, string>>({});
   const [deliveryIdempotencyKey, setDeliveryIdempotencyKey] = useState("");
 
+  const initialOrder = useRef("");
+  const listVersion = useRef(0);
+  useEffect(() => {
+    const number = new URLSearchParams(window.location?.search || "").get("order");
+    if (number && /^MW-[0-9]+$/.test(number)) { initialOrder.current = number; setFilters({ status: "all", customer: number, from: "", to: "" }); }
+  }, []);
+
   const productById = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
   const eligibleProducts = useMemo(() => {
     const normalized = productQuery.trim().toLocaleLowerCase("es-AR");
@@ -151,33 +161,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
       .some(value => value.toLocaleLowerCase("es-AR").includes(normalized))).slice(0, 8);
   }, [productQuery, products]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const query = new URLSearchParams({ page: String(page), ...filters });
-      const response = await fetch(`/api/admin/wholesale-orders?${query}`, { cache: "no-store" });
-      const body = await response.json();
-      if (!response.ok || !body.ok) throw new Error(body.message || "No se pudieron cargar las solicitudes.");
-      setRows(body.data);
-      setTotal(body.pagination.total);
-      setPages(body.pagination.totalPages);
-      setDetail(current => current && body.data.some((row: Order) => row.id === current.id) ? current : null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudieron cargar las solicitudes.");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, filters]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const setFilter = (key: keyof Filters, value: string) => {
-    setPage(1);
-    setFilters(current => ({ ...current, [key]: value }));
-  };
-
-  async function showDetail(id: string) {
+  const showDetail = useCallback(async (id: string) => {
     setSelectedId(id);
     setDetail(null);
     setDetailError("");
@@ -205,7 +189,37 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
     } finally {
       setDetailLoading(false);
     }
-  }
+  }, []);
+
+  const load = useCallback(async () => {
+    const version = ++listVersion.current;
+    setLoading(true);
+    setError("");
+    try {
+      const query = new URLSearchParams({ page: String(page), ...filters });
+      const response = await fetch(`/api/admin/wholesale-orders?${query}`, { cache: "no-store" });
+      const body = await response.json();
+      if (!response.ok || !body.ok) throw new Error(body.message || "No se pudieron cargar las solicitudes.");
+      if (version !== listVersion.current) return;
+      setRows(body.data);
+      const requested = body.data.find((row: Order) => row.orderNumber === initialOrder.current);
+      if (requested) { initialOrder.current = ""; await showDetail(requested.id); }
+      setTotal(body.pagination.total);
+      setPages(body.pagination.totalPages);
+      setDetail(current => current && body.data.some((row: Order) => row.id === current.id) ? current : null);
+    } catch (cause) {
+      if (version === listVersion.current) setError(cause instanceof Error ? cause.message : "No se pudieron cargar las solicitudes.");
+    } finally {
+      if (version === listVersion.current) setLoading(false);
+    }
+  }, [page, filters, showDetail]);
+
+  useEffect(() => { const version = listVersion; void load(); return () => { version.current++; }; }, [load]);
+
+  const setFilter = (key: keyof Filters, value: string) => {
+    setPage(1);
+    setFilters(current => ({ ...current, [key]: value }));
+  };
 
   function updateDraft(index: number, patch: Partial<DraftItem>) {
     setDraftItems(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
@@ -308,8 +322,8 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
     </header>
 
     <section aria-label="Filtros" className="grid gap-3 rounded-2xl border border-white/10 bg-zinc-900/50 p-4 sm:grid-cols-2 xl:grid-cols-4">
-      <label className="text-xs font-semibold text-zinc-400">Estado<select className={inputClass} value={filters.status} onChange={event => setFilter("status", event.target.value)}><option value="all">Todos</option>{Object.entries(labels).filter(([key]) => ["received", "in_review", "awaiting_customer", "confirmed", "rejected", "cancelled"].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-      <label className="text-xs font-semibold text-zinc-400">Cliente<input className={inputClass} placeholder="Buscar cliente" value={filters.customer} onChange={event => setFilter("customer", event.target.value)} /></label>
+      <label className="text-xs font-semibold text-zinc-400">Estado<select className={inputClass} value={filters.status} onChange={event => setFilter("status", event.target.value)}><option value="attention">Revisión y confirmación de DCL</option><option value="all">Todos</option>{Object.entries(labels).filter(([key]) => ["received", "in_review", "awaiting_customer", "confirmed", "rejected", "cancelled"].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+      <label className="text-xs font-semibold text-zinc-400">Cliente o n?mero<input className={inputClass} placeholder="Cliente o MW-000001" value={filters.customer} onChange={event => setFilter("customer", event.target.value)} /></label>
       <label className="text-xs font-semibold text-zinc-400">Desde<input type="date" className={inputClass} value={filters.from} onChange={event => setFilter("from", event.target.value)} /></label>
       <label className="text-xs font-semibold text-zinc-400">Hasta<input type="date" className={inputClass} value={filters.to} onChange={event => setFilter("to", event.target.value)} /></label>
     </section>
@@ -318,8 +332,8 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
     {loading ? <p role="status" className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">Cargando solicitudes…</p> : rows.length === 0 ? <p className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">No hay solicitudes para estos filtros.</p> : <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(230px,0.26fr)_minmax(0,1fr)]">
       <aside aria-label="Solicitudes" className={`min-w-0 ${detail ? "hidden space-y-2 xl:block" : "space-y-2"}`}>
         <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Solicitudes</h2><span className="text-xs text-zinc-500">{total} total</span></div>
-        {rows.map(row => <button key={row.id} type="button" disabled={Boolean(processing)} onClick={() => void showDetail(row.id)} aria-pressed={detail?.id === row.id} className={`w-full rounded-2xl border p-4 text-left transition disabled:opacity-50 ${detail?.id === row.id ? "border-red-400/60 bg-red-950/30" : "border-white/10 bg-zinc-900/60 hover:border-white/25"}`}>
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><b className="break-words [overflow-wrap:anywhere] text-sm">{row.orderNumber}</b><span className="max-w-full break-words rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-zinc-300">{labels[row.status] || row.status}</span></div>
+        {rows.map(row => <button key={row.id} type="button" disabled={Boolean(processing)} onClick={() => void showDetail(row.id)} aria-pressed={detail?.id === row.id} className={`w-full border-b px-2 py-4 text-left transition disabled:opacity-50 ${detail?.id === row.id ? "border-red-400/60 bg-red-950/30" : "border-white/10 hover:bg-white/5"}`}>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><b className="break-words [overflow-wrap:anywhere] text-sm">{row.orderNumber}</b><span className={`max-w-full break-words rounded-lg px-2.5 py-1 text-xs ${row.status === "in_review" && row.revisionStatus === "approved" ? "bg-amber-300/15 font-bold text-amber-100 ring-1 ring-amber-300/30" : "bg-white/5 text-zinc-300"}`}>{wholesaleAdminLabel(row.status, row.revisionStatus)}</span></div>
           <p className="mt-2 break-words text-sm text-zinc-300 [overflow-wrap:anywhere]">{row.customerName}</p>
           <div className="mt-3 flex min-w-0 flex-wrap items-end justify-between gap-2"><b className="max-w-full break-words text-base [overflow-wrap:anywhere]">{row.total == null ? "Total no disponible" : money(row.total, row.currency || "ARS")}</b><time className="break-words text-right text-[11px] text-zinc-500">{when(row.createdAt)}</time></div>
         </button>)}
@@ -331,9 +345,10 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
           <button type="button" onClick={() => { setDetail(null); setSelectedId(""); setDetailError(""); }} className={`${buttonClass} mb-4 xl:hidden`}>← Volver a solicitudes</button>
           <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5">
             <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Solicitud · {detail.customer}</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">{detail.orderNumber}</h2><p className="mt-2 text-sm text-zinc-400">Recibida {when(detail.createdAt)} · {detail.confirmedAt ? `Confirmada ${when(detail.confirmedAt)}` : "Aún no confirmada"}</p></div>
-            <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold">{labels[detail.status] || detail.status}</span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold">{wholesaleAdminLabel(detail.status, detail.revision.status)}</span>
           </header>
 
+          <p className="mt-4 rounded-xl border border-amber-300/20 p-4 text-sm text-amber-100">Próxima acción: {wholesaleNextAction(detail.status, detail.revision.status, !detail.deliveryProgress.length || detail.deliveryProgress.some(item => item.delivered < item.ordered))}</p>
           <section aria-label="Resumen vigente" className="my-5 rounded-2xl border border-emerald-300/20 bg-emerald-950/20 p-4 sm:p-5">
             <div className="flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-start"><div className="min-w-0 flex-1"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">Revisión vigente · v{detail.revision.version_number}</p><p className="mt-1 text-sm text-zinc-300">{labels[detail.revision.status] || detail.revision.status}</p><p className="mt-2 break-words text-xs text-zinc-400 [overflow-wrap:anywhere]">Condiciones vigentes: {detail.revision.commercial_conditions || "Sin condiciones adicionales"}</p></div><div className="max-w-full rounded-xl bg-emerald-300/10 px-4 py-3 sm:shrink-0 sm:text-right"><p className="text-xs text-emerald-100/70">Total vigente · servidor</p><strong className="break-words text-2xl font-black text-white [overflow-wrap:anywhere]">{money(detail.revision.totalAmount, detail.revision.currency)}</strong></div></div>
             <div className="mt-4 border-t border-emerald-300/10 pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-100/70">Artículos vigentes</p><ul className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">{detail.revision.items.map(item => <li key={item.productId} className="grid min-w-0 grid-cols-1 gap-2 rounded-lg bg-black/15 px-3 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_auto]"><span className="min-w-0"><b className="block break-words text-zinc-100 [overflow-wrap:anywhere]">{item.name}</b><span className="break-words text-xs text-zinc-400 [overflow-wrap:anywhere]">Código {item.productId} · {item.quantity} × {money(item.unitPrice, item.currency)}</span></span><span className="break-words font-semibold sm:text-right [overflow-wrap:anywhere]">{money(item.lineTotal, item.currency)}</span></li>)}</ul></div>
@@ -342,7 +357,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
           <div className="grid min-w-0 items-start gap-5 min-[1600px]:grid-cols-2">
             <RevisionCard title="Condiciones y artículos recibidos" revision={detail.originalRevision} />
 
-            {canPropose ? <section aria-label="Propuesta en edición" className="min-w-0 rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-950/25 to-zinc-950 p-4 sm:p-5 shadow-lg shadow-black/10">
+            {canPropose ? <details className="min-w-0"><summary className="min-h-11 cursor-pointer py-3 font-semibold text-amber-200">Preparar una propuesta</summary><section aria-label="Propuesta en edición" className="min-w-0 rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-950/25 to-zinc-950 p-4 sm:p-5 shadow-lg shadow-black/10">
               <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">Borrador administrativo</p><h3 className="mt-1 text-xl font-bold">Propuesta en edición</h3></div><span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-xs text-amber-100">No enviada</span></div>
               <p className="mt-2 text-sm leading-6 text-zinc-400">El total mostrado es una estimación con el catálogo cargado. Al enviar, el servidor vuelve a validar productos y precios.</p>
 
@@ -410,7 +425,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
                 catch (cause) { setActionError(cause instanceof Error ? cause.message : "No se pudo preparar la propuesta."); return; }
                 void performAction("propose", { expectedRevisionId: detail.revision.id, items: draftItems, idempotencyKey: key, commercialConditions, internalNote });
               }}>{processing === "propose" ? "Enviando propuesta…" : "Enviar propuesta"}</button>
-            </section> : <section aria-label="Propuesta" className="rounded-2xl border border-dashed border-white/15 bg-zinc-950/50 p-5"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">Propuesta</p><h3 className="mt-1 text-xl font-bold">Aún no está en edición</h3><p className="mt-3 text-sm leading-6 text-zinc-400">Iniciá la revisión para preparar una propuesta. La revisión vigente y su total siguen visibles arriba.</p></section>}
+            </section></details> : <section aria-label="Propuesta" className="rounded-2xl border border-dashed border-white/15 bg-zinc-950/50 p-5"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">Propuesta</p><h3 className="mt-1 text-xl font-bold">Aún no está en edición</h3><p className="mt-3 text-sm leading-6 text-zinc-400">Iniciá la revisión para preparar una propuesta. La revisión vigente y su total siguen visibles arriba.</p></section>}
           </div>
 
           {canPropose && <section aria-label="Nota interna" className="mt-5 rounded-2xl border border-violet-300/20 bg-violet-950/15 p-5"><label className="block text-sm font-semibold text-violet-100">Nota interna <span className="font-normal text-violet-300/70">· solo para administración</span><textarea maxLength={1000} rows={3} disabled={Boolean(processing)} className={`${inputClass} resize-y`} value={internalNote} onChange={event => setInternalNote(event.target.value)} placeholder="No se comparte con el cliente" /></label><p className="mt-2 text-xs text-zinc-500">Hasta 1.000 caracteres. Se guarda únicamente en la cronología interna.</p></section>}
@@ -420,7 +435,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
 
           <section aria-label="Acciones administrativas" className="mt-6 flex min-w-0 flex-col items-stretch gap-3 border-y border-white/10 py-5 sm:flex-row sm:flex-wrap sm:items-center">
             {detail.status === "received" && <button type="button" className={`${buttonClass} w-full border-sky-300/30 bg-sky-300/10 text-sky-100 sm:w-auto`} disabled={Boolean(processing)} onClick={() => void performAction("start_review")}>{processing === "start_review" ? "Iniciando revisión…" : "Iniciar revisión"}</button>}
-            {canConfirm && <button type="button" className={`${buttonClass} w-full border-emerald-300/30 bg-emerald-300/10 text-emerald-100 sm:w-auto`} disabled={Boolean(processing)} onClick={() => { if (window.confirm("¿Confirmar esta solicitud con la revisión vigente? Esto no registra una entrega.")) void performAction("confirm", { revisionId: detail.revision.id }); }}>{processing === "confirm" ? "Confirmando…" : "Confirmar solicitud"}</button>}
+            {canConfirm && <WholesaleConfirmation key={detail.revision.id} items={detail.revision.items} conditions={detail.revision.commercial_conditions} approved={detail.revision.status === "approved"} busy={Boolean(processing)} confirm={() => { if (window.confirm("¿Confirmar esta solicitud con la revisión vigente? Esto reserva stock y no registra cobros ni entregas.")) void performAction("confirm", { revisionId: detail.revision.id }); }} />}
             {canReject && <button type="button" className={`${buttonClass} w-full border-red-400/30 text-red-200 sm:w-auto`} disabled={Boolean(processing)} onClick={() => { if (window.confirm("¿Rechazar esta solicitud? La acción quedará registrada en su cronología.")) void performAction("reject", { internalNote }); }}>{processing === "reject" ? "Rechazando…" : "Rechazar solicitud"}</button>}
             {detail.status === "confirmed" && <p className="text-sm text-emerald-300">Pedido confirmado. Desde los paneles siguientes podés registrar entregas, cobros, reembolsos y conciliaciones; el cobro no cambia el estado del pedido.</p>}
             {detail.status === "confirmed" && <section aria-label="Entregas mayoristas" className="w-full basis-full rounded-2xl border border-emerald-300/15 bg-emerald-950/10 p-4">
@@ -435,7 +450,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
           {(detail.status === "confirmed" || detail.deliveries.length > 0) && <WholesaleOrderLedger orderId={detail.id} revisionId={detail.revision.id} status={detail.status} total={detail.revision.totalAmount} currency={detail.revision.currency} deliveries={detail.deliveries} />}
           <section aria-label="Cronología" className="pt-6">
             <div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">Actividad del pedido</p><h3 className="mt-1 text-xl font-bold">Cronología</h3></div><span className="rounded-full bg-white/5 px-3 py-1 text-xs text-zinc-400">{detail.events.length} eventos</span></div>
-            {detail.events.length ? <ol className="mt-5 space-y-4">{detail.events.map(event => <li key={event.id} className="relative border-l border-red-400/40 pb-1 pl-5 before:absolute before:-left-[5px] before:top-1 before:h-2.5 before:w-2.5 before:rounded-full before:bg-red-400"><p className="font-semibold text-zinc-100">{labels[event.type] || event.type}</p><p className="mt-1 text-xs text-zinc-400">{when(event.createdAt)} · {event.channel} · {event.actor}</p></li>)}</ol> : <p className="mt-4 text-sm text-zinc-500">Esta solicitud todavía no tiene eventos registrados.</p>}
+            {detail.events.length ? <ol className="mt-5 space-y-4">{[...detail.events].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id - b.id).map(event => <li key={event.id} className="relative border-l border-red-400/40 pb-1 pl-5 before:absolute before:-left-[5px] before:top-1 before:h-2.5 before:w-2.5 before:rounded-full before:bg-red-400"><p className="font-semibold text-zinc-100">{labels[event.type] || event.type}</p><p className="mt-1 text-xs text-zinc-400">{when(event.createdAt)} · {event.channel} · {event.actor}</p></li>)}</ol> : <p className="mt-4 text-sm text-zinc-500">Esta solicitud todavía no tiene eventos registrados.</p>}
           </section>
         </>}
       </section>

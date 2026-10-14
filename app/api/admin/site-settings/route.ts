@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { buildSiteSettingsPatch } from "@/lib/site-settings-patch";
@@ -58,6 +59,11 @@ export async function POST(request: Request) {
     }
 
     if (!data) return NextResponse.json({ ok: false, error: "No existe site_settings (id=1). No se creó ni reseteó configuración." }, { status: 409 });
+    if (body.section === "payments" || body.section === "transfer") {
+      revalidatePath("/");
+      revalidatePath("/mayoristas");
+      revalidatePath("/checkout");
+    }
     return NextResponse.json({ ok: true, data });
   } catch (err) {
     console.error("Excepción en API site-settings admin:", err);

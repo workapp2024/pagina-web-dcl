@@ -1,4 +1,5 @@
 .local-postgres/
+.local-test-regularization/
 Referencia/
 .env*
 scripts/maintenance/

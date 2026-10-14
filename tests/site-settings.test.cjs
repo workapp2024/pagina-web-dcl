@@ -149,6 +149,7 @@ function route(result = { data: { id: 1 }, error: null }, authenticated = true) 
     select() { return this; }, maybeSingle: async () => result,
   };
   const { POST } = load('app/api/admin/site-settings/route.ts', {
+    'next/cache': { revalidatePath: () => {} },
     '@/lib/admin-auth': { isAdminAuthenticated: async () => authenticated },
     '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ from: () => query }) },
   }, { Error, console: { warn() {}, error() {} } });

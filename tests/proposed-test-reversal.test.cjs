@@ -1,0 +1,101 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const {randomUUID}=require('node:crypto');
+const {PGlite}=require('@electric-sql/pglite');
+const {ids}=require('../scripts/maintenance/regularize-confirmed-tests.cjs');
+test('proposed delivered reversal is scoped, atomic, idempotent and preserves historical snapshots and completed installation date',async()=>{
+  const db=new PGlite();
+  try{
+    await db.exec('CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;CREATE SCHEMA auth;CREATE TABLE auth.users(id UUID PRIMARY KEY);');
+    for(const file of fs.readdirSync('supabase/migrations').filter(f=>/^\d{14}_/.test(f)&&f.slice(0,14)<='20261018010000'&&!f.includes('storage_setup')).sort())await db.exec(fs.readFileSync('supabase/migrations/'+file,'utf8'));
+    await db.exec(fs.readFileSync('scripts/maintenance/proposed-delivered-test-regularization.sql','utf8'));
+    const customer=randomUUID(),period=randomUUID();
+    await db.query('INSERT INTO auth.users(id) VALUES($1)',[ids.admin]);
+    await db.query("INSERT INTO admin_profiles(id,email,role,display_name) VALUES($1,'test@example.invalid','ADMIN','Test')",[ids.admin]);
+    await db.query("INSERT INTO customers(id,full_name) VALUES($1,'Test')",[customer]);
+    await db.exec("INSERT INTO products(id,name,slug,price,stock) VALUES('producto-1790288673630','Test','regularization-test',1,10),('unrelated','Real','unrelated-real',20,37)");
+    await db.query("INSERT INTO financial_periods(id,name,starts_at,status) VALUES($1,'Test',now()-interval '1 day','open')",[period]);
+    await db.query("INSERT INTO financial_activation(singleton,activated_at,initial_period_id,activation_key) VALUES(true,now()-interval '1 day',$1,gen_random_uuid())",[period]);
+    // Seed an existing historical snapshot; normal posting triggers are enabled
+    // again before testing any reversal (no trigger is disabled on the live DB).
+    await db.exec('ALTER TABLE sales DISABLE TRIGGER record_cash_sale_income_after_total; ALTER TABLE payment_transactions DISABLE TRIGGER record_approved_payment_finance;');
+    const pairs=[['3b02118b-cc18-48fb-ae72-f05893a080db',ids.sales[0],null],['8d2bf8fe-8590-4a71-933e-e916eb87977e',ids.sales[1],null],['bfa2aad5-ca81-4873-8741-1e38284f44cb',ids.sales[2],null],['3622b1fa-899b-4a01-b275-cf4bfd920c6a',ids.sales[3],ids.incomes[0]],['3fc59d89-b010-424f-bab6-aa786684f131',ids.sales[5],ids.incomes[2]]];
+    for(const [order,sale,income] of pairs){
+      await db.query("INSERT INTO sales(id,customer_id,status,total,subtotal,payment_method) VALUES($1,$2,'completed',1,1,'transfer')",[sale,customer]);
+      await db.query("INSERT INTO sale_items(sale_id,product_id,product_name,quantity,unit_price,line_total) VALUES($1,'producto-1790288673630','Test',1,1,1)",[sale]);
+      await db.query("INSERT INTO inventory_movements(product_id,movement_type,quantity_delta,reason,reference_type,reference_id) VALUES('producto-1790288673630','venta',-1,'Original','sale',$1)",[sale]);
+      await db.query("INSERT INTO orders(id,customer_id,status,payment_method,total,subtotal,idempotency_key,fulfillment_method) VALUES($1,$2,'completed','transfer',1,1,$3,'pickup')",[order,customer,randomUUID()]);
+      await db.query("INSERT INTO payment_transactions(order_id,sale_id,provider,status,amount,currency,external_idempotency_key) VALUES($1,$2,'transfer','approved',1,'ARS',$3)",[order,sale,randomUUID()]);
+      for(const status of ['preparing','ready','delivered'])await db.query('UPDATE orders SET operational_status=$2 WHERE id=$1',[order,status]);
+      await db.query('SELECT set_order_archived($1,true)',[order]);
+      if(income)await db.query("INSERT INTO cash_movements(id,movement_type,amount,sale_id,account_id,period_id) VALUES($1,'sale_income',1,$2,'mercadopago',$3)",[income,sale,period]);
+    }
+    await db.exec('ALTER TABLE sales ENABLE TRIGGER record_cash_sale_income_after_total; ALTER TABLE payment_transactions ENABLE TRIGGER record_approved_payment_finance;');
+    const firstKey=randomUUID();
+    await assert.rejects(db.query('SELECT regularize_confirmed_delivered_test($1,$2,$3)',[randomUUID(),ids.admin,randomUUID()]),/OUT_OF_SCOPE/);
+    await assert.rejects(db.query('SELECT regularize_confirmed_delivered_test($1,$2,$3)',[pairs[0][0],randomUUID(),randomUUID()]),/ADMIN_REQUIRED/);
+    const originalCount=(await db.query('SELECT count(*)::int n FROM inventory_movements')).rows[0].n;
+    await db.query("UPDATE payment_transactions SET amount=2 WHERE order_id=$1",[pairs[0][0]]);
+    await assert.rejects(db.query('SELECT regularize_confirmed_delivered_test($1,$2,$3)',[pairs[0][0],ids.admin,firstKey]),/PAYMENT_CHANGED/);
+    assert.equal((await db.query('SELECT count(*)::int n FROM inventory_movements')).rows[0].n,originalCount);
+    await db.query('UPDATE payment_transactions SET amount=1 WHERE order_id=$1',[pairs[0][0]]);
+    for(const [order,,] of pairs){const key=order===pairs[0][0]?firstKey:randomUUID();const first=await db.query('SELECT regularize_confirmed_delivered_test($1,$2,$3) id',[order,ids.admin,key]);const again=await db.query('SELECT regularize_confirmed_delivered_test($1,$2,$3) id',[order,ids.admin,key]);assert.equal(first.rows[0].id,again.rows[0].id);}
+    assert.equal((await db.query('SELECT sum(amount)::int amount FROM cash_movements')).rows[0].amount,0);
+    assert.equal((await db.query("SELECT stock FROM products WHERE id='producto-1790288673630'")).rows[0].stock,10);
+    assert.equal((await db.query("SELECT stock FROM products WHERE id='unrelated'")).rows[0].stock,37);
+    assert.equal((await db.query("SELECT count(*)::int n FROM confirmed_test_reversals WHERE original_order->>'operational_status'='delivered' AND original_payment->>'status'='approved'")).rows[0].n,5);
+    assert.equal((await db.query("SELECT count(*)::int n FROM orders WHERE status='cancelled' AND operational_status='cancelled' AND archived_at IS NOT NULL")).rows[0].n,5);
+    for(const [order] of pairs)assert.equal((await db.query('SELECT order_archive_block_reason($1) reason',[order])).rows[0].reason,null);
+    await db.query("INSERT INTO sales(id,customer_id,status,total,subtotal,payment_method) VALUES($1,$2,'cancelled',1,1,'transfer')",[ids.independent[1],customer]);
+    await db.exec("INSERT INTO installations(id,sale_id,status,completed_at) VALUES('470a2110-0bfb-40ca-a002-5a841dc6dbb0','49a5d8de-9ccb-4172-a54a-c3e2f1abb31e','completed','2026-09-30T01:54:34.242Z')");
+    const ikey=randomUUID();await db.query('SELECT invalidate_confirmed_test_installation($1,$2)',[ids.admin,ikey]);await db.query('SELECT invalidate_confirmed_test_installation($1,$2)',[ids.admin,ikey]);
+    const installation=(await db.query('SELECT status,completed_at FROM installations')).rows[0];assert.equal(installation.status,'cancelled');assert.equal(new Date(installation.completed_at).toISOString(),'2026-09-30T01:54:34.242Z');
+    await db.exec(fs.readFileSync('scripts/maintenance/proposed-neutralize-test-postings.sql','utf8'));
+    await db.exec(fs.readFileSync('scripts/maintenance/proposed-regularization-concurrency.sql','utf8'));
+    const stockKey=randomUUID();
+    await db.exec("UPDATE products SET stock=11 WHERE id='producto-1790288673630'");
+    await assert.rejects(db.query('SELECT zero_confirmed_test_stock($1,$2)',[ids.admin,stockKey]),/STATE_CHANGED/);
+    assert.equal((await db.query('SELECT count(*)::int n FROM inventory_movements WHERE id=$1',[stockKey])).rows[0].n,0);
+    await db.exec("UPDATE products SET stock=10 WHERE id='producto-1790288673630'");
+    await db.query('SELECT zero_confirmed_test_stock($1,$2)',[ids.admin,stockKey]);
+    await db.query('SELECT zero_confirmed_test_stock($1,$2)',[ids.admin,stockKey]);
+    assert.equal((await db.query("SELECT stock FROM products WHERE id='producto-1790288673630'")).rows[0].stock,0);
+    assert.equal((await db.query('SELECT count(*)::int n FROM inventory_movements WHERE id=$1',[stockKey])).rows[0].n,1);
+    await db.query("SELECT set_wholesale_financial_account_mapping('cash',NULL,$1)",[ids.admin]);
+    await db.query("SELECT admin_manage_customer_wholesale('activate',$1,repeat('a',64))",[customer]);
+    await db.exec("INSERT INTO products(id,name,slug,price,wholesale_price,cost_price,stock) VALUES('producto-1788919384672','IR','ir-test',78446,78446,64300,0)");
+    const revision=randomUUID();
+    await db.exec('BEGIN');
+    await db.query("INSERT INTO wholesale_orders(id,customer_id,current_revision_id,idempotency_key,request_fingerprint) VALUES($1,$2,$3,$4,repeat('a',64))",[ids.deliveredOrder,customer,revision,randomUUID()]);
+    await db.query("INSERT INTO wholesale_order_revisions(id,order_id,version_number,revision_type,status,total_amount,idempotency_key,request_fingerprint) VALUES($1,$2,1,'original','draft',78446,$3,repeat('b',64))",[revision,ids.deliveredOrder,randomUUID()]);
+    await db.query("INSERT INTO wholesale_order_revision_items(revision_id,product_id,product_name_snapshot,quantity,unit_price,line_total) VALUES($1,'producto-1788919384672','IR',1,78446,78446)",[revision]);
+    await db.query("UPDATE wholesale_order_revisions SET status='ready_for_confirmation' WHERE id=$1",[revision]);await db.exec('COMMIT');
+    await db.query('SELECT record_wholesale_stock_movement($1,$2,1,$3,$4,$5)',[ids.wholesaleProduct,'receipt','Fixture',randomUUID(),ids.admin]);
+    await db.query('SELECT start_wholesale_order_review($1,$2)',[ids.deliveredOrder,ids.admin]);await db.query('SELECT confirm_wholesale_order_revision($1,$2,$3)',[ids.deliveredOrder,revision,ids.admin]);
+    const delivery=(await db.query('SELECT record_wholesale_delivery($1,$2,$3::jsonb,$4,$5) id',[ids.deliveredOrder,revision,JSON.stringify([{productId:ids.wholesaleProduct,quantity:1}]),randomUUID(),ids.admin])).rows[0].id;
+    await db.query("INSERT INTO wholesale_payment_entries(id,order_id,revision_id,entry_type,amount,currency,payment_method,occurred_at,idempotency_key,actor_id) VALUES($1,$2,$3,'payment',78446,'ARS','cash',now(),$4,$5)",[ids.payment,ids.deliveredOrder,revision,randomUUID(),ids.admin]);
+    await assert.rejects(db.query('SELECT neutralize_confirmed_test_wholesale_pair($1,$2)',[ids.admin,randomUUID()]),/NOT_CANCELLED/);
+    await db.query('SELECT record_wholesale_delivery_correction($1,$2,$3::jsonb,$4,$5,$6)',[ids.deliveredOrder,delivery,JSON.stringify([{productId:ids.wholesaleProduct,quantity:1}]),'Fixture reversal',randomUUID(),ids.admin]);
+    await db.query("SELECT close_wholesale_order($1,'cancel',$2,'Fixture')",[ids.deliveredOrder,ids.admin]);
+    await db.query("SELECT refund_wholesale_payment($1,78446,'cash','DCL-TEST-REGULARIZATION-MW-000004',now(),$2,$3)",[ids.payment,randomUUID(),ids.admin]);
+    const nkey=randomUUID();await db.query('SELECT neutralize_confirmed_test_wholesale_pair($1,$2)',[ids.admin,nkey]);await db.query('SELECT neutralize_confirmed_test_wholesale_pair($1,$2)',[ids.admin,nkey]);
+    assert.equal((await db.query("SELECT count(*)::int n FROM wholesale_financial_postings WHERE status='neutralized_test_pair'")).rows[0].n,2);
+    await db.query('SELECT map_confirmed_test_cash_safely($1)',[ids.admin]);
+    await db.query('SELECT map_confirmed_test_cash_safely($1)',[ids.admin]);
+    assert.equal((await db.query('SELECT post_wholesale_financial_entry($1) status',[ids.payment])).rows[0].status,'neutralized_test_pair');
+    assert.equal((await db.query('SELECT count(*)::int n FROM cash_movements WHERE wholesale_payment_entry_id IS NOT NULL')).rows[0].n,0);
+    // A future ordinary wholesale payment still uses the existing bridge.
+    const attempt=(await db.query('SELECT start_wholesale_order_attempt($1,$2::jsonb,true) data',[customer,JSON.stringify([{productId:ids.wholesaleProduct,quantity:1}])])).rows[0].data.attemptId;
+    const future=(await db.query('SELECT submit_wholesale_order_attempt($1,$2) id',[customer,attempt])).rows[0].id;
+    const futureRevision=(await db.query('SELECT current_revision_id id FROM wholesale_orders WHERE id=$1',[future])).rows[0].id;
+    await db.query('SELECT start_wholesale_order_review($1,$2)',[future,ids.admin]);await db.query('SELECT confirm_wholesale_order_revision($1,$2,$3)',[future,futureRevision,ids.admin]);
+    await db.query("SELECT record_wholesale_payment($1,$2,78445,'ARS','cash',NULL,now(),$3,$4)",[future,futureRevision,randomUUID(),ids.admin]);
+    assert.equal((await db.query("SELECT count(*)::int n FROM wholesale_financial_postings WHERE status='posted'")).rows[0].n,1);
+    await db.query("SELECT set_wholesale_financial_account_mapping('cash',NULL,$1)",[ids.admin]);
+    await db.query("SELECT record_wholesale_payment($1,$2,1,'ARS','cash',NULL,now(),$3,$4)",[future,futureRevision,randomUUID(),ids.admin]);
+    await assert.rejects(db.query('SELECT map_confirmed_test_cash_safely($1)',[ids.admin]),/OTHER_CASH_PENDING/);
+    assert.equal((await db.query("SELECT account_id FROM wholesale_financial_account_mappings WHERE payment_method='cash'")).rows[0].account_id,null);
+    await assert.rejects(db.exec("SET ROLE service_role; INSERT INTO confirmed_test_reversals(order_id) VALUES(gen_random_uuid())"),/permission denied/);
+  }finally{await db.close();}
+});

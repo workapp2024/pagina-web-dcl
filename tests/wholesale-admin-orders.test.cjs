@@ -48,6 +48,25 @@ test('wholesale admin list requires ADMIN and rejects VENDEDOR before querying',
   assert.equal(calls.length, 0);
 });
 
+test('attention is a read filter, returns current approval and searches an exact commercial number', async () => {
+  const { route, calls } = loadListRoute({ fixtures: state => {
+    if (state.table === 'wholesale_orders') return { data: [{ id: orderId, order_number: 'MW-000001', customer_id: customerId, current_revision_id: revisionId, status: 'in_review', created_at: '2026-10-09T12:00:00Z' }], count: 1, error: null };
+    if (state.table === 'wholesale_order_revisions') return { data: [{ id: revisionId, total_amount: 1200, currency: 'ARS', status: 'approved' }], error: null };
+    if (state.table === 'customers') return { data: [{ id: customerId, full_name: 'Cliente' }], error: null };
+    return { data: [], error: null };
+  } });
+  const response = await route.GET(new Request('https://test.invalid?status=attention&customer=MW-000001'));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data[0].revisionStatus, 'approved');
+  const filters = calls.find(call => call.table === 'wholesale_orders').filters;
+  const attentionFilter = filters.find(filter => filter[0] === 'in');
+  assert.equal(attentionFilter[1], 'status');
+  // Normalize only the VM array prototype; compare every requested state exactly.
+  assert.deepEqual(Array.from(attentionFilter[2]), ['received', 'in_review']);
+  assert.deepEqual(filters.find(filter => filter[1] === 'order_number'), ['eq', 'order_number', 'MW-000001']);
+  assert.ok(!calls.some(call => call.table === 'customers' && call.selection === 'id'));
+});
+
 test('wholesale list applies status, date, customer filters and bounded pagination', async () => {
   const { route, calls } = loadListRoute({ fixtures: state => {
     if (state.table === 'customers' && state.selection === 'id') return { data: [{ id: customerId }], error: null };

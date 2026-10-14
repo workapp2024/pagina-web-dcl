@@ -1,4 +1,5 @@
 "use client";
+import { retailNextAction } from "@/lib/admin-order-attention";
 import { useIsOwner } from "@/components/admin/AdminIdentityProvider";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -29,7 +30,7 @@ const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "curren
 const date = (value: string) => new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(value));
 const fulfillmentLabels = { pickup: "Retiro", delivery: "Entrega a domicilio" };
 const filters = [
-  { id: "all", label: "Todos" }, { id: "attention", label: "Transferencia / stock pendiente" },
+  { id: "needs_attention", label: "Requieren atención de DCL" }, { id: "all", label: "Todos" }, { id: "attention", label: "Transferencia / stock pendiente" },
   { id: "pending", label: "Pago pendiente" }, { id: "transfer", label: "Transferencias a verificar" },
   { id: "paid", label: "Pagos aprobados e incidencias" }, { id: "delivery", label: "Entregas pendientes con pago" },
   { id: "completed", label: "Venta registrada" }, { id: "cancelled", label: "Cancelación / rechazo registrado" },
@@ -40,7 +41,7 @@ export function OrdersManager() {
   const isOwner = useIsOwner();
   const [rows, setRows] = useState<Order[]>([]);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState("needs_attention");
   const [operational, setOperational] = useState("all");
   const [period, setPeriod] = useState("all");
   const [view, setView] = useState<"active" | "archived">("active");
@@ -60,6 +61,14 @@ export function OrdersManager() {
   const [loading, setLoading] = useState(false);
   const latest = useRef(0);
   const inFlight = useRef(false);
+  const initialOrder = useRef("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const number = new URLSearchParams(window.location?.search || "").get("order");
+      if (number && /^DCL-[0-9]+$/.test(number)) { initialOrder.current = number; setQ(number); setStatus("all"); }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
   const load = useCallback(async () => {
     const version = ++latest.current;
     setLoading(true);
@@ -70,7 +79,10 @@ export function OrdersManager() {
       if (!response.ok) throw new Error(body.error || "No se pudieron cargar los pedidos.");
       const data: Order[] = body.data || [];
       setError(""); setRows(data); setTotal(body.pagination.total);
-      setSelected(current => current ? data.find(row => row.id === current.id) || null : null);
+      setSelected(current => {
+        if (initialOrder.current) { const match = data.find(row => row.order_number === initialOrder.current); if (match) { initialOrder.current = ""; return match; } }
+        return current ? data.find(row => row.id === current.id) || null : null;
+      });
       if (page > Math.max(1, Math.ceil(body.pagination.total / 50))) setPage(Math.max(1, Math.ceil(body.pagination.total / 50)));
     } catch (cause) {
       if (version === latest.current) setError(cause instanceof Error ? cause.message : "No se pudieron cargar los pedidos.");
@@ -151,11 +163,11 @@ export function OrdersManager() {
     <button disabled={busy || loading} onClick={() => void load()} className={buttonClass}>{loading ? "Actualizando…" : "Actualizar pedidos"}</button>
     {status === "completed" && <p className="text-sm text-amber-200">Venta registrada indica confirmación comercial del flujo actual; no acredita entrega.</p>}
     {error && !selected && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
-    <div className="space-y-3">{rows.map(row => <button key={row.id} onClick={() => { setSelected(row); setResolution(null); setResolutionKey(""); setNote(""); setOperationNote(""); }} className="w-full rounded-2xl border border-white/10 p-4 text-left hover:border-red-500/40">
+    <div className="space-y-3">{rows.map(row => <button key={row.id} onClick={() => { setSelected(row); setResolution(null); setResolutionKey(""); setNote(""); setOperationNote(""); }} className="w-full border-b border-white/10 px-2 py-4 text-left hover:bg-white/5">
       <div className="flex flex-wrap justify-between gap-3"><div><b>{row.order_number} · {row.customer?.full_name || "Cliente"}</b><small className="mt-1 block text-zinc-400">{row.customer?.phone || "Sin teléfono"} · {date(row.created_at)}</small></div><b>{money(row.total)}</b></div>
       <p className="mt-3 text-sm text-zinc-300">{row.items.map(item => `${item.product_name} × ${item.quantity}`).join(" · ")}</p>
-      <div className="mt-3 flex flex-wrap gap-2 text-sm"><span className="rounded-lg bg-white/10 px-3 py-2">Operativo: <b>{operationalLabels[row.operational_status]}</b></span><span className="rounded-lg bg-white/5 px-3 py-2">Pedido: <b>{technicalOrderLabels[row.status] || row.status}</b></span><span className="rounded-lg bg-white/5 px-3 py-2">Pago: <b>{paymentLabels[row.payment?.status || ""] || "Sin transacción"}</b></span></div>
-      <p className="mt-2 text-xs text-zinc-400">{paymentMethodLabels[row.payment_method]} · {fulfillmentLabels[row.fulfillment_method]}</p>
+      <div className="mt-3 flex flex-wrap gap-2 text-sm"><span className="rounded-lg bg-white/10 px-3 py-2">Estado: <b>{operationalLabels[row.operational_status]}</b></span><span className="rounded-lg bg-white/5 px-3 py-2">Pago: <b>{paymentLabels[row.payment?.status || ""] || "Sin transacción"}</b></span></div>
+      <p className="mt-2 text-sm text-amber-200">Próxima acción: {retailNextAction(row)}</p><p className="mt-2 text-xs text-zinc-400">{paymentMethodLabels[row.payment_method]} · {fulfillmentLabels[row.fulfillment_method]}</p>
       {row.status === "stock_unavailable" && <p className="mt-2 text-sm text-amber-200">Pago aprobado sin venta: requiere stock disponible o reembolso externo.</p>}
       {row.status === "refund_required" && <p className="mt-2 text-sm font-semibold text-amber-200">Incidencia financiera: pago aprobado tras cancelar. Requiere reembolso externo.</p>}
       {row.status === "refunded" && <p className="mt-2 text-sm text-emerald-200">Pedido reembolsado y conciliado.</p>}
@@ -169,7 +181,9 @@ export function OrdersManager() {
       <div className="mt-5 rounded-2xl bg-white/5 p-4"><b>{selected.customer?.full_name}</b><p className="text-sm text-zinc-300">{selected.customer?.phone || "Sin teléfono"}</p><p className="text-sm text-zinc-400">{selected.customer?.email || "Sin email"}</p></div>
       <div className="mt-5 space-y-2">{selected.items.map((item, index) => <p key={index} className="flex justify-between gap-3"><span>{item.product_name} × {item.quantity}</span><b>{money(item.line_total)}</b></p>)}</div>
       <p className="mt-5 text-xl font-black">Total {money(selected.total)}</p>
-      <dl className="mt-5 grid gap-3 rounded-2xl border border-white/10 p-4 text-sm">
+      <p className="mt-3 text-sm text-zinc-200">Estado: <b>{operationalLabels[selected.operational_status]}</b> · Pago: <b>{paymentLabels[selected.payment?.status || ""] || "Sin transacción"}</b></p>
+      <p className="mt-4 rounded-xl border border-amber-300/20 p-4 text-sm text-amber-100">Próxima acción: {retailNextAction(selected)}</p>
+      <details className="mt-4"><summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-300">Pago, modalidad y detalles técnicos</summary><dl className="mt-5 grid gap-3 rounded-2xl border border-white/10 p-4 text-sm">
         <div><dt className="text-zinc-400">Estado operativo</dt><dd className="font-bold">{operationalLabels[selected.operational_status]}</dd></div>
         <div><dt className="text-zinc-400">Estado técnico del pedido</dt><dd className="font-bold">{technicalOrderLabels[selected.status] || selected.status}</dd></div>
         <div><dt className="text-zinc-400">Estado del pago</dt><dd className="font-bold">{paymentLabels[selected.payment?.status || ""] || "Sin transacción"} · {paymentMethodLabels[selected.payment_method]}</dd></div>
@@ -179,7 +193,7 @@ export function OrdersManager() {
         <div><dt className="text-zinc-400">Pago y proveedor</dt><dd className="break-all">{selected.payment?.provider || "Sin proveedor"}{selected.payment?.external_payment_id && ` · Pago: ${selected.payment.external_payment_id}`}{selected.payment?.external_order_id && ` · Orden externa: ${selected.payment.external_order_id}`}</dd></div>
         <div><dt className="text-zinc-400">Modalidad</dt><dd>{fulfillmentLabels[selected.fulfillment_method]}{selected.shipping_address && ` · ${selected.shipping_address}`}</dd></div>
         {selected.notes && <div><dt className="text-zinc-400">Observaciones del pedido</dt><dd>{selected.notes}</dd></div>}
-      </dl>
+      </dl></details>
       {selected.status === "refund_required" && <p className="mt-4 border-l-2 border-amber-400 pl-3 text-sm text-amber-100">Pago aprobado después de cancelar el pedido. Requiere reembolso externo y conciliación.</p>}
       {selected.status === "stock_unavailable" && <p className="mt-4 border-l-2 border-amber-400 pl-3 text-sm text-amber-100">Pago aprobado sin venta por falta de stock reservado.</p>}
       {selected.status === "refunded" && <p className="mt-4 text-sm text-emerald-200">Reembolso conciliado. No hay nuevas acciones de resolución.</p>}
@@ -201,7 +215,7 @@ export function OrdersManager() {
       </section>
       {isOwner && selected.payment_method === "transfer" && selected.status === "pending_manual_verification" && <section className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4"><h3 className="font-bold">Verificación de transferencia</h3><p className="mt-1 text-sm text-zinc-300">{selected.transfer_declared_at ? `El cliente informó la transferencia el ${date(selected.transfer_declared_at)}.` : "El cliente todavía no informó la transferencia."}</p><button disabled={busy || !selected.transfer_declared_at} onClick={() => void action("confirm_transfer")} className={`mt-4 ${buttonClass} bg-red-600`}>Confirmar transferencia recibida</button></section>}
       {selected.resolutions?.length > 0 && <section className="mt-5"><h3 className="font-bold">Resoluciones</h3><ol className="mt-3 space-y-2">{selected.resolutions.map(entry => <li key={entry.id} className="rounded-lg bg-white/5 p-3 text-sm"><b>{resolutionLabels[entry.resolution_type] || entry.resolution_type}</b><p className="mt-1 text-xs text-zinc-400">{date(entry.created_at)} · {entry.actor} · {entry.source}</p>{entry.external_reference && <p className="mt-2 break-all">Referencia: {entry.external_reference}</p>}<p className="mt-2 whitespace-pre-wrap">{entry.note}</p></li>)}</ol></section>}
-      <section className="mt-5"><h3 className="font-bold">Historial operativo</h3><ol className="mt-3 space-y-2">{selected.operationalHistory.map(entry => <li key={entry.id} className="rounded-xl bg-white/5 p-3 text-sm"><p className="font-bold">{entry.action === "archive" ? "Pedido archivado" : entry.action === "restore" ? "Pedido restaurado" : <>{entry.previous_status ? `${operationalLabels[entry.previous_status]} → ` : "Inicio → "}{operationalLabels[entry.new_status]}</>}</p><p className="mt-1 text-xs text-zinc-400">{date(entry.created_at)} · {entry.actor} · {entry.source}</p>{entry.note && <p className="mt-2 whitespace-pre-wrap">{entry.note}</p>}</li>)}</ol></section>
+      <section className="mt-5"><h3 className="font-bold">Historial operativo</h3><ol className="mt-3 space-y-2">{[...selected.operationalHistory].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id).map(entry => <li key={entry.id} className="rounded-xl bg-white/5 p-3 text-sm"><p className="font-bold">{entry.action === "archive" ? "Pedido archivado" : entry.action === "restore" ? "Pedido restaurado" : <>{entry.previous_status ? `${operationalLabels[entry.previous_status]} → ` : "Inicio → "}{operationalLabels[entry.new_status]}</>}</p><p className="mt-1 text-xs text-zinc-400">{date(entry.created_at)} · {entry.actor} · {entry.source}</p>{entry.note && <p className="mt-2 whitespace-pre-wrap">{entry.note}</p>}</li>)}</ol></section>
       <section className="mt-5"><h3 className="font-bold">Notas internas</h3><div className="mt-2 space-y-2">{selected.internalNotes.map(item => <div key={item.id} className="rounded-xl bg-white/5 p-3 text-sm"><p>{item.note}</p><small className="text-zinc-500">{date(item.created_at)}</small></div>)}</div><label className="mt-3 block text-sm">Nueva nota<textarea disabled={busy} value={note} onChange={e => setNote(e.target.value)} maxLength={1000} className="mt-2 min-h-20 w-full rounded-xl bg-zinc-900 p-3" /></label><button disabled={busy || !note.trim()} onClick={() => void action("add_note", { note })} className={`mt-2 ${buttonClass}`}>Agregar nota</button></section>
       <details className="mt-5 text-xs text-zinc-400"><summary className="cursor-pointer py-2">Identificador técnico</summary><p className="mt-2 break-all">UUID: {selected.id}</p></details>
     </section></div>}

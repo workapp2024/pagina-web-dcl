@@ -1,4 +1,5 @@
 "use client";
+import { SearchableList } from "@/components/admin/SearchableList";
 import { useIsOwner } from "@/components/admin/AdminIdentityProvider";
 
 import { useEffect, useMemo, useState } from "react";
@@ -118,7 +119,7 @@ export function AdminInventoryManager() {
         <div>
           <h1 className="text-3xl font-black uppercase tracking-[-0.06em] text-white">Inventario</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            El stock se materializa en cada producto, pero cada modificación se registra como un movimiento auditable.
+            Consultá existencias o registrá un ingreso, salida o ajuste.
           </p>
         </div>
         <button
@@ -209,9 +210,8 @@ export function AdminInventoryManager() {
 
       <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
         <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">Stock por producto</h2>
-        {loading ? <p className="mt-4 text-sm text-zinc-400">Cargando inventario...</p> : null}
-        {!loading && products.length === 0 ? <p className="mt-4 text-sm text-zinc-400">Todavía no hay productos disponibles.</p> : null}
-        {products.length > 0 ? (
+        <SearchableList rows={products} label="Productos" placeholder="Nombre o código" stock={product => product.stock} loading={loading} searchText={product => [product.name, product.id]}>
+          {products => (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm text-zinc-300">
               <thead><tr className="border-b border-white/10 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
@@ -231,14 +231,14 @@ export function AdminInventoryManager() {
                 </tr>;
               })}</tbody>
             </table>
-          </div>
-        ) : null}
+          </div>          )}
+        </SearchableList>
       </section>
 
       <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
         <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">Historial de movimientos</h2>
-        {!loading && movements.length === 0 ? <p className="mt-4 text-sm text-zinc-400">Todavía no hay movimientos registrados.</p> : null}
-        {movements.length > 0 ? (
+        <SearchableList rows={movements} label="Movimientos" placeholder="Producto, código, fecha, tipo o motivo" loading={loading} movement={{ date: row => row.createdAt, type: row => row.type, labels: { entrada: "Entrada", salida: "Salida", ajuste: "Ajuste", venta: "Venta" } }} searchText={movement => [movement.productName, movement.productId, movement.type, movement.reason, movement.referenceType, movement.referenceId, movement.createdAt, new Date(movement.createdAt).toLocaleDateString("es-AR")]}>
+          {movements => (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[920px] text-left text-sm text-zinc-300">
               <thead><tr className="border-b border-white/10 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
@@ -253,8 +253,8 @@ export function AdminInventoryManager() {
                 <td className="py-3 text-zinc-400">{movement.referenceType && movement.referenceId ? `${movement.referenceType}: ${movement.referenceId}` : "—"}</td>
               </tr>)}</tbody>
             </table>
-          </div>
-        ) : null}
+          </div>          )}
+        </SearchableList>
       </section>
     </div>
   );

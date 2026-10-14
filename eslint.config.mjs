@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     ".local-postgres/**",
+    ".local-test-regularization/**",
     "Referencia/**",
   ]),
 ]);

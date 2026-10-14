@@ -1,0 +1,7 @@
+import { redirect } from "next/navigation";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { FinanceOverview } from "@/components/admin/FinanceOverview";
+export default async function Page() {
+  if (!(await isAdminAuthenticated())) redirect("/admin/login");
+  return <FinanceOverview sector="minoristas" />;
+}

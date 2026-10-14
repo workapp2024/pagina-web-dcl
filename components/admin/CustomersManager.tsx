@@ -33,6 +33,8 @@ export function CustomersManager() {
   const isOwner = useIsOwner();
   const [view, setView] = useState<"active" | "archived">("active");
   const [query, setQuery] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const listVisible = showAll || Boolean(query.trim());
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
   const [rows, setRows] = useState<Customer[]>([]);
@@ -47,6 +49,7 @@ export function CustomersManager() {
   const [wholesaleMessage, setWholesaleMessage] = useState("");
 
   useEffect(() => {
+    if (!listVisible) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setLoading(true);
@@ -55,6 +58,7 @@ export function CustomersManager() {
         const response = await fetch(`/api/admin/customers?${params}`, { signal: controller.signal });
         const body = await response.json();
         if (!body.ok) throw new Error(body.error || "No se pudieron cargar los clientes.");
+        if (controller.signal.aborted) return;
         setRows(body.data || []);
         setTotal(body.pagination?.total || 0);
         setError("");
@@ -65,7 +69,7 @@ export function CustomersManager() {
       }
     }, query ? 180 : 0);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [view, query, page, refresh]);
+  }, [view, query, page, refresh, listVisible]);
 
   function startCreate() { setSelected(null); setForm(emptyForm); setFormMode("create"); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }
   function startEdit(customer: Customer) {
@@ -121,17 +125,19 @@ export function CustomersManager() {
         <button aria-pressed={view === "active"} onClick={() => chooseView("active")} className={`px-4 py-2 text-sm ${view === "active" ? "bg-white text-zinc-950" : "text-zinc-300"}`}>Activos</button>
         <button aria-pressed={view === "archived"} onClick={() => chooseView("archived")} className={`px-4 py-2 text-sm ${view === "archived" ? "bg-white text-zinc-950" : "text-zinc-300"}`}>Archivados</button>
       </div>
-      <input aria-label="Buscar clientes" value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder="Buscar por nombre, teléfono, email o documento" className="min-w-0 flex-1 rounded border border-white/15 bg-zinc-900 p-2.5 text-sm" />
+      <input aria-label="Buscar clientes" type="search" maxLength={80} value={query} onChange={event => { setQuery(event.target.value); setRows([]); setPage(1); }} placeholder="Buscar por nombre, teléfono, email o documento" className="min-w-0 flex-1 rounded border border-white/15 bg-zinc-900 p-2.5 text-sm" />
     </div>
+    <button type="button" aria-expanded={showAll} aria-controls="customer-list" onClick={() => { setShowAll(value => !value); setPage(1); }} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm font-semibold">{showAll ? "Ocultar clientes" : "Ver todos los clientes"}</button>
+    {!listVisible && <p className="text-sm text-zinc-500">Buscá un cliente o desplegá el listado.</p>}
     {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-    {loading ? <p className="text-sm text-zinc-400">Cargando clientes...</p> : rows.length === 0 ? <p className="text-sm text-zinc-400">No hay clientes en esta vista.</p> :
+    <div id="customer-list">{listVisible && (loading ? <p className="text-sm text-zinc-400">Cargando clientes...</p> : rows.length === 0 ? <p className="text-sm text-zinc-400">No hay clientes en esta vista.</p> :
       <div className="grid gap-2 md:grid-cols-2">{rows.map(customer => <button key={customer.id} onClick={() => { setSelected(customer); setFormMode(null); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }} className="border border-white/15 p-4 text-left hover:border-red-500/50">
         <strong>{customer.full_name}</strong><p className="mt-1 text-sm text-zinc-400">{customer.phone || customer.email || "Sin contacto"}</p>
         {customer.wholesale_enabled && <small className="mt-2 inline-block rounded border border-amber-500/40 px-2 py-1 text-amber-200">Mayorista · {customer.wholesale_access_active ? "Acceso activo" : "Acceso inactivo"}</small>}
         <p className="mt-3 text-sm">{customer.sales.length} compras · {money(customer.total)}</p>
         <small className="text-zinc-400">{customer.vehicles.length} vehículos · {customer.warranties.length} garantías</small>
-      </button>)}</div>}
-    {total > 20 && <div className="flex items-center justify-end gap-3 text-sm">
+      </button>)}</div>)}</div>
+    {listVisible && total > 20 && <div className="flex items-center justify-end gap-3 text-sm">
       <button disabled={page <= 1} onClick={() => setPage(value => value - 1)} className="disabled:opacity-40">Anterior</button>
       <span>Página {page} de {Math.ceil(total / 20)}</span>
       <button disabled={page * 20 >= total} onClick={() => setPage(value => value + 1)} className="disabled:opacity-40">Siguiente</button>
