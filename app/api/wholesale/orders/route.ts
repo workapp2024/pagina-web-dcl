@@ -54,7 +54,8 @@ export async function GET(request: Request) {
     return errorResponse("El cursor de solicitudes no es válido.", 400);
   }
   try {
-    const { data, error } = await createAdminServerClient().rpc("list_wholesale_customer_orders" as never, {
+    const db = createAdminServerClient();
+    const { data, error } = await db.rpc("list_wholesale_customer_orders" as never, {
       p_customer: customerId,
       p_limit: limitValue,
       p_before_created_at: beforeCreatedAt,
@@ -65,11 +66,29 @@ export async function GET(request: Request) {
       return errorResponse(mapped.error, mapped.status);
     }
     const orders = Array.isArray(data) ? data : [];
+    // IDs come exclusively from the session-scoped RPC, never from client input.
+    const orderIds = orders.map(order => order.id as string);
+    const publicTypes = ["order_created", "review_started", "revision_proposed", "revision_approved", "revision_rejected", "order_confirmed", "order_rejected", "order_cancelled", "delivery_recorded", "order_fully_delivered", "order_delivery_completion_reversed"];
+    const tracking: { id: number; order_id: string; event_type: string; created_at: string }[] = [];
+    if (orderIds.length) {
+      for (let offset = 0; ; offset += 500) {
+        const result = await db.from("wholesale_order_events")
+          .select("id,order_id,event_type,created_at").in("order_id", orderIds)
+          .in("event_type", publicTypes).order("created_at").order("id").range(offset, offset + 499);
+        if (result.error) throw new Error("Customer tracking unavailable");
+        const batch = result.data ?? [];
+        tracking.push(...batch);
+        if (batch.length < 500) break;
+      }
+    }
+    const presentedOrders = orders.map(order => ({ ...order, tracking_events: tracking
+      .filter(event => event.order_id === order.id && publicTypes.includes(event.event_type))
+      .map(event => ({ id: String(event.id), type: event.event_type, at: event.created_at })) }));
     const last = orders.at(-1) as { created_at?: string; id?: string } | undefined;
     const nextCursor = orders.length === limitValue && last?.created_at && last.id
       ? { beforeCreatedAt: last.created_at, beforeId: last.id }
       : null;
-    return NextResponse.json({ ok: true, data: orders, nextCursor }, { headers: privateHeaders });
+    return NextResponse.json({ ok: true, data: presentedOrders, nextCursor }, { headers: privateHeaders });
   } catch {
     return errorResponse("No se pudieron consultar las solicitudes. Intentá nuevamente.", 503);
   }

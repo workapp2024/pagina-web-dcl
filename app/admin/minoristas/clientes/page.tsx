@@ -1,6 +1,9 @@
-import ExistingPage from "@/app/admin/clientes/page";
+import { CustomersManager } from "@/components/admin/CustomersManager";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { redirect } from "next/navigation";
 
 export default async function Page() {
   
-  return <><p className="mb-4 text-sm text-zinc-400">Minoristas · Gestión compartida de clientes existente.</p><ExistingPage /></>;
+  if (!(await isAdminAuthenticated("commercial"))) redirect("/admin/login");
+  return <CustomersManager sector="retail" />;
 }

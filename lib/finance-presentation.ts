@@ -1,10 +1,13 @@
+import type { SectorCash } from "@/lib/finance-sector-cash";
 export type CurrencyAmount = { currency: string; amount: number };
 export type FinanceMovement = { id: string; source?: string; movement_type: string; sale_id?: string | null; amount: number; currency?: string; description: string; occurred_at: string };
 export type FinancePresentationData = {
   activated: boolean; totalAvailable?: number; salesTotal?: number; realizedProfit?: number; retailCostsComplete?: boolean;
-  accounts: { id: string; name: string; balance: number }[];
+  cashBySector?: SectorCash;
+  retailPending?: { id: string; amount: number; currency: string; reason: string; status: string }[];
+  accounts: { id: string; name: string; balance: number; active?: boolean }[];
   periods: { id: string; name: string; status: string }[];
-  selectedPeriod?: { id: string; name: string };
+  selectedPeriod?: { id: string; name: string; status?: string };
   movements?: FinanceMovement[];
   wholesale?: { available: boolean; recognizedNet?: CurrencyAmount[]; received?: CurrencyAmount[]; refunds?: CurrencyAmount[];
     receivables?: { order_number: string; customer_name: string; currency: string; amount: number }[];
@@ -26,7 +29,11 @@ export function sectorFinancialPresentation(data: FinancePresentationData, secto
   return {
     // Account balances include shared opening balances, expenses and transfers.
     // The absence of a wholesale reference is NOT proof of retail ownership.
+    // El libro no prueba la acreditación/liquidez de las cuentas externas.
     cash: null,
+    registeredCash: data.cashBySector ? [{ currency: "ARS", amount: data.cashBySector[sector].available }] : null,
+    income: data.cashBySector ? [{ currency: "ARS", amount: data.cashBySector[sector].income }] : null,
+    expense: data.cashBySector ? [{ currency: "ARS", amount: data.cashBySector[sector].expense }] : null,
     sales: sector === "minoristas" ? (Number.isFinite(data.salesTotal) ? [{ currency: "ARS", amount: data.salesTotal! }] : null)
       : wholesale?.available && wholesale.recognizedNet ? sumByCurrency(wholesale.recognizedNet) : null,
     receivables: sector === "mayoristas" && wholesale?.available && wholesale.receivables ? sumByCurrency(wholesale.receivables) : null,

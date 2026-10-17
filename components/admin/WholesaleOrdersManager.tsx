@@ -3,6 +3,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { wholesaleAdminLabel, wholesaleNextAction } from "@/lib/admin-order-attention";
+import { adminCommercialTracking, historicalOrder, adminOrderDelivered, commercialHistory, commercialStateClass } from "@/lib/wholesale-order-summary";
+import { useWholesaleOrderVisibility } from "@/components/wholesale/useWholesaleOrderVisibility";
+import { WholesaleOrderTracking } from "@/components/wholesale/WholesaleOrderTracking";
 import { WholesaleConfirmation } from "@/components/admin/WholesaleConfirmation";
 import { WholesaleOrderLedger } from "@/components/admin/WholesaleOrderLedger";
 import {
@@ -77,6 +80,7 @@ const labels: Record<string, string> = {
   revision_rejected: "Cliente rechazó la propuesta",
   order_confirmed: "Solicitud confirmada", order_rejected: "Solicitud rechazada",
   order_cancelled: "Solicitud cancelada",
+  delivery_recorded: "Entrega registrada", order_fully_delivered: "Entrega completa",
 };
 const money = (value: number, currency = "ARS") =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: currency.trim() }).format(value);
@@ -102,7 +106,7 @@ function RevisionCard({ title, revision }: { title: string; revision: Detail["or
   if (!revision) return <section className="min-w-0 rounded-2xl border border-sky-300/20 bg-sky-950/20 p-5"><h3 className="break-words text-lg font-bold text-sky-100 [overflow-wrap:anywhere]">{title}</h3><p className="mt-3 text-sm text-zinc-400">La revisión original no está disponible en este detalle.</p></section>;
   return <section aria-label={title} className="min-w-0 rounded-2xl border border-sky-300/20 bg-gradient-to-b from-sky-950/40 to-zinc-950 p-4 sm:p-5 shadow-lg shadow-black/10">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-300">Pedido original</p><h3 className="mt-1 text-xl font-bold text-white">{title}</h3></div>
+      <div><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-300">{title === "Condiciones y artículos recibidos" ? "Pedido original" : "Antecedente histórico"}</p><h3 className="mt-1 text-xl font-bold text-white">{title}</h3></div>
       <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-3 py-1 text-xs font-semibold text-sky-200">v{revision.version_number}</span>
     </div>
     <ul className="mt-5 divide-y divide-white/10">
@@ -111,12 +115,33 @@ function RevisionCard({ title, revision }: { title: string; revision: Detail["or
         <p className="mt-1 text-sm text-zinc-400">{item.quantity} × {money(item.unitPrice, item.currency)}</p>
       </li>)}
     </ul>
-    <div className="mt-5 min-w-0 border-t border-sky-300/15 pt-4"><p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Condiciones originales</p><p className="mt-1 break-words whitespace-pre-wrap text-sm text-zinc-200 [overflow-wrap:anywhere]">{revision.commercial_conditions || "Sin condiciones adicionales"}</p></div>
-    <div className="mt-4 flex min-w-0 flex-col justify-between gap-2 rounded-xl bg-sky-300/10 px-4 py-3 sm:flex-row sm:items-center"><span className="text-sm font-semibold text-sky-100">Total original</span><strong className="break-words text-lg text-white [overflow-wrap:anywhere]">{money(revision.totalAmount, revision.currency)}</strong></div>
+    <div className="mt-5 min-w-0 border-t border-sky-300/15 pt-4"><p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{title === "Condiciones y artículos recibidos" ? "Condiciones originales" : "Condiciones registradas"}</p><p className="mt-1 break-words whitespace-pre-wrap text-sm text-zinc-200 [overflow-wrap:anywhere]">{revision.commercial_conditions || "Sin condiciones adicionales"}</p></div>
+    <div className="mt-4 flex min-w-0 flex-col justify-between gap-2 rounded-xl bg-sky-300/10 px-4 py-3 sm:flex-row sm:items-center"><span className="text-sm font-semibold text-sky-100">{title === "Condiciones y artículos recibidos" ? "Total original" : "Importe histórico"}</span><strong className="break-words text-lg text-white [overflow-wrap:anywhere]">{money(revision.totalAmount, revision.currency)}</strong></div>
   </section>;
 }
 
+function RevisionHistory({ orderId, currentId, originalId }: {orderId:string;currentId:string;originalId?:string}) {
+  const [revisions,setRevisions]=useState<Revision[]>([]);
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    const controller=new AbortController();
+    void fetch(`/api/admin/wholesale-orders/${orderId}/revisions`,{cache:"no-store",signal:controller.signal}).then(async response=>{
+      const body=await response.json();
+      if(!response.ok || !body.ok) throw new Error("No se pudieron cargar las revisiones anteriores.");
+      if(!controller.signal.aborted) setRevisions(body.data);
+    }).catch(()=>{if(!controller.signal.aborted) setError("No se pudieron cargar las revisiones anteriores.");}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+    return ()=>controller.abort();
+  },[orderId]);
+  return <div className="mt-3 space-y-3">{loading && <p role="status" className="text-sm text-zinc-400">Cargando revisiones anteriores…</p>}{error && <p role="alert" className="text-sm text-amber-200">{error}</p>}{revisions.filter(revision=>revision.id!==currentId && revision.id!==originalId).map(revision=><details key={revision.id}><summary className="min-h-11 cursor-pointer py-3 text-sm">Antecedente · revisión v{revision.version_number}</summary><RevisionCard title={`Propuesta anterior · v${revision.version_number}`} revision={revision} /></details>)}</div>;
+}
+
 export function WholesaleOrdersManager({ products, catalogError = "" }: { products: WholesaleProduct[]; catalogError?: string }) {
+  const visibility=useWholesaleOrderVisibility("/api/admin/wholesale-orders/visibility");
+  const [showArchived,setShowArchived]=useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  const [detailSection, setDetailSection] = useState("Resumen");
+  const [advancedAudit, setAdvancedAudit] = useState(false);
   const [rows, setRows] = useState<Order[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [selectedId, setSelectedId] = useState("");
@@ -163,6 +188,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
 
   const showDetail = useCallback(async (id: string) => {
     setSelectedId(id);
+    setDetailSection("Resumen"); setAdvancedAudit(false);
     setDetail(null);
     setDetailError("");
     setActionError("");
@@ -196,7 +222,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
     setLoading(true);
     setError("");
     try {
-      const query = new URLSearchParams({ page: String(page), ...filters });
+      const query = new URLSearchParams({ page: String(page), ...filters, ...(visibility.available ? {archived:String(showArchived)} : {}) });
       const response = await fetch(`/api/admin/wholesale-orders?${query}`, { cache: "no-store" });
       const body = await response.json();
       if (!response.ok || !body.ok) throw new Error(body.message || "No se pudieron cargar las solicitudes.");
@@ -212,13 +238,14 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
     } finally {
       if (version === listVersion.current) setLoading(false);
     }
-  }, [page, filters, showDetail]);
+  }, [page, filters, showDetail, visibility.available, showArchived]);
 
   useEffect(() => { const version = listVersion; void load(); return () => { version.current++; }; }, [load]);
 
   const setFilter = (key: keyof Filters, value: string) => {
     setPage(1);
-    setFilters(current => ({ ...current, [key]: value }));
+    setFilters(current => ({ ...current, [key]: value, ...(key === "customer" && value ? { status: "all" } : {}) }));
+    setListOpen(true);
   };
 
   function updateDraft(index: number, patch: Partial<DraftItem>) {
@@ -286,6 +313,10 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
     }
   }
 
+  const delivered = Boolean(detail && detail.status === "confirmed" && adminOrderDelivered(detail.events));
+  const historical = Boolean(detail && historicalOrder(detail.status, delivered));
+  const nextAction = detail && !historical ? wholesaleNextAction(detail.status, detail.revision.status, !delivered) : null;
+  const stateClass = commercialStateClass(detail?.status ?? "", delivered);
   const canPropose = detail && ["in_review", "awaiting_customer"].includes(detail.status) && detail.revision.status !== "approved";
   const canReject = detail && ["received", "in_review", "awaiting_customer"].includes(detail.status);
   const canConfirm = detail && detail.status === "in_review" &&
@@ -318,44 +349,51 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
   return <main className="mx-auto min-w-0 w-full max-w-[1680px] space-y-7 px-1 pb-10">
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div><p className="text-xs font-bold uppercase tracking-[0.24em] text-red-300">Administración · Ventas B2B</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Pedidos mayoristas</h1></div>
-      <p className="max-w-xl text-sm leading-6 text-zinc-400">Revisá cada solicitud, compará la versión original con la propuesta y confirmá cuando corresponda. Confirmar no registra pagos ni entregas.</p>
     </header>
 
+    <div className="flex flex-wrap gap-3"><button type="button" className={buttonClass} onClick={() => { setFilter("status", "attention"); setFilters({status:"attention",customer:"",from:"",to:""}); }}>Requieren atención{filters.status === "attention" && !filters.customer && !filters.from && !filters.to && !loading ? ` · ${total}` : ""}</button><button type="button" className={buttonClass} onClick={() => { setPage(1); setFilters({status:"all",customer:"",from:"",to:""}); setListOpen(!listOpen); }}>{listOpen ? "Ocultar pedidos" : "Ver pedidos"}</button></div>
+    {visibility.available && <button type="button" className={buttonClass} onClick={()=>{setShowArchived(value=>!value);setListOpen(true);setPage(1);setFilters({status:"all",customer:"",from:"",to:""});setSelectedId("");setDetail(null);}}>{showArchived ? "Ver pedidos habituales" : "Ver archivados"}</button>}
+    {visibility.error && <p role="alert" className="text-sm text-amber-200">{visibility.error}</p>}
     <section aria-label="Filtros" className="grid gap-3 rounded-2xl border border-white/10 bg-zinc-900/50 p-4 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-xs font-semibold text-zinc-400">Estado<select className={inputClass} value={filters.status} onChange={event => setFilter("status", event.target.value)}><option value="attention">Revisión y confirmación de DCL</option><option value="all">Todos</option>{Object.entries(labels).filter(([key]) => ["received", "in_review", "awaiting_customer", "confirmed", "rejected", "cancelled"].includes(key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-      <label className="text-xs font-semibold text-zinc-400">Cliente o n?mero<input className={inputClass} placeholder="Cliente o MW-000001" value={filters.customer} onChange={event => setFilter("customer", event.target.value)} /></label>
+      <label className="text-xs font-semibold text-zinc-400">Cliente o número<input className={inputClass} placeholder="Cliente o MW-000001" value={filters.customer} onChange={event => setFilter("customer", event.target.value)} /></label>
       <label className="text-xs font-semibold text-zinc-400">Desde<input type="date" className={inputClass} value={filters.from} onChange={event => setFilter("from", event.target.value)} /></label>
       <label className="text-xs font-semibold text-zinc-400">Hasta<input type="date" className={inputClass} value={filters.to} onChange={event => setFilter("to", event.target.value)} /></label>
     </section>
 
     {error && <p role="alert" className="rounded-xl border border-red-400/20 bg-red-950/60 p-4 text-red-200">{error}</p>}
-    {loading ? <p role="status" className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">Cargando solicitudes…</p> : rows.length === 0 ? <p className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">No hay solicitudes para estos filtros.</p> : <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(230px,0.26fr)_minmax(0,1fr)]">
-      <aside aria-label="Solicitudes" className={`min-w-0 ${detail ? "hidden space-y-2 xl:block" : "space-y-2"}`}>
+    {(listOpen || filters.customer || selectedId) && (loading ? <p role="status" className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">Cargando solicitudes…</p> : rows.length === 0 ? <p className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">No hay solicitudes para estos filtros.</p> : <div className="grid min-w-0 items-start gap-5 ">
+      <aside aria-label="Solicitudes" className={`min-w-0 ${selectedId ? "hidden" : "space-y-2"}`}>
         <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Solicitudes</h2><span className="text-xs text-zinc-500">{total} total</span></div>
         {rows.map(row => <button key={row.id} type="button" disabled={Boolean(processing)} onClick={() => void showDetail(row.id)} aria-pressed={detail?.id === row.id} className={`w-full border-b px-2 py-4 text-left transition disabled:opacity-50 ${detail?.id === row.id ? "border-red-400/60 bg-red-950/30" : "border-white/10 hover:bg-white/5"}`}>
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><b className="break-words [overflow-wrap:anywhere] text-sm">{row.orderNumber}</b><span className={`max-w-full break-words rounded-lg px-2.5 py-1 text-xs ${row.status === "in_review" && row.revisionStatus === "approved" ? "bg-amber-300/15 font-bold text-amber-100 ring-1 ring-amber-300/30" : "bg-white/5 text-zinc-300"}`}>{wholesaleAdminLabel(row.status, row.revisionStatus)}</span></div>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><b className="break-words [overflow-wrap:anywhere] text-sm">{row.orderNumber}</b><span className={`max-w-full break-words rounded-lg px-2.5 py-1 text-xs ${commercialStateClass(row.status)}`}>{wholesaleAdminLabel(row.status, row.revisionStatus)}</span></div>
           <p className="mt-2 break-words text-sm text-zinc-300 [overflow-wrap:anywhere]">{row.customerName}</p>
           <div className="mt-3 flex min-w-0 flex-wrap items-end justify-between gap-2"><b className="max-w-full break-words text-base [overflow-wrap:anywhere]">{row.total == null ? "Total no disponible" : money(row.total, row.currency || "ARS")}</b><time className="break-words text-right text-[11px] text-zinc-500">{when(row.createdAt)}</time></div>
         </button>)}
         <div className="flex items-center justify-between gap-2 pt-2 text-xs text-zinc-400"><span>Página {page} de {pages}</span><div className="flex gap-2"><button className={buttonClass} disabled={page <= 1 || loading || Boolean(processing)} onClick={() => setPage(value => value - 1)}>Anterior</button><button className={buttonClass} disabled={page >= pages || loading || Boolean(processing)} onClick={() => setPage(value => value + 1)}>Siguiente</button></div></div>
       </aside>
 
-      <section aria-label="Detalle de solicitud y cronología" className="min-w-0 max-w-full rounded-3xl border border-white/10 bg-zinc-900/35 p-4 sm:p-6 xl:p-7">
+      <section aria-label="Detalle de solicitud y cronología" hidden={!selectedId} className="min-w-0 max-w-full rounded-3xl border border-white/10 bg-zinc-900/35 p-4 sm:p-6 xl:p-7">
+          <button type="button" onClick={() => { setDetail(null); setSelectedId(""); setDetailError(""); }} className={`${buttonClass} mb-4`}>← Volver a solicitudes</button>
         {detailLoading ? <p role="status" className="p-8 text-center text-zinc-400">Cargando detalle…</p> : detailError ? <p role="alert" className="text-red-200">{detailError}</p> : !detail ? <p className="py-14 text-center text-zinc-400">Seleccioná una solicitud para comparar sus revisiones y ver la cronología.</p> : <>
-          <button type="button" onClick={() => { setDetail(null); setSelectedId(""); setDetailError(""); }} className={`${buttonClass} mb-4 xl:hidden`}>← Volver a solicitudes</button>
+
           <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5">
-            <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Solicitud · {detail.customer}</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">{detail.orderNumber}</h2><p className="mt-2 text-sm text-zinc-400">Recibida {when(detail.createdAt)} · {detail.confirmedAt ? `Confirmada ${when(detail.confirmedAt)}` : "Aún no confirmada"}</p></div>
-            <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold">{wholesaleAdminLabel(detail.status, detail.revision.status)}</span>
+            <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Solicitud · {detail.customer}</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">{detail.orderNumber}</h2><p className="mt-2 text-sm text-zinc-400">Recibida {when(detail.createdAt)}</p></div>
+            <span className={`rounded-xl border px-4 py-3 text-base font-bold ${stateClass}`}>{wholesaleAdminLabel(detail.status, detail.revision.status)}{delivered && " · Entrega completa"}</span>
           </header>
 
-          <p className="mt-4 rounded-xl border border-amber-300/20 p-4 text-sm text-amber-100">Próxima acción: {wholesaleNextAction(detail.status, detail.revision.status, !detail.deliveryProgress.length || detail.deliveryProgress.some(item => item.delivered < item.ordered))}</p>
-          <section aria-label="Resumen vigente" className="my-5 rounded-2xl border border-emerald-300/20 bg-emerald-950/20 p-4 sm:p-5">
-            <div className="flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-start"><div className="min-w-0 flex-1"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">Revisión vigente · v{detail.revision.version_number}</p><p className="mt-1 text-sm text-zinc-300">{labels[detail.revision.status] || detail.revision.status}</p><p className="mt-2 break-words text-xs text-zinc-400 [overflow-wrap:anywhere]">Condiciones vigentes: {detail.revision.commercial_conditions || "Sin condiciones adicionales"}</p></div><div className="max-w-full rounded-xl bg-emerald-300/10 px-4 py-3 sm:shrink-0 sm:text-right"><p className="text-xs text-emerald-100/70">Total vigente · servidor</p><strong className="break-words text-2xl font-black text-white [overflow-wrap:anywhere]">{money(detail.revision.totalAmount, detail.revision.currency)}</strong></div></div>
-            <div className="mt-4 border-t border-emerald-300/10 pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-100/70">Artículos vigentes</p><ul className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">{detail.revision.items.map(item => <li key={item.productId} className="grid min-w-0 grid-cols-1 gap-2 rounded-lg bg-black/15 px-3 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_auto]"><span className="min-w-0"><b className="block break-words text-zinc-100 [overflow-wrap:anywhere]">{item.name}</b><span className="break-words text-xs text-zinc-400 [overflow-wrap:anywhere]">Código {item.productId} · {item.quantity} × {money(item.unitPrice, item.currency)}</span></span><span className="break-words font-semibold sm:text-right [overflow-wrap:anywhere]">{money(item.lineTotal, item.currency)}</span></li>)}</ul></div>
+          {nextAction && <p className="mt-4 rounded-xl border border-amber-300/20 p-4 text-sm text-amber-100">Próxima acción: {nextAction}</p>}
+          {visibility.available && (historical || visibility.ids.includes(detail.id)) && <button type="button" disabled={visibility.busy || Boolean(processing)} className={`${buttonClass} mt-3`} onClick={async()=>{if(await visibility.setArchived(detail.id,!visibility.ids.includes(detail.id))){setDetail(null);setSelectedId("");await load();}}}>{visibility.ids.includes(detail.id) ? "Restaurar pedido" : "Archivar"}</button>}
+          <nav aria-label="Secciones del pedido" className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{["Resumen", "Seguimiento", "Cobros y entregas", "Historial"].map(section => <button key={section} type="button" aria-pressed={detailSection === section} onClick={() => setDetailSection(section)} className={`${buttonClass} ${detailSection === section ? "bg-red-300/10 text-red-200" : "text-zinc-400"}`}>{section}</button>)}</nav>
+          <div hidden={detailSection !== "Resumen"}>
+          <section aria-label="Resumen vigente" className={`my-5 rounded-2xl border p-4 sm:p-5 ${stateClass}`}>
+            <p className="text-sm">{historical ? "Importe histórico del pedido" : "Importe vigente"}</p>
+            <strong className="break-words text-2xl font-black [overflow-wrap:anywhere]">{money(detail.revision.totalAmount, detail.revision.currency)}</strong>
+            <ul className="mt-4 divide-y divide-white/10 text-zinc-100">{detail.revision.items.map(item => <li key={item.productId} className="break-words py-3 text-sm [overflow-wrap:anywhere]"><b>{item.name}</b> ? {item.quantity} unidades</li>)}</ul>
           </section>
 
           <div className="grid min-w-0 items-start gap-5 min-[1600px]:grid-cols-2">
-            <RevisionCard title="Condiciones y artículos recibidos" revision={detail.originalRevision} />
+
 
             {canPropose ? <details className="min-w-0"><summary className="min-h-11 cursor-pointer py-3 font-semibold text-amber-200">Preparar una propuesta</summary><section aria-label="Propuesta en edición" className="min-w-0 rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-950/25 to-zinc-950 p-4 sm:p-5 shadow-lg shadow-black/10">
               <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">Borrador administrativo</p><h3 className="mt-1 text-xl font-bold">Propuesta en edición</h3></div><span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-xs text-amber-100">No enviada</span></div>
@@ -425,35 +463,46 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
                 catch (cause) { setActionError(cause instanceof Error ? cause.message : "No se pudo preparar la propuesta."); return; }
                 void performAction("propose", { expectedRevisionId: detail.revision.id, items: draftItems, idempotencyKey: key, commercialConditions, internalNote });
               }}>{processing === "propose" ? "Enviando propuesta…" : "Enviar propuesta"}</button>
-            </section></details> : <section aria-label="Propuesta" className="rounded-2xl border border-dashed border-white/15 bg-zinc-950/50 p-5"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">Propuesta</p><h3 className="mt-1 text-xl font-bold">Aún no está en edición</h3><p className="mt-3 text-sm leading-6 text-zinc-400">Iniciá la revisión para preparar una propuesta. La revisión vigente y su total siguen visibles arriba.</p></section>}
+            </section></details> : detail.status === "received" ? <section aria-label="Propuesta" className="rounded-2xl border border-dashed border-white/15 bg-zinc-950/50 p-5"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">Propuesta</p><h3 className="mt-1 text-xl font-bold">Aún no está en edición</h3><p className="mt-3 text-sm leading-6 text-zinc-400">Iniciá la revisión para preparar una propuesta. La revisión vigente y su total siguen visibles arriba.</p></section> : null}
           </div>
 
           {canPropose && <section aria-label="Nota interna" className="mt-5 rounded-2xl border border-violet-300/20 bg-violet-950/15 p-5"><label className="block text-sm font-semibold text-violet-100">Nota interna <span className="font-normal text-violet-300/70">· solo para administración</span><textarea maxLength={1000} rows={3} disabled={Boolean(processing)} className={`${inputClass} resize-y`} value={internalNote} onChange={event => setInternalNote(event.target.value)} placeholder="No se comparte con el cliente" /></label><p className="mt-2 text-xs text-zinc-500">Hasta 1.000 caracteres. Se guarda únicamente en la cronología interna.</p></section>}
 
           {needsReview && <div className="mt-5 rounded-2xl border border-amber-300/30 bg-amber-950/30 p-4" role="alert"><p className="text-sm text-amber-100">La revisión vigente cambió. Compará los artículos y las condiciones antes de volver a proponer.</p><button type="button" className={`${buttonClass} mt-3 border-amber-300/30`} disabled={Boolean(processing)} onClick={() => setReviewedLatest(true)}>Ya revisé la versión vigente</button>{reviewedLatest && <p className="mt-2 text-sm text-emerald-300">Versión revisada. Ya podés preparar otra propuesta.</p>}</div>}
+          </div>
           {actionError && <p role="alert" className="mt-5 rounded-xl border border-red-400/20 bg-red-950/60 p-4 text-sm text-red-200">{actionError}</p>}
-
+          <div hidden={detailSection !== "Resumen" && detailSection !== "Cobros y entregas"}>
           <section aria-label="Acciones administrativas" className="mt-6 flex min-w-0 flex-col items-stretch gap-3 border-y border-white/10 py-5 sm:flex-row sm:flex-wrap sm:items-center">
             {detail.status === "received" && <button type="button" className={`${buttonClass} w-full border-sky-300/30 bg-sky-300/10 text-sky-100 sm:w-auto`} disabled={Boolean(processing)} onClick={() => void performAction("start_review")}>{processing === "start_review" ? "Iniciando revisión…" : "Iniciar revisión"}</button>}
             {canConfirm && <WholesaleConfirmation key={detail.revision.id} items={detail.revision.items} conditions={detail.revision.commercial_conditions} approved={detail.revision.status === "approved"} busy={Boolean(processing)} confirm={() => { if (window.confirm("¿Confirmar esta solicitud con la revisión vigente? Esto reserva stock y no registra cobros ni entregas.")) void performAction("confirm", { revisionId: detail.revision.id }); }} />}
             {canReject && <button type="button" className={`${buttonClass} w-full border-red-400/30 text-red-200 sm:w-auto`} disabled={Boolean(processing)} onClick={() => { if (window.confirm("¿Rechazar esta solicitud? La acción quedará registrada en su cronología.")) void performAction("reject", { internalNote }); }}>{processing === "reject" ? "Rechazando…" : "Rechazar solicitud"}</button>}
-            {detail.status === "confirmed" && <p className="text-sm text-emerald-300">Pedido confirmado. Desde los paneles siguientes podés registrar entregas, cobros, reembolsos y conciliaciones; el cobro no cambia el estado del pedido.</p>}
-            {detail.status === "confirmed" && <section aria-label="Entregas mayoristas" className="w-full basis-full rounded-2xl border border-emerald-300/15 bg-emerald-950/10 p-4">
+            {detail.status === "confirmed" && detailSection === "Cobros y entregas" && <section aria-label="Entregas mayoristas" className="w-full basis-full rounded-2xl border border-emerald-300/15 bg-emerald-950/10 p-4">
               <h3 className="font-bold text-emerald-100">Entregas</h3>
-              <div className="mt-3 space-y-2">{detail.deliveryProgress.map(progress => <div key={progress.productId} className="grid min-w-0 grid-cols-[minmax(0,1fr)_6rem] items-center gap-3"><p className="min-w-0 break-words text-sm text-zinc-300">{detail.revision.items.find(item => item.productId === progress.productId)?.name ?? progress.productId}<span className="block text-xs text-zinc-500">Entregadas {progress.delivered}/{progress.ordered} · reservadas {progress.reservedRemaining}</span></p><input aria-label={`Cantidad a entregar ${progress.productId}`} type="number" min="0" max={Math.min(progress.reservedRemaining, progress.ordered-progress.delivered)} step="1" disabled={Boolean(processing)} className={inputClass} value={deliveryQuantities[progress.productId] ?? "0"} onChange={event => {setDeliveryQuantities(current => ({...current,[progress.productId]:event.target.value}));setDeliveryIdempotencyKey("");}} /></div>)}</div>
-              {detail.deliveries.length > 0 && <ol className="mt-4 space-y-2 border-t border-white/10 pt-3 text-sm text-zinc-400">{detail.deliveries.map(delivery => <li key={delivery.id}>Entrega del {when(delivery.deliveredAt)} · {delivery.items.map(item => `${item.quantity} × ${detail.revision.items.find(product => product.productId === item.productId)?.name ?? item.productId}`).join(", ")}</li>)}</ol>}
+              <div className="mt-3 space-y-2">{detail.deliveryProgress.map(progress => <div key={progress.productId} className="grid min-w-0 grid-cols-[minmax(0,1fr)_6rem] items-center gap-3"><p className="min-w-0 break-words text-sm text-zinc-300">{detail.revision.items.find(item => item.productId === progress.productId)?.name ?? progress.productId}<span className="block text-xs text-zinc-500">Entregadas {progress.delivered}/{progress.ordered} · pendientes {Math.max(0,progress.ordered-progress.delivered)}</span></p><input aria-label={`Cantidad a entregar ${progress.productId}`} type="number" min="0" max={Math.min(progress.reservedRemaining, progress.ordered-progress.delivered)} step="1" disabled={Boolean(processing) || progress.delivered >= progress.ordered} className={inputClass} value={deliveryQuantities[progress.productId] ?? "0"} onChange={event => {setDeliveryQuantities(current => ({...current,[progress.productId]:event.target.value}));setDeliveryIdempotencyKey("");}} /></div>)}</div>
+
               {detail.deliveryProgress.every(item => item.delivered >= item.ordered) ? <p className="mt-4 text-sm font-semibold text-emerald-200">Entrega completa. El pedido conserva su estado comercial confirmado.</p> : <button type="button" className={`${buttonClass} mt-4 w-full border-emerald-300/30 bg-emerald-300/10 text-emerald-100 sm:w-auto`} disabled={Boolean(processing)||!validDelivery} onClick={()=>{let key=deliveryIdempotencyKey;try{if(!key){key=createIdempotencyKey();setDeliveryIdempotencyKey(key);}}catch(cause){setActionError(cause instanceof Error?cause.message:"No se pudo preparar la entrega.");return;}void performAction("deliver",{revisionId:detail.revision.id,idempotencyKey:key,items:deliveryItems.map(({productId,quantity})=>({productId,quantity}))});}}>{processing==="deliver"?"Registrando entrega…":"Registrar entrega parcial"}</button>}
             </section>}
             {processing && <span role="status" className="text-sm text-zinc-400">Procesando solicitud…</span>}
           </section>
 
-          {(detail.status === "confirmed" || detail.deliveries.length > 0) && <WholesaleOrderLedger orderId={detail.id} revisionId={detail.revision.id} status={detail.status} total={detail.revision.totalAmount} currency={detail.revision.currency} deliveries={detail.deliveries} />}
-          <section aria-label="Cronología" className="pt-6">
-            <div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">Actividad del pedido</p><h3 className="mt-1 text-xl font-bold">Cronología</h3></div><span className="rounded-full bg-white/5 px-3 py-1 text-xs text-zinc-400">{detail.events.length} eventos</span></div>
-            {detail.events.length ? <ol className="mt-5 space-y-4">{[...detail.events].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id - b.id).map(event => <li key={event.id} className="relative border-l border-red-400/40 pb-1 pl-5 before:absolute before:-left-[5px] before:top-1 before:h-2.5 before:w-2.5 before:rounded-full before:bg-red-400"><p className="font-semibold text-zinc-100">{labels[event.type] || event.type}</p><p className="mt-1 text-xs text-zinc-400">{when(event.createdAt)} · {event.channel} · {event.actor}</p></li>)}</ol> : <p className="mt-4 text-sm text-zinc-500">Esta solicitud todavía no tiene eventos registrados.</p>}
-          </section>
+          </div>
+          <div hidden={detailSection !== "Cobros y entregas" && detailSection !== "Resumen"}>
+          {<WholesaleOrderLedger key={detail.id} orderId={detail.id} revisionId={detail.revision.id} status={detail.status} total={detail.revision.totalAmount} currency={detail.revision.currency} deliveries={detail.deliveries} productNames={Object.fromEntries([...(detail.originalRevision?.items ?? []),...detail.revision.items].map(item=>[item.productId,item.name]))} view={detailSection === "Resumen" ? "summary" : "payments"} />}
+          </div>
+          <div hidden={detailSection !== "Seguimiento"} className="pt-5"><WholesaleOrderTracking events={adminCommercialTracking(detail.events)} nextAction={null} outcome={detail.status} delivered={delivered} /></div>
+          <div hidden={detailSection !== "Historial"} className="pt-5">
+            <ol aria-label="Antecedentes comerciales" className="divide-y divide-white/10">{commercialHistory(detail.events).map(event => <li key={event.id} className="py-3 text-sm"><p className="font-semibold">{event.label}</p><time dateTime={event.at} className="mt-1 block text-xs text-zinc-400">{when(event.at)}</time></li>)}</ol>
+            <button type="button" className={`${buttonClass} mt-5 text-zinc-400`} onClick={()=>setAdvancedAudit(value=>!value)}>{advancedAudit ? "Cerrar consulta avanzada" : "Consulta avanzada de antecedentes"}</button>
+            {advancedAudit && <section aria-label="Auditoría avanzada" className="mt-4 space-y-4 border-t border-white/10 pt-4">
+              <details><summary className="min-h-11 cursor-pointer py-3 text-sm">Solicitud original</summary><RevisionCard title="Condiciones y artículos recibidos" revision={detail.originalRevision} /></details>
+              <details><summary className="min-h-11 cursor-pointer py-3 text-sm">Últimas condiciones registradas</summary><RevisionCard title="Últimas condiciones registradas" revision={detail.revision} /></details>
+              <RevisionHistory key={detail.id} orderId={detail.id} currentId={detail.revision.id} originalId={detail.originalRevision?.id} />
+              <WholesaleOrderLedger orderId={detail.id} revisionId={detail.revision.id} status={detail.status} total={detail.revision.totalAmount} currency={detail.revision.currency} deliveries={detail.deliveries} view="history" />
+              <details><summary className="min-h-11 cursor-pointer py-3 text-sm">Registro íntegro de auditoría</summary><pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs text-zinc-400">{JSON.stringify(detail.events,null,2)}</pre></details>
+            </section>}
+          </div>
         </>}
       </section>
-    </div>}
+    </div>)}
   </main>;
 }

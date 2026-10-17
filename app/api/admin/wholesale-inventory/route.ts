@@ -22,7 +22,11 @@ export async function GET() {
     const db = createAdminServerClient();
     const { data, error } = await db.rpc("list_wholesale_inventory");
     if (error) throw error;
-    return NextResponse.json({ ok: true, data }, { headers: { "Cache-Control": "no-store" } });
+    const { data: metadata, error: metadataError } = await db.from("products").select("id,connector_type");
+    if (metadataError) throw metadataError;
+    const connectors = new Map(((metadata || []) as { id: string; connector_type: string | null }[]).map(product => [product.id, product.connector_type]));
+    const inventory = data as unknown as { products: { productId: string }[]; movements: unknown[] };
+    return NextResponse.json({ ok: true, data: { ...inventory, products: inventory.products.map(product => ({ ...product, connectorType: connectors.get(product.productId) })) } }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return apiError("INTERNAL_ERROR", "No se pudo cargar el inventario mayorista.", 500);
   }

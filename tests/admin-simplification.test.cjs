@@ -59,26 +59,29 @@ test('financial screens render distinct sector amounts, one consolidated balance
   const { renderToStaticMarkup } = require('react-dom/server');
   function render(sector) {
     let index = 0;
-    const values = [data, '', '', false, false];
+    const { buildSectorCash } = load('lib/finance-sector-cash.ts');
+    const cashBySector = buildSectorCash(data.movements.map(row => ({ ...row, account_id: 'cash', description: 'Movimiento', occurred_at: '2026-10-17T12:00:00Z', wholesale_payment_entry_id: row.source === 'wholesale' ? 'payment' : null })));
+    const values = [{ ...data, cashBySector }, '', '', false, false];
     const { FinanceOverview } = load('components/admin/FinanceOverview.tsx', {
       react: { useState: () => [values[index++], () => {}], useEffect: () => {} },
       'next/link': ({ children, ...props }) => React.createElement('a', props, children),
       '@/components/admin/FinancesManager': { FinancesManager: () => React.createElement('span', null, 'ADVANCED_TOOLS') },
       '@/components/admin/SearchableList': load('components/admin/SearchableList.tsx'),
+      '@/components/admin/FinanceCashHistory': load('components/admin/FinanceCashHistory.tsx'),
     });
     return renderToStaticMarkup(React.createElement(FinanceOverview, { sector }));
   }
   const general = render('general');
   assert.match(general, /950,00/);
   assert.doesNotMatch(general, /400,00|300,00|ADVANCED_TOOLS/);
-  assert.match(general, /No disponible/);
+  assert.match(general, /Sin atribución/);
   assert.doesNotMatch(general, /<details[^>]* open/);
   const retail = render('minoristas');
-  assert.match(retail, /400,00/); assert.doesNotMatch(retail, /950,00|300,00/);
+  assert.match(retail, /200,00/); assert.doesNotMatch(retail, /950,00|300,00|400,00/);
   const wholesale = render('mayoristas');
-  assert.match(wholesale, /300,00/); assert.doesNotMatch(wholesale, /950,00|400,00/);
-  assert.equal((retail.match(/<dt /g) || []).length, 4);
-  assert.equal((wholesale.match(/<dt /g) || []).length, 4);
+  assert.match(wholesale, /200,00/); assert.doesNotMatch(wholesale, /950,00|400,00|300,00/);
+  assert.equal((retail.match(/<dt /g) || []).length, 3);
+  assert.equal((wholesale.match(/<dt /g) || []).length, 3);
 });
 
 test('navigation retains every existing module without repeated exact destinations or general finances in sectors', () => {

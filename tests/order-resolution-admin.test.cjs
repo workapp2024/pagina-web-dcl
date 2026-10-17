@@ -112,6 +112,7 @@ test('resolution modal explains external refund and retries with the same key af
   const render = () => { cursor = 0; refCursor = 0; return OrdersManager(); };
   const button = label => nodes(render()).find(n => n.type === 'button' && text(n) === label);
   button('Actualizar pedidos').props.onClick(); await settle();
+  button('Ver pedidos').props.onClick();
   nodes(render()).find(n => n.type === 'button' && text(n).includes('Cliente test')).props.onClick();
   assert.equal(button('Completar con stock disponible'), undefined);
   button('Registrar reembolso y cerrar incidencia').props.onClick();

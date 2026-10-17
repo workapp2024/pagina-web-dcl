@@ -1,4 +1,7 @@
 "use client";
+import { InventoryMovementCard } from "@/components/admin/InventoryMovementCard";
+import { InventoryStockCard } from "@/components/admin/InventoryStockCard";
+import { InventoryProductSearch } from "@/components/admin/InventoryProductSearch";
 import { SearchableList } from "@/components/admin/SearchableList";
 import { useIsOwner } from "@/components/admin/AdminIdentityProvider";
 
@@ -117,7 +120,7 @@ export function AdminInventoryManager() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black uppercase tracking-[-0.06em] text-white">Inventario</h1>
+          <h1 className="text-3xl font-black uppercase tracking-[-0.06em] text-white">Inventario minorista</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
             Consultá existencias o registrá un ingreso, salida o ajuste.
           </p>
@@ -142,19 +145,7 @@ export function AdminInventoryManager() {
         </div>
 
         <form onSubmit={submitMovement} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label className="block text-sm text-zinc-300 xl:col-span-2">
-            <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Producto</span>
-            <select
-              value={form.productId}
-              onChange={(event) => setForm((previous) => ({ ...previous, productId: event.target.value }))}
-              disabled={loading || activeProducts.length === 0}
-              required
-              className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white disabled:opacity-50"
-            >
-              <option value="">Seleccioná un producto...</option>
-              {activeProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · stock {product.stock}</option>)}
-            </select>
-          </label>
+          <div className="xl:col-span-2"><InventoryProductSearch products={activeProducts} value={form.productId} disabled={loading} onChange={productId => setForm(previous => ({ ...previous, productId }))} /></div>
 
           <label className="block text-sm text-zinc-300">
             <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Tipo</span>
@@ -199,7 +190,7 @@ export function AdminInventoryManager() {
           <div className="flex items-end">
             <button
               type="submit"
-              disabled={loading || submitting || activeProducts.length === 0}
+              disabled={loading || submitting || !form.productId}
               className="w-full rounded-full bg-red-600 px-5 py-3 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? "Registrando..." : "Registrar movimiento"}
@@ -212,26 +203,7 @@ export function AdminInventoryManager() {
         <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">Stock por producto</h2>
         <SearchableList rows={products} label="Productos" placeholder="Nombre o código" stock={product => product.stock} loading={loading} searchText={product => [product.name, product.id]}>
           {products => (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm text-zinc-300">
-              <thead><tr className="border-b border-white/10 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                <th className="py-3 pr-3">Producto</th><th className="py-3 pr-3">Código</th><th className="py-3 pr-3">Stock</th><th className="py-3 pr-3">Mínimo</th><th className="py-3 pr-3">Costo</th><th className="py-3 pr-3">Venta</th><th className="py-3 pr-3">Margen</th><th className="py-3">Estado</th>
-              </tr></thead>
-              <tbody>{products.map((product) => {
-                const status = stockStatus(product);
-                return <tr key={product.id} className="border-b border-white/5">
-                  <td className="py-3 pr-3 font-semibold text-white">{product.name}{!product.active ? <span className="ml-2 text-xs font-normal text-zinc-500">Inactivo</span> : null}</td>
-                  <td className="py-3 pr-3 font-mono text-xs text-zinc-400">{product.id}</td>
-                  <td className="py-3 pr-3 text-base font-black text-white">{product.stock}</td>
-                  <td className="py-3 pr-3">{product.stockMin}</td>
-                  <td className="py-3 pr-3">{formatCurrency(product.costPrice)}</td>
-                  <td className="py-3 pr-3">{formatCurrency(product.price)}</td>
-                  <td className="py-3 pr-3">{product.marginPercentage === undefined ? "—" : `${product.marginPercentage}%`}</td>
-                  <td className="py-3"><span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${status.className}`}>{status.label}</span></td>
-                </tr>;
-              })}</tbody>
-            </table>
-          </div>          )}
+          <div className="mt-4">{products.map(product => { const status = stockStatus(product); return <InventoryStockCard key={product.id} name={product.name} code={product.id} stock={product.stock}><span className={status.className}>{status.label}</span>{!product.active && <span>Inactivo</span>}<details className="w-full"><summary className="min-h-11 cursor-pointer py-3">Detalles del producto</summary><dl className="grid grid-cols-2 gap-3 text-zinc-400"><div><dt>Mínimo</dt><dd>{product.stockMin}</dd></div><div><dt>Costo</dt><dd>{formatCurrency(product.costPrice)}</dd></div><div><dt>Venta</dt><dd>{formatCurrency(product.price)}</dd></div><div><dt>Margen</dt><dd>{product.marginPercentage === undefined ? "—" : product.marginPercentage + "%"}</dd></div></dl></details></InventoryStockCard>; })}</div>          )}
         </SearchableList>
       </section>
 
@@ -239,21 +211,7 @@ export function AdminInventoryManager() {
         <h2 className="text-xl font-black uppercase tracking-[-0.05em] text-white">Historial de movimientos</h2>
         <SearchableList rows={movements} label="Movimientos" placeholder="Producto, código, fecha, tipo o motivo" loading={loading} movement={{ date: row => row.createdAt, type: row => row.type, labels: { entrada: "Entrada", salida: "Salida", ajuste: "Ajuste", venta: "Venta" } }} searchText={movement => [movement.productName, movement.productId, movement.type, movement.reason, movement.referenceType, movement.referenceId, movement.createdAt, new Date(movement.createdAt).toLocaleDateString("es-AR")]}>
           {movements => (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-sm text-zinc-300">
-              <thead><tr className="border-b border-white/10 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500">
-                <th className="py-3 pr-3">Fecha</th><th className="py-3 pr-3">Producto</th><th className="py-3 pr-3">Tipo</th><th className="py-3 pr-3">Cantidad</th><th className="py-3 pr-3">Motivo</th><th className="py-3">Referencia</th>
-              </tr></thead>
-              <tbody>{movements.map((movement) => <tr key={movement.id} className="border-b border-white/5">
-                <td className="py-3 pr-3 text-zinc-400">{new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(movement.createdAt))}</td>
-                <td className="py-3 pr-3 font-semibold text-white">{movement.productName}</td>
-                <td className="py-3 pr-3">{movementLabel(movement.type)}</td>
-                <td className={`py-3 pr-3 font-black ${movement.quantityDelta > 0 ? "text-emerald-300" : "text-red-300"}`}>{movement.quantityDelta > 0 ? "+" : ""}{movement.quantityDelta}</td>
-                <td className="py-3 pr-3">{movement.reason}</td>
-                <td className="py-3 text-zinc-400">{movement.referenceType && movement.referenceId ? `${movement.referenceType}: ${movement.referenceId}` : "—"}</td>
-              </tr>)}</tbody>
-            </table>
-          </div>          )}
+          <div className="mt-4">{movements.map(movement => <InventoryMovementCard key={movement.id} name={movement.productName} type={movementLabel(movement.type)} date={movement.createdAt} reason={movement.reason}><p className={movement.quantityDelta > 0 ? "text-emerald-300" : "text-red-300"}>Existencia {movement.quantityDelta > 0 ? "+" : ""}{movement.quantityDelta}</p><details><summary className="min-h-11 cursor-pointer py-3">Referencia</summary><p>{movement.productId} {movement.referenceType} {movement.referenceId}</p></details></InventoryMovementCard>)}</div>          )}
         </SearchableList>
       </section>
     </div>

@@ -5,6 +5,7 @@ import { apiError, apiInternalError, boundedString, isUuid, readJsonObject } fro
 import { rateLimit } from "@/lib/rate-limit";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { buildWholesaleFinanceReadModel } from "@/lib/wholesale-finance-read-model.cjs";
+import { buildSectorCash, type CashAllocation } from "@/lib/finance-sector-cash";
 
 async function fetchAllRows(query: any) {
   const rows: any[] = [];
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
     const accountId=boundedString(p.get("accountId"),40),movementType=boundedString(p.get("movementType"),32),from=p.get("from"),to=p.get("to");if(accountId)mq=mq.eq("account_id",accountId);if(movementType&&!movementType.startsWith("wholesale_"))mq=mq.eq("movement_type",movementType);if(from&&!Number.isNaN(Date.parse(from)))mq=mq.gte("occurred_at",from);if(to&&!Number.isNaN(Date.parse(to)))mq=mq.lte("occurred_at",/^\d{4}-\d{2}-\d{2}$/.test(to)?`${to}T23:59:59.999Z`:to);
     const {data:movements,error:me}=await mq;if(me)throw new Error(me.message);
     let wholesale: any = { available: false, activity: [], receivables: [] };
+    const cashMetadata = new Map<string, {payment_method: string; order_number?: string; reversal_of_id?: string | null}>();
     const wholesalePeriod = { id: selected.id, starts_at: selected.starts_at, ends_at: selected.ends_at };
     try {
       const [orders, payments, recognitions, reversals, reconciliationEvents, journals, customers, accountMappings, financialPostings] = await Promise.all([
@@ -69,6 +71,7 @@ export async function GET(request: Request) {
       });
       const paymentById = new Map(payments.map((entry: any) => [entry.id, entry]));
       const postingByEntry = new Map(financialPostings.map((entry: any) => [entry.payment_entry_id, entry]));
+      for (const entry of payments) cashMetadata.set(entry.id,{payment_method:entry.payment_method,order_number:orders.find((order:any)=>order.id===entry.order_id)?.order_number,reversal_of_id:entry.refund_of ? postingByEntry.get(entry.refund_of)?.cash_movement_id : undefined});
       const mappedMovements = (movements || []).map((movement: any) => {
         const entry = movement.wholesale_payment_entry_id ? paymentById.get(movement.wholesale_payment_entry_id) : null;
         if (!entry) return movement;
@@ -108,14 +111,29 @@ export async function GET(request: Request) {
       const rows=items.filter((item:any)=>item.sale_id===sale.id);
       return rows.length>0 && rows.every((item:any)=>item.unit_cost!==null && item.unit_cost!==undefined && Number.isFinite(Number(item.unit_cost)) && Number(item.unit_cost)>=0);
     });
-    const allMovements=await fetchAllRows(db.from("cash_movements").select("account_id,amount").eq("period_id",selected.id));
+    const allMovements=await fetchAllRows(db.from("cash_movements").select("id,account_id,period_id,amount,movement_type,description,occurred_at,created_at,sale_id,wholesale_payment_entry_id,transfer_id,reversal_of_id").eq("period_id",selected.id).order("occurred_at",{ascending:false}).order("id"));
+    let sectorAllocations: CashAllocation[] = [];
+    const sectorOperations: any[] = [];
+    try {
+      sectorAllocations = await fetchAllRows(db.from("financial_sector_allocations").select("cash_movement_id,sector,operation_id").order("cash_movement_id"));
+    } catch (error: any) {
+      if (!["42P01", "PGRST205"].includes(error?.code)) throw error;
+    }
+    const cashIds = new Set(allMovements.map((movement:any)=>movement.id));
+    const operationIds = [...new Set(sectorAllocations.filter(allocation=>cashIds.has(allocation.cash_movement_id)).map(allocation=>allocation.operation_id).filter(Boolean))];
+    for (let offset=0;offset<operationIds.length;offset+=500) sectorOperations.push(...await fetchAllRows(db.from("financial_sector_operations").select("id,action,actor_id,created_at,reverse_of,legacy_movement_id,request").in("id",operationIds.slice(offset,offset+500)).order("id")));
+    const cashBySector = buildSectorCash(allMovements.map((movement:any)=>({ ...movement,
+      ...(movement.wholesale_payment_entry_id ? cashMetadata.get(movement.wholesale_payment_entry_id) : {payment_method:sales.find((sale:any)=>sale.id===movement.sale_id)?.payment_method}),
+      operation:sectorOperations.find(operation=>operation.id===sectorAllocations.find(allocation=>allocation.cash_movement_id===movement.id)?.operation_id),
+    })), sectorAllocations);
+    const retailPending = await fetchAllRows(db.from("financial_pending_postings").select("id,amount,currency,reason,status").eq("status","pending").order("id"));
     const balances=(accounts||[]).filter((a:any)=>a.active).map((a:any)=>({...a,balance:allMovements.filter((m:any)=>m.account_id===a.id).reduce((n:number,m:any)=>n+Number(m.amount),0)}));
     const investedStock=(products||[]).reduce((n:number,x:any)=>n+Number(x.stock||0)*Number(x.cost_price||0),0),potentialStockValue=(products||[]).reduce((n:number,x:any)=>n+Number(x.stock||0)*Number(x.price||0),0),potentialStockProfit=potentialStockValue-investedStock;
     const financeMovements = [...(wholesale.cashMovements || []), ...(movements || []).filter((movement: any) => !movement.wholesale_payment_entry_id), ...(wholesale.activity || [])]
       .filter((movement: any) => !movementType || movement.movement_type === movementType)
       .sort((a: any, b: any) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))
       .slice(0, 1000);
-    return NextResponse.json({ok:true,data:{activated:true,accounts:balances,accountManagement:accounts||[],totalAvailable:balances.reduce((n:number,a:any)=>n+a.balance,0),periods,selectedPeriod:selected,salesTotal,realizedProfit:salesTotal-realizedCost,retailCostsComplete,realizedCost,investedStock,potentialStockValue,potentialStockProfit,potentialRoi:investedStock>0?potentialStockProfit/investedStock*100:null,movements:financeMovements,wholesale}});
+    return NextResponse.json({ok:true,data:{activated:true,cashBySector,retailPending,accounts:balances,accountManagement:accounts||[],totalAvailable:cashBySector.total,periods,selectedPeriod:selected,salesTotal,realizedProfit:salesTotal-realizedCost,retailCostsComplete,realizedCost,investedStock,potentialStockValue,potentialStockProfit,potentialRoi:investedStock>0?potentialStockProfit/investedStock*100:null,movements:financeMovements,wholesale}});
   } catch(error){return apiInternalError("admin_finances_list",error)}
 }
 

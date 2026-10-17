@@ -1,0 +1,73 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { PGlite } = require('@electric-sql/pglite');
+
+test('proposed wholesale creation is atomic, classified, audited and does not activate access', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
+      CREATE TABLE customers(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), full_name varchar(160) NOT NULL, phone varchar(50), email varchar(255), document_number varchar(40), notes text NOT NULL DEFAULT '', created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+      CREATE TABLE customer_vehicles(customer_id uuid); CREATE TABLE orders(customer_id uuid); CREATE TABLE sales(customer_id uuid); CREATE TABLE warranties(customer_id uuid);
+      CREATE TABLE products(id text, stock int); CREATE TABLE wholesale_orders(id uuid); CREATE TABLE cash_movements(id uuid, amount numeric); CREATE TABLE wholesale_inventory_movements(id uuid);
+      ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+      GRANT USAGE ON SCHEMA public TO service_role,anon,authenticated;
+      GRANT SELECT,INSERT,UPDATE,DELETE ON customers TO service_role;`);
+    const history = fs.readFileSync('supabase/migrations/20260920010000_customer_admin.sql', 'utf8');
+    await db.exec(history.slice(history.indexOf('ALTER TABLE public.customers'), history.indexOf('CREATE FUNCTION public.admin_manage_customer')));
+    const original = fs.readFileSync('supabase/migrations/20261007020000_customer_wholesale_access.sql', 'utf8');
+    await db.exec(original.slice(original.indexOf('ALTER TABLE public.customers'), original.indexOf('CREATE FUNCTION public.admin_manage_customer_wholesale')));
+    await db.exec(original.slice(original.indexOf('CREATE OR REPLACE FUNCTION public.admin_manage_customer'), original.lastIndexOf('COMMIT;')));
+    await db.exec(`REVOKE ALL ON FUNCTION admin_manage_customer(text,uuid,jsonb) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION admin_manage_customer(text,uuid,jsonb) TO service_role;
+      INSERT INTO customers(id,full_name,wholesale_enabled) VALUES('11111111-1111-4111-8111-111111111111','Ambos sectores',true);
+      INSERT INTO orders VALUES('11111111-1111-4111-8111-111111111111');
+      INSERT INTO sales VALUES('11111111-1111-4111-8111-111111111111');
+      INSERT INTO products VALUES('stock protegido',7); INSERT INTO cash_movements VALUES(gen_random_uuid(),123);`);
+    const existing = (await db.query('SELECT to_jsonb(c) AS row FROM customers c')).rows;
+    const commerceTables = ['orders','sales','products','wholesale_orders','cash_movements','wholesale_inventory_movements'];
+    const commerceBefore = await Promise.all(commerceTables.map(table => db.query(`SELECT to_jsonb(t) AS row FROM ${table} t`)));
+    await db.exec(fs.readFileSync('scripts/maintenance/proposed-block2-customer-create.sql', 'utf8'));
+    const security = (await db.query("SELECT prosecdef,proconfig,pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE oid='public.admin_create_wholesale_customer(jsonb)'::regprocedure")).rows[0];
+    assert.equal(security.prosecdef, false);
+    assert.equal(security.owner, 'postgres');
+    assert.deepEqual(security.proconfig, ['search_path=pg_catalog, public']);
+    await db.exec('SET ROLE service_role');
+    assert.equal((await db.query("SELECT has_table_privilege(current_user,'customer_admin_history','UPDATE') AS allowed")).rows[0].allowed, false);
+    await db.query(`SELECT admin_create_wholesale_customer($1::jsonb)`, [JSON.stringify({ full_name: 'Mayorista', notes: '' })]);
+    const customer = (await db.query("SELECT * FROM customers WHERE full_name='Mayorista'")).rows[0];
+    assert.equal(customer.wholesale_enabled, true);
+    assert.equal(customer.wholesale_access_active, false);
+    assert.equal(customer.wholesale_code_hash, null);
+    const events = (await db.query('SELECT * FROM customer_admin_history ORDER BY id')).rows;
+    assert.equal(events.length, 2);
+    assert.equal(events[0].action, 'create');
+    assert.equal(events[0].after_data.wholesale_enabled, false);
+    assert.equal(events[1].action, 'edit');
+    assert.deepEqual(events[1].before_data, events[0].after_data);
+    assert.equal(events[1].after_data.wholesale_enabled, true);
+    assert.equal('wholesale_code_hash' in events[1].after_data, false);
+    await assert.rejects(db.query(`SELECT admin_create_wholesale_customer($1::jsonb)`, [JSON.stringify({ full_name: '', id: '11111111-1111-4111-8111-111111111111' })]), /CUSTOMER_INVALID_INPUT/);
+    await db.exec('RESET ROLE');
+    await db.exec(`CREATE FUNCTION reject_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='edit' THEN RAISE EXCEPTION 'audit rollback'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER reject_audit BEFORE INSERT ON customer_admin_history FOR EACH ROW EXECUTE FUNCTION reject_audit(); SET ROLE service_role;`);
+    await assert.rejects(db.query(`SELECT admin_create_wholesale_customer($1::jsonb)`, [JSON.stringify({ full_name: 'Auditoría fallida', notes: '' })]), /audit rollback/);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM customers')).rows[0].n, 2);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM customer_admin_history')).rows[0].n, 2);
+    await db.exec('RESET ROLE; DROP TRIGGER reject_audit ON customer_admin_history;');
+    await db.exec(`CREATE FUNCTION reject_classification() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test rollback'; END $$;
+      CREATE TRIGGER reject_classification BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION reject_classification();`);
+    await db.exec('SET ROLE service_role');
+    await assert.rejects(db.query(`SELECT admin_create_wholesale_customer($1::jsonb)`, [JSON.stringify({ full_name: 'No debe persistir', notes: '' })]), /test rollback/);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM customers')).rows[0].n, 2);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM customer_admin_history')).rows[0].n, 2);
+    for (const role of ['anon','authenticated']) {
+      await db.exec(`RESET ROLE; SET ROLE ${role}`);
+      await assert.rejects(db.query(`SELECT admin_create_wholesale_customer('{}'::jsonb)`), /permission denied/);
+    }
+    await db.exec('RESET ROLE');
+    assert.deepEqual((await db.query("SELECT to_jsonb(c) AS row FROM customers c WHERE id='11111111-1111-4111-8111-111111111111'")).rows, existing);
+    const commerceAfter = await Promise.all(commerceTables.map(table => db.query(`SELECT to_jsonb(t) AS row FROM ${table} t`)));
+    assert.deepEqual(commerceAfter, commerceBefore);
+  } finally { await db.close(); }
+});

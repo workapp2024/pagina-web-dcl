@@ -15,7 +15,7 @@ type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 type InventoryMovementRow = Database["public"]["Tables"]["inventory_movements"]["Row"];
 type InventoryMovementInsert = Database["public"]["Tables"]["inventory_movements"]["Insert"];
 
-const INVENTORY_PRODUCT_SELECT = "id,name,active,price,cost_price,margin_percentage,stock,stock_min";
+const INVENTORY_PRODUCT_SELECT = "id,name,connector_type,active,price,cost_price,margin_percentage,stock,stock_min";
 const INVENTORY_MOVEMENT_SELECT = "id,product_id,movement_type,quantity_delta,reason,reference_type,reference_id,created_at";
 
 async function requireInventoryAdmin(readOnly = false) {
@@ -33,10 +33,11 @@ async function requireInventoryAdmin(readOnly = false) {
   return null;
 }
 
-function mapProduct(row: Pick<ProductRow, "id" | "name" | "active" | "price" | "cost_price" | "margin_percentage" | "stock" | "stock_min">): InventoryProduct {
+function mapProduct(row: Pick<ProductRow, "id" | "name" | "connector_type" | "active" | "price" | "cost_price" | "margin_percentage" | "stock" | "stock_min">): InventoryProduct {
   return {
     id: row.id,
     name: row.name,
+    connectorType: row.connector_type,
     active: row.active,
     price: Number(row.price),
     costPrice: row.cost_price ?? undefined,

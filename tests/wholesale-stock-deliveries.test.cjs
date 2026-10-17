@@ -44,6 +44,49 @@ before(async () => {
 });
 after(async () => { await db?.close(); });
 
+test('proposed visibility archive is reversible, owner-scoped, audited and never changes commerce',async()=>{
+  await db.exec(fs.readFileSync('scripts/maintenance/proposed-wholesale-order-visibility.sql','utf8'));
+  const order=await createOrder([{productId:'p1',quantity:1}]);
+  await assert.rejects(db.query('SELECT public.set_wholesale_order_visibility($1,true,NULL,$2)',[order.id,admin]),/VISIBILITY_PENDING/);
+  await db.query("SELECT public.close_wholesale_order($1,'cancel',$2,'')",[order.id,admin]);
+  const snapshot=async()=>JSON.stringify((await db.query('SELECT row_to_json(o) data FROM wholesale_orders o WHERE id=$1',[order.id])).rows);
+  const before=await snapshot();
+  await db.query('SELECT public.set_wholesale_order_visibility($1,true,$2,NULL)',[order.id,customer]);
+  const ids=async(c,a)=>(await db.query('SELECT public.list_wholesale_order_visibility($1,$2) ids',[c,a])).rows[0].ids;
+  assert.deepEqual(await ids(customer,null),[order.id]);assert.deepEqual(await ids(null,admin),[]);
+  const other=randomUUID();await db.query('INSERT INTO customers(id) VALUES($1)',[other]);
+  await assert.rejects(db.query('SELECT public.set_wholesale_order_visibility($1,true,$2,NULL)',[order.id,other]),/VISIBILITY_NOT_FOUND/);
+  await assert.rejects(db.query('SELECT public.set_wholesale_order_visibility($1,true,NULL,$2)',[order.id,seller]),/WHOLESALE_ADMIN_REQUIRED/);
+  await db.query('SELECT public.set_wholesale_order_visibility($1,true,NULL,$2)',[order.id,admin]);
+  await db.query('SELECT public.set_wholesale_order_visibility($1,true,NULL,$2)',[order.id,admin]);
+  assert.deepEqual(await ids(null,admin),[order.id]);
+  await db.query('SELECT public.set_wholesale_order_visibility($1,false,$2,NULL)',[order.id,customer]);
+  assert.deepEqual(await ids(customer,null),[]);assert.deepEqual(await ids(null,admin),[order.id]);
+  assert.equal(await snapshot(),before);
+  assert.equal((await db.query('SELECT count(*)::int n FROM wholesale_order_visibility_history WHERE order_id=$1',[order.id])).rows[0].n,3);
+  await assert.rejects(db.query('DELETE FROM wholesale_order_visibility_history WHERE order_id=$1',[order.id]),/WHOLESALE_HISTORY_IMMUTABLE/);
+  await db.exec('BEGIN');
+  try {
+    await db.exec("INSERT INTO products(id,name,wholesale_price) VALUES('archive-case','Archivo',100)");
+    await movement('archive-case','receipt',3);
+    const pending=await createOrder([{productId:'archive-case',quantity:1}]);await confirm(pending);
+    const paid=await db.query('SELECT public.record_wholesale_payment($1,$2,80,\'ARS\',\'bank_transfer\',NULL,$3,$4,$5) id',[pending.id,pending.revisionId,'2026-10-11T12:00:00Z',randomUUID(),admin]);
+    await db.query("SELECT public.close_wholesale_order($1,'cancel',$2,'')",[pending.id,admin]);
+    const eligible=async id=>(await db.query('SELECT public.wholesale_order_can_archive($1) value',[id])).rows[0].value;
+    assert.equal(await eligible(pending.id),false,'customer credit cannot be hidden');
+    await db.query("SELECT public.refund_wholesale_payment($1,80,'bank_transfer',NULL,$2,$3,$4)",[paid.rows[0].id,'2026-10-11T12:00:00Z',randomUUID(),admin]);
+    assert.equal(await eligible(pending.id),true);
+    const finished=await createOrder([{productId:'archive-case',quantity:1}]);await confirm(finished);
+    await deliver(finished,[{productId:'archive-case',quantity:1}]);
+    assert.equal(await eligible(finished.id),false,'delivered receivable cannot be hidden');
+    await db.query("SELECT public.record_wholesale_payment($1,$2,100,'ARS','bank_transfer',NULL,$3,$4,$5)",[finished.id,finished.revisionId,'2026-10-11T12:00:00Z',randomUUID(),admin]);
+    assert.equal(await eligible(finished.id),true);
+  } finally {await db.exec('ROLLBACK');}
+  await db.exec('SET ROLE anon');
+  await assert.rejects(db.query('SELECT public.list_wholesale_order_visibility($1,NULL)',[customer]),/permission denied/);
+  await db.exec('RESET ROLE');
+});
+
 async function createOrder(entries) {
   const result = await db.query('SELECT public.create_wholesale_order($1,$2::jsonb,$3) id',[customer,JSON.stringify(entries),randomUUID()]);
   const id=result.rows[0].id;

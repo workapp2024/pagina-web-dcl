@@ -67,6 +67,54 @@ function text(tree) {
   return text(tree.props?.children);
 }
 
+async function sectorPendingView(sector, orders) {
+  const states=[]; let cursor=0; let effect;
+  const jsx=(type,props)=>({type,props});
+  const {SectorHome}=load('components/admin/SectorHome.tsx',{
+    react:{useEffect:callback=>{effect=callback;},useState:initial=>{const index=cursor++;if(!(index in states))states[index]=initial;return [states[index],value=>{states[index]=value;}];}},
+    'react/jsx-runtime':{jsx,jsxs:jsx},'next/link':'a',
+    '@/components/admin/AdminIdentityProvider':{useAdminIdentity:()=>({role:'ADMIN'})},
+  },{fetch:async url=>{
+    const params=new URL('https://local.test'+url).searchParams;
+    if(sector==='mayoristas') {
+      assert.match(url,/\/api\/admin\/wholesale-orders/);
+      if(url.endsWith('/delivered')) return Response.json({data:{deliveryProgress:[{ordered:1,delivered:1}]}});
+      assert.equal(params.get('archived'),'false');
+    } else {
+      assert.match(url,/\/api\/admin\/orders\?/);
+      assert.equal(params.get('view'),'active');
+    }
+    return Response.json({data:orders,pagination:{total:orders.length}});
+  }});
+  const render=()=>{cursor=0;return SectorHome({sector});};
+  render();const cleanup=effect();
+  await new Promise(resolve=>setTimeout(resolve,30));
+  const tree=render();cleanup();return tree;
+}
+
+test('wholesale home respects administrative archive and never falls back to historical activity',async()=>{
+  const rows=['cancelled','rejected','awaiting_customer'].map((status,index)=>({id:status,orderNumber:`MW-${index}`,status,customerName:'Cliente'}));
+  rows.push({id:'delivered',orderNumber:'MW-DELIVERED',status:'confirmed',customerName:'Cliente'});
+  const tree=await sectorPendingView('mayoristas',rows);
+  assert.match(text(tree),/Todo al día. No tenés pedidos pendientes/);
+  assert.doesNotMatch(text(tree),/MW-|Actividad reciente|Próxima acción/);
+  assert.ok(nodes(tree).some(node=>node.props?.href==='/admin/mayoristas/pedidos'));
+});
+
+test('retail home keeps genuine pending actions and omits delivered or settled terminal orders',async()=>{
+  const rows=[
+    {id:'pending',order_number:'MIN-PENDING',status:'pending_manual_verification',operational_status:'received',payment:null,customer:{full_name:'Cliente pendiente'}},
+    {...paid,id:'done',order_number:'MIN-DONE',operational_status:'delivered'},
+    {id:'cancelled',order_number:'MIN-CANCELLED',status:'cancelled',operational_status:'cancelled',payment:null},
+  ];
+  const tree=await sectorPendingView('minoristas',rows);
+  assert.match(text(tree),/MIN-PENDING.*Cliente pendiente.*Transferencia a verificar.*Verificar la transferencia recibida/);
+  assert.doesNotMatch(text(tree),/MIN-DONE|MIN-CANCELLED|Actividad reciente/);
+  const empty=await sectorPendingView('minoristas',rows.slice(1));
+  assert.match(text(empty),/Todo al día. No tenés pedidos pendientes/);
+  assert.ok(nodes(empty).some(node=>node.props?.href==='/admin/minoristas/pedidos'));
+});
+
 test('guided confirmation blocks unknown/insufficient stock and requires review; performs only a GET precheck', async () => {
   let available = 1; let confirmed = 0; const requests = [];
   const ui = uiHarness('components/admin/WholesaleConfirmation.tsx', { fetch: async (url, init) => {

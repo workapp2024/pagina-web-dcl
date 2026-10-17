@@ -323,6 +323,7 @@ test('Orders modal link is gated by server availability and remains offered on a
     const render = () => { cursor = 0; refCursor = 0; return OrdersManager(); };
     let tree = render(); const refresh = nodes(tree).find(n => n.type === 'button' && n.props.children === 'Actualizar pedidos');
     refresh.props.onClick(); await new Promise(resolve => setImmediate(resolve));
+    nodes(render()).find(n => n.type === 'button' && n.props.children === 'Ver pedidos').props.onClick();
     tree = render(); const row = nodes(tree).find(n => n.type === 'button' && n.key === selected.id); row.props.onClick();
     tree = render(); const links = nodes(tree).filter(n => n.type === 'a' && n.props.children === 'Ver comprobante');
     assert.equal(links.length, available === true ? 1 : 0);

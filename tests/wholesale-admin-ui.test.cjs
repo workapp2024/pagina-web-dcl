@@ -13,7 +13,7 @@ test('admin proposal failures preserve the draft and explain safe same-key recov
 });
 
 test('admin wholesale UI separates current revision from the proposed draft and never accepts client prices', () => {
-  assert.match(source, /Revisión vigente/);
+  assert.match(source, /Importe vigente/);
   assert.match(source, /Propuesta en edici/);
   assert.match(source, /Pedido original/);
   assert.match(source, /Subtotal estimado de propuesta/);
@@ -34,10 +34,11 @@ test('product selector uses named catalog products and rejects anonymous or inva
   assert.match(source, /No disponible para una nueva propuesta/);
 });
 
-test('comparison lays out two columns on wide screens and stacks on mobile', () => {
+test('detail uses a single card with responsive navigation and preserved product wrapping', () => {
   assert.match(source, /grid min-w-0 items-start gap-5 min-\[1600px\]:grid-cols-2/);
   assert.match(source, /max-w-\[1680px\]/);
-  assert.match(source, /xl:grid-cols-\[minmax\(230px,0\.26fr\)_minmax\(0,1fr\)\]/);
+  assert.match(source, /aria-label="Secciones del pedido"/);
+  assert.match(source, /grid-cols-2 gap-2 sm:grid-cols-4/);
   assert.match(source, /\[overflow-wrap:anywhere\]/);
   assert.match(source, /w-full border-amber-300\/40/);
 });
@@ -62,7 +63,7 @@ test('admin actions are gated by order and revision states and share a pending-o
   assert.match(source, /processing\)\}/);
   assert.match(source, /performAction\("start_review"\)/);
   assert.match(source, /performAction\("confirm"/);
-  assert.match(source, /registrar entregas, cobros, reembolsos y conciliaciones/);
+  assert.match(source, /WholesaleOrderLedger/);
   assert.doesNotMatch(source, /los pagos no se gestionan en esta etapa/);
   assert.match(source, /performAction\("reject"/);
 });
@@ -77,5 +78,5 @@ test('stale proposals reload the current revision and require explicit administr
 
 test('successful actions reload both order detail and timeline plus the paginated list', () => {
   assert.match(source, /await showDetail\(selectedId\);\s*await load\(\);/);
-  assert.match(source, /aria-label="Cronología"|<h3 className="font-bold">Cronología<\/h3>/);
+  assert.match(source, /aria-label="Antecedentes comerciales"/);
 });

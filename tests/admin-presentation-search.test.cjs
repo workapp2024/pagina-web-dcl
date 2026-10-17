@@ -60,7 +60,7 @@ test('customer list makes no initial request, searches through the paginated API
     URLSearchParams,
     setTimeout: callback => setTimeout(callback, 0), fetch: async (url, init) => { requests.push({ url, init }); return Response.json({ ok: true, data: [customer], pagination: { total: 21 } }); },
   });
-  const render = () => { h.reset(); return CustomersManager(); };
+  const render = () => { h.reset(); return CustomersManager({}); };
   const button = label => nodes(render()).find(node => node.type === 'button' && text(node) === label);
   render(); h.effect(); await new Promise(resolve => setTimeout(resolve, 15));
   assert.equal(requests.length, 0); assert.ok(button('Crear cliente')); assert.ok(button('Ver todos los clientes'));

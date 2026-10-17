@@ -221,13 +221,28 @@ test('attempt recovery API returns original item IDs and quantities without the 
 });
 
 test('order history API validates pagination and maps only customer-scoped RPC results', async () => {
+  const reads = [];
+  const query = {
+    select(fields) { reads.push(['select',fields]); return this; },
+    in(field, values) { reads.push(['in',field,Array.from(values)]); return this; },
+    order() { return this; },
+    async range() { return {data:[
+      {id:1,order_id:'order-1',event_type:'delivery_recorded',created_at:'2026-10-13T12:00:00Z',actor_id:'PRIVATE',notes:'PRIVATE'},
+      {id:2,order_id:'other-customer',event_type:'order_confirmed',created_at:'2026-10-13T12:00:00Z'},
+      {id:3,order_id:'order-1',event_type:'private_note',created_at:'2026-10-13T12:00:00Z'},
+    ],error:null}; },
+  };
   const route = load('app/api/wholesale/orders/route.ts', {
     'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
     '@/lib/wholesale-server': { getWholesaleSessionCustomerId: async () => customerId },
-    '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ rpc: async () => ({ data: [{ id: 'order-1' }], error: null }) }) },
+    '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ rpc: async () => ({ data: [{ id: 'order-1' }], error: null }), from: table => { assert.equal(table,'wholesale_order_events'); return query; } }) },
     '@/lib/store/buyer-session': { isSameOriginWrite: () => true },
   });
   const response = await route.GET(new Request('https://dcl.test/api/wholesale/orders?limit=25'));
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).data, [{ id: 'order-1' }]);
+  const result = await response.json();
+  assert.deepEqual(result.data, [{ id: 'order-1', tracking_events:[{id:'1',type:'delivery_recorded',at:'2026-10-13T12:00:00Z'}] }]);
+  assert.deepEqual(reads[0],['select','id,order_id,event_type,created_at']);
+  assert.deepEqual(reads[1],['in','order_id',['order-1']]);
+  assert.doesNotMatch(JSON.stringify(result),/PRIVATE|other-customer|private_note|actor_id|notes/);
 });

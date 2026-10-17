@@ -19,6 +19,8 @@ export async function GET(request: Request) {
   const blocked = await guard(); if (blocked) return blocked;
   try {
     const params = new URL(request.url).searchParams;
+    const sector = params.get("sector") || "all";
+    if (!["all", "retail", "wholesale"].includes(sector)) return apiError("BAD_REQUEST", "Sector inválido.", 400);
     const view = params.get("view") || "active";
     if (view !== "active" && view !== "archived") return apiError("BAD_REQUEST", "Vista inválida.", 400);
     const rawQuery = boundedString(params.get("q"), 80);
@@ -28,10 +30,12 @@ export async function GET(request: Request) {
     const limit = 20;
     const db = createAdminServerClient();
     let query = db.from("customers")
-      .select("id,full_name,phone,email,document_number,notes,created_at,updated_at,archived_at,wholesale_enabled,wholesale_access_active,wholesale_access_activated_at,wholesale_code_updated_at,wholesale_access_updated_at", { count: "exact" })
+      .select("id,full_name,phone,email,document_number,notes,created_at,updated_at,archived_at,wholesale_enabled,wholesale_access_active,wholesale_access_activated_at,wholesale_code_updated_at,wholesale_access_updated_at,retail_orders:orders(),retail_sales:sales(),retail_vehicles:customer_vehicles(),retail_warranties:warranties()", { count: "exact" })
       .order("created_at", { ascending: false }).order("id", { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
     query = view === "active" ? query.is("archived_at", null) : query.not("archived_at", "is", null);
+    if (sector === "wholesale") query = query.eq("wholesale_enabled", true);
+    if (sector === "retail") query = query.or("wholesale_enabled.eq.false,retail_orders.not.is.null,retail_sales.not.is.null,retail_vehicles.not.is.null,retail_warranties.not.is.null");
     if (q) query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,email.ilike.%${q}%,document_number.ilike.%${q}%`);
     const { data, error, count } = await query;
     if (error) throw new Error(error.message);
@@ -66,6 +70,8 @@ export async function POST(request: Request) {
   const body = await readJsonObject(request);
   if (!body || typeof body.action !== "string") return apiError("BAD_REQUEST", "Acción inválida.", 400);
   const action = body.action;
+  if (body.sector !== undefined && !["retail", "wholesale", "all"].includes(String(body.sector))) return apiError("BAD_REQUEST", "Sector inválido.", 400);
+  if (action === "create" && body.sector === "wholesale" && !(await isAdminAuthenticated())) return apiError("FORBIDDEN", "Acceso denegado.", 403);
   if (["wholesale_activate", "wholesale_revoke", "wholesale_disable"].includes(action)) {
     if (!(await isAdminAuthenticated())) return apiError("FORBIDDEN", "Acceso denegado.", 403);
     if (!isUuid(body.customerId)) return apiError("BAD_REQUEST", "Cliente inválido.", 400);
@@ -111,10 +117,12 @@ export async function POST(request: Request) {
   }
   try {
     const db = createAdminServerClient();
-    const { data: result, error } = await db.rpc("admin_manage_customer" as never, {
+    const wholesaleCreate = action === "create" && body.sector === "wholesale";
+    const { data: result, error } = await db.rpc((wholesaleCreate ? "admin_create_wholesale_customer" : "admin_manage_customer") as never, wholesaleCreate ? { p_data: data } as never : {
       p_action: action, p_customer: action === "create" ? null : customerId, p_data: data,
     } as never) as unknown as { data: Record<string, unknown> | null; error: { message: string } | null };
     if (error) {
+      if (wholesaleCreate && /PGRST202|42883/.test(String((error as { code?: string }).code))) return apiError("CONFIGURATION_ERROR", "La creación mayorista requiere aprobar e instalar la propuesta SQL del Bloque 2. No se creó ningún cliente.", 503);
       if (error.message.includes("CUSTOMER_NOT_FOUND")) return apiError("NOT_FOUND", "Cliente no encontrado.", 404);
       if (error.message.includes("CUSTOMER_HAS_DEPENDENCIES") || error.message.includes("foreign key constraint")) {
         return apiError("BAD_REQUEST", "El cliente tiene vehículos o historial relacionado. Archivá el cliente en lugar de eliminarlo.", 409);

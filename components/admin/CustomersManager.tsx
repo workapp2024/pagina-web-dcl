@@ -29,7 +29,7 @@ export function mergeWholesaleCustomer(current: Customer, updated: Partial<Custo
   };
 }
 
-export function CustomersManager() {
+export function CustomersManager({ sector = "all" }: { sector?: "all" | "retail" | "wholesale" }) {
   const isOwner = useIsOwner();
   const [view, setView] = useState<"active" | "archived">("active");
   const [query, setQuery] = useState("");
@@ -54,7 +54,7 @@ export function CustomersManager() {
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const params = new URLSearchParams({ view, q: query, page: String(page) });
+        const params = new URLSearchParams({ sector, view, q: query, page: String(page) });
         const response = await fetch(`/api/admin/customers?${params}`, { signal: controller.signal });
         const body = await response.json();
         if (!body.ok) throw new Error(body.error || "No se pudieron cargar los clientes.");
@@ -69,7 +69,7 @@ export function CustomersManager() {
       }
     }, query ? 180 : 0);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [view, query, page, refresh, listVisible]);
+  }, [sector, view, query, page, refresh, listVisible]);
 
   function startCreate() { setSelected(null); setForm(emptyForm); setFormMode("create"); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }
   function startEdit(customer: Customer) {
@@ -84,7 +84,7 @@ export function CustomersManager() {
     try {
       const response = await fetch("/api/admin/customers", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, customerId: selected?.id, ...(action === "create" || action === "edit" ? form : {}) }),
+        body: JSON.stringify({ action, sector, customerId: selected?.id, ...(action === "create" || action === "edit" ? form : {}) }),
       });
       const body = await response.json();
       if (!body.ok) throw new Error(body.error || "No se pudo guardar el cliente.");
@@ -117,7 +117,7 @@ export function CustomersManager() {
 
   return <div className="space-y-5">
     <header className="flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-2xl font-bold">Clientes</h1>
+      <h1 className="text-2xl font-bold">Clientes{sector === "wholesale" ? " mayoristas" : sector === "retail" ? " minoristas" : ""}</h1>
       <button onClick={startCreate} className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500">Crear cliente</button>
     </header>
     <div className="flex flex-wrap items-center gap-3">

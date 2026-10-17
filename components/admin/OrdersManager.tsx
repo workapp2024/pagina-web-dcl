@@ -41,6 +41,9 @@ export function OrdersManager() {
   const isOwner = useIsOwner();
   const [rows, setRows] = useState<Order[]>([]);
   const [q, setQ] = useState("");
+  const [listOpen, setListOpen] = useState(false);
+  const [detailSection, setDetailSection] = useState("Resumen");
+  const listVisible = listOpen || Boolean(q.trim());
   const [status, setStatus] = useState("needs_attention");
   const [operational, setOperational] = useState("all");
   const [period, setPeriod] = useState("all");
@@ -143,18 +146,19 @@ export function OrdersManager() {
   function switchView(next: "active" | "archived") {
     if (inFlight.current || next === view) return;
     latest.current++;
-    setView(next); setSelected(null); setRows([]); setTotal(0); setPage(1);
+    setView(next); setListOpen(true); setSelected(null); setRows([]); setTotal(0); setPage(1);
     setStatus("all"); setOperational("all"); setPeriod("all"); setError("");
     setNote(""); setOperationNote("");
     setResolution(null); setResolutionKey(""); setResolutionAttempted(false); setResolutionNote(""); setExternalReference("");
   }
 
-  return <div className="space-y-5">
+  return <main className="mx-auto min-w-0 w-full max-w-[1680px] space-y-7 px-1 pb-10">
     {notice && <p role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">{notice}</p>}
-    <header><h1 className="text-3xl font-black">Pedidos</h1><p className="mt-2 text-sm text-zinc-400">Gestioná preparación y entrega. El pago se muestra por separado.</p></header>
+    <header><p className="text-xs font-bold uppercase tracking-[0.24em] text-red-300">Administración · Minoristas</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Pedidos minoristas</h1><p className="mt-2 text-sm text-zinc-400">Gestioná preparación y entrega. El pago se muestra por separado.</p></header>
+    <div className="flex flex-wrap gap-3"><button type="button" aria-expanded={listOpen} onClick={() => { setListOpen(value => !value); setSelected(null); }} className={buttonClass}>{listOpen ? "Ocultar pedidos" : "Ver pedidos"}</button><button type="button" className={buttonClass} onClick={() => { setStatus("needs_attention"); setPage(1); setListOpen(true); setSelected(null); }}>Requieren atención</button></div>
     <nav aria-label="Organización de pedidos" className="flex gap-2"><button disabled={busy} aria-pressed={view === "active"} onClick={() => switchView("active")} className={`${buttonClass} ${view === "active" ? "bg-red-600" : ""}`}>Pedidos activos</button><button disabled={busy} aria-pressed={view === "archived"} onClick={() => switchView("archived")} className={`${buttonClass} ${view === "archived" ? "bg-red-600" : ""}`}>Ver archivados</button></nav>
     {view === "archived" && <p className="text-sm text-zinc-400">Pedidos archivados. Conservan sus datos y pueden restaurarse.</p>}
-    <div className={`grid gap-3 sm:grid-cols-2 ${view === "active" ? "lg:grid-cols-4" : ""}`}>
+    <div className={`grid gap-3 rounded-2xl border border-white/10 bg-zinc-900/50 p-4 sm:grid-cols-2 ${view === "active" ? "lg:grid-cols-4" : ""}`}>
       <label className="text-sm">Buscar pedido<input value={q} onChange={e => { setQ(e.target.value); setPage(1); }} placeholder="DCL-000001, cliente, teléfono, producto o UUID" className="mt-1 w-full rounded-xl bg-zinc-900 p-3" /></label>
       {view === "active" && <><label className="text-sm">Estado del pedido<select value={operational} onChange={e => { setOperational(e.target.value); setPage(1); }} className="mt-1 w-full rounded-xl bg-zinc-900 p-3"><option value="all">Todos los estados operativos</option>{Object.entries(operationalLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label className="text-sm">Pago / revisión<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className="mt-1 w-full rounded-xl bg-zinc-900 p-3">{filters.map(filter => <option key={filter.id} value={filter.id}>{filter.label}</option>)}</select></label></>}
@@ -163,27 +167,30 @@ export function OrdersManager() {
     <button disabled={busy || loading} onClick={() => void load()} className={buttonClass}>{loading ? "Actualizando…" : "Actualizar pedidos"}</button>
     {status === "completed" && <p className="text-sm text-amber-200">Venta registrada indica confirmación comercial del flujo actual; no acredita entrega.</p>}
     {error && !selected && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
-    <div className="space-y-3">{rows.map(row => <button key={row.id} onClick={() => { setSelected(row); setResolution(null); setResolutionKey(""); setNote(""); setOperationNote(""); }} className="w-full border-b border-white/10 px-2 py-4 text-left hover:bg-white/5">
+    {!listVisible && !selected && <p className="text-sm text-zinc-500">Buscá un pedido o desplegá el listado.</p>}
+    {listVisible && !selected && <><div className="space-y-2">{rows.map(row => <button key={row.id} onClick={() => { setSelected(row); setDetailSection("Resumen"); setResolution(null); setResolutionKey(""); setNote(""); setOperationNote(""); }} className="w-full min-w-0 break-words border-b border-white/10 px-2 py-4 text-left hover:bg-white/5 [overflow-wrap:anywhere]">
       <div className="flex flex-wrap justify-between gap-3"><div><b>{row.order_number} · {row.customer?.full_name || "Cliente"}</b><small className="mt-1 block text-zinc-400">{row.customer?.phone || "Sin teléfono"} · {date(row.created_at)}</small></div><b>{money(row.total)}</b></div>
-      <p className="mt-3 text-sm text-zinc-300">{row.items.map(item => `${item.product_name} × ${item.quantity}`).join(" · ")}</p>
-      <div className="mt-3 flex flex-wrap gap-2 text-sm"><span className="rounded-lg bg-white/10 px-3 py-2">Estado: <b>{operationalLabels[row.operational_status]}</b></span><span className="rounded-lg bg-white/5 px-3 py-2">Pago: <b>{paymentLabels[row.payment?.status || ""] || "Sin transacción"}</b></span></div>
+      <p className="mt-3 text-sm text-zinc-300">{row.items[0]?.product_name}{row.items.length > 1 && ` · +${row.items.length - 1} artículos`}</p>
+      <div className="mt-3 flex flex-wrap gap-2 text-sm"><span className={`rounded-lg px-2.5 py-1 text-xs ${row.operational_status === "delivered" ? "bg-emerald-400/10 text-emerald-200" : row.operational_status === "cancelled" ? "bg-red-400/10 text-red-200" : "bg-amber-400/10 text-amber-200"}`}>Estado: <b>{operationalLabels[row.operational_status]}</b></span><span className="rounded-lg bg-white/5 px-3 py-2">Pago: <b>{paymentLabels[row.payment?.status || ""] || "Sin transacción"}</b></span></div>
       <p className="mt-2 text-sm text-amber-200">Próxima acción: {retailNextAction(row)}</p><p className="mt-2 text-xs text-zinc-400">{paymentMethodLabels[row.payment_method]} · {fulfillmentLabels[row.fulfillment_method]}</p>
       {row.status === "stock_unavailable" && <p className="mt-2 text-sm text-amber-200">Pago aprobado sin venta: requiere stock disponible o reembolso externo.</p>}
       {row.status === "refund_required" && <p className="mt-2 text-sm font-semibold text-amber-200">Incidencia financiera: pago aprobado tras cancelar. Requiere reembolso externo.</p>}
       {row.status === "refunded" && <p className="mt-2 text-sm text-emerald-200">Pedido reembolsado y conciliado.</p>}
       {["cancelled", "rejected"].includes(row.status) && row.operational_status !== "cancelled" && <p className="mt-2 text-sm text-amber-200">Cancelación o rechazo registrado en el flujo de pago; pendiente de revisión operativa.</p>}
     </button>)}{!rows.length && !loading && <p className="py-8 text-center text-sm text-zinc-500">No hay pedidos para estos filtros.</p>}</div>
-    <nav aria-label="Paginación" className="flex flex-wrap items-center justify-between gap-3"><button disabled={loading || page === 1} onClick={() => setPage(p => p - 1)} className={buttonClass}>Anterior</button><span className="text-sm">Página {page} de {Math.max(1, Math.ceil(total / 50))} · {total} pedidos</span><button disabled={loading || page * 50 >= total} onClick={() => setPage(p => p + 1)} className={buttonClass}>Siguiente</button></nav>
-    {selected && actions && <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-3 sm:p-5"><section role="dialog" aria-modal="true" aria-labelledby="order-title" className="mx-auto max-w-2xl rounded-3xl bg-zinc-950 p-5 sm:p-6">
-      <button disabled={busy} onClick={() => { setSelected(null); setResolution(null); }} className="float-right min-h-11 px-2 text-zinc-400">Cerrar</button>
+    <nav aria-label="Paginación" className="flex flex-wrap items-center justify-between gap-3"><button disabled={loading || page === 1} onClick={() => setPage(p => p - 1)} className={buttonClass}>Anterior</button><span className="text-sm">Página {page} de {Math.max(1, Math.ceil(total / 50))} · {total} pedidos</span><button disabled={loading || page * 50 >= total} onClick={() => setPage(p => p + 1)} className={buttonClass}>Siguiente</button></nav></>}
+    {selected && actions && <div><section aria-label="Detalle de pedido y cronología" aria-labelledby="order-title" className="min-w-0 max-w-full rounded-3xl border border-white/10 bg-zinc-900/35 p-4 sm:p-6 xl:p-7">
+      <button disabled={busy} onClick={() => { setSelected(null); setResolution(null); }} className={buttonClass}>← Volver a pedidos</button>
       <p className="text-xs font-bold uppercase tracking-widest text-red-300">Pedido</p><h2 id="order-title" className="text-2xl font-black">{selected.order_number}</h2><p className="mt-1 text-sm text-zinc-400">{date(selected.created_at)}</p>
       {error && <p role="alert" className="mt-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
-      <div className="mt-5 rounded-2xl bg-white/5 p-4"><b>{selected.customer?.full_name}</b><p className="text-sm text-zinc-300">{selected.customer?.phone || "Sin teléfono"}</p><p className="text-sm text-zinc-400">{selected.customer?.email || "Sin email"}</p></div>
+      <nav aria-label="Secciones del pedido" className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{["Resumen", "Seguimiento", "Cobros y entregas", "Historial"].map(section => <button key={section} type="button" aria-pressed={detailSection === section} onClick={() => setDetailSection(section)} className={buttonClass}>{section}</button>)}</nav>
+      <div hidden={detailSection !== "Resumen"}>      <div className="mt-5 rounded-2xl bg-white/5 p-4"><b>{selected.customer?.full_name}</b><p className="text-sm text-zinc-300">{selected.customer?.phone || "Sin teléfono"}</p><p className="text-sm text-zinc-400">{selected.customer?.email || "Sin email"}</p></div>
       <div className="mt-5 space-y-2">{selected.items.map((item, index) => <p key={index} className="flex justify-between gap-3"><span>{item.product_name} × {item.quantity}</span><b>{money(item.line_total)}</b></p>)}</div>
       <p className="mt-5 text-xl font-black">Total {money(selected.total)}</p>
       <p className="mt-3 text-sm text-zinc-200">Estado: <b>{operationalLabels[selected.operational_status]}</b> · Pago: <b>{paymentLabels[selected.payment?.status || ""] || "Sin transacción"}</b></p>
       <p className="mt-4 rounded-xl border border-amber-300/20 p-4 text-sm text-amber-100">Próxima acción: {retailNextAction(selected)}</p>
-      <details className="mt-4"><summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-300">Pago, modalidad y detalles técnicos</summary><dl className="mt-5 grid gap-3 rounded-2xl border border-white/10 p-4 text-sm">
+      </div><div hidden={detailSection !== "Cobros y entregas"}>
+      <details className="mt-4" open><summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-300">Pago, modalidad y detalles técnicos</summary><dl className="mt-5 grid gap-3 rounded-2xl border border-white/10 p-4 text-sm">
         <div><dt className="text-zinc-400">Estado operativo</dt><dd className="font-bold">{operationalLabels[selected.operational_status]}</dd></div>
         <div><dt className="text-zinc-400">Estado técnico del pedido</dt><dd className="font-bold">{technicalOrderLabels[selected.status] || selected.status}</dd></div>
         <div><dt className="text-zinc-400">Estado del pago</dt><dd className="font-bold">{paymentLabels[selected.payment?.status || ""] || "Sin transacción"} · {paymentMethodLabels[selected.payment_method]}</dd></div>
@@ -214,11 +221,12 @@ export function OrdersManager() {
         </div></>}
       </section>
       {isOwner && selected.payment_method === "transfer" && selected.status === "pending_manual_verification" && <section className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4"><h3 className="font-bold">Verificación de transferencia</h3><p className="mt-1 text-sm text-zinc-300">{selected.transfer_declared_at ? `El cliente informó la transferencia el ${date(selected.transfer_declared_at)}.` : "El cliente todavía no informó la transferencia."}</p><button disabled={busy || !selected.transfer_declared_at} onClick={() => void action("confirm_transfer")} className={`mt-4 ${buttonClass} bg-red-600`}>Confirmar transferencia recibida</button></section>}
+      </div><div hidden={detailSection !== "Historial"}>
       {selected.resolutions?.length > 0 && <section className="mt-5"><h3 className="font-bold">Resoluciones</h3><ol className="mt-3 space-y-2">{selected.resolutions.map(entry => <li key={entry.id} className="rounded-lg bg-white/5 p-3 text-sm"><b>{resolutionLabels[entry.resolution_type] || entry.resolution_type}</b><p className="mt-1 text-xs text-zinc-400">{date(entry.created_at)} · {entry.actor} · {entry.source}</p>{entry.external_reference && <p className="mt-2 break-all">Referencia: {entry.external_reference}</p>}<p className="mt-2 whitespace-pre-wrap">{entry.note}</p></li>)}</ol></section>}
-      <section className="mt-5"><h3 className="font-bold">Historial operativo</h3><ol className="mt-3 space-y-2">{[...selected.operationalHistory].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id).map(entry => <li key={entry.id} className="rounded-xl bg-white/5 p-3 text-sm"><p className="font-bold">{entry.action === "archive" ? "Pedido archivado" : entry.action === "restore" ? "Pedido restaurado" : <>{entry.previous_status ? `${operationalLabels[entry.previous_status]} → ` : "Inicio → "}{operationalLabels[entry.new_status]}</>}</p><p className="mt-1 text-xs text-zinc-400">{date(entry.created_at)} · {entry.actor} · {entry.source}</p>{entry.note && <p className="mt-2 whitespace-pre-wrap">{entry.note}</p>}</li>)}</ol></section>
-      <section className="mt-5"><h3 className="font-bold">Notas internas</h3><div className="mt-2 space-y-2">{selected.internalNotes.map(item => <div key={item.id} className="rounded-xl bg-white/5 p-3 text-sm"><p>{item.note}</p><small className="text-zinc-500">{date(item.created_at)}</small></div>)}</div><label className="mt-3 block text-sm">Nueva nota<textarea disabled={busy} value={note} onChange={e => setNote(e.target.value)} maxLength={1000} className="mt-2 min-h-20 w-full rounded-xl bg-zinc-900 p-3" /></label><button disabled={busy || !note.trim()} onClick={() => void action("add_note", { note })} className={`mt-2 ${buttonClass}`}>Agregar nota</button></section>
+      </div><div hidden={detailSection !== "Seguimiento"}><section className="mt-5"><h3 className="font-bold">Seguimiento cronológico</h3><ol className="mt-3 space-y-3 border-l border-white/15 pl-4">{[...selected.operationalHistory].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id).map(entry => <li key={entry.id} className="rounded-xl bg-white/5 p-3 text-sm"><p className="font-bold">{entry.action === "archive" ? "Pedido archivado" : entry.action === "restore" ? "Pedido restaurado" : <>{entry.previous_status ? `${operationalLabels[entry.previous_status]} → ` : "Inicio → "}{operationalLabels[entry.new_status]}</>}</p><p className="mt-1 text-xs text-zinc-400">{date(entry.created_at)} · {entry.actor} · {entry.source}</p>{entry.note && <p className="mt-2 whitespace-pre-wrap">{entry.note}</p>}</li>)}</ol></section>
+      </div><div hidden={detailSection !== "Historial"}><section className="mt-5"><h3 className="font-bold">Notas internas</h3><div className="mt-2 space-y-2">{selected.internalNotes.map(item => <div key={item.id} className="rounded-xl bg-white/5 p-3 text-sm"><p>{item.note}</p><small className="text-zinc-500">{date(item.created_at)}</small></div>)}</div><label className="mt-3 block text-sm">Nueva nota<textarea disabled={busy} value={note} onChange={e => setNote(e.target.value)} maxLength={1000} className="mt-2 min-h-20 w-full rounded-xl bg-zinc-900 p-3" /></label><button disabled={busy || !note.trim()} onClick={() => void action("add_note", { note })} className={`mt-2 ${buttonClass}`}>Agregar nota</button></section>
       <details className="mt-5 text-xs text-zinc-400"><summary className="cursor-pointer py-2">Identificador técnico</summary><p className="mt-2 break-all">UUID: {selected.id}</p></details>
-    </section></div>}
+    </div></section></div>}
     {selected && resolution && <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/90 p-4"><section role="dialog" aria-modal="true" aria-labelledby="resolution-title" className="w-full max-w-lg rounded-lg border border-white/15 bg-zinc-950 p-5">
       <h2 id="resolution-title" className="text-lg font-bold">{resolutionLabels[resolution]}</h2>
       <p className="mt-2 text-sm text-zinc-300">{refundResolutions.includes(resolution) ? "Esta acción no devuelve dinero automáticamente. Usala únicamente después de realizar y verificar el reembolso total por el medio de pago correspondiente." : resolution === "TRANSFER_APPROVAL_ERROR" ? "Sólo cuando la transferencia fue aprobada por error y no hubo un pago que devolver." : resolution === "COMPLETE_STOCK_UNAVAILABLE" ? "El cliente ya pagó. Se volverá a verificar el stock actual y, si alcanza, se completará la venta sin volver a cobrar." : "Se cancelará el pedido no cobrado y se liberará su reserva."}</p>
@@ -227,5 +235,5 @@ export function OrdersManager() {
       <label className="mt-4 block text-sm">Motivo o nota administrativa<textarea disabled={busy || resolutionAttempted} value={resolutionNote} onChange={e => setResolutionNote(e.target.value)} maxLength={1000} className="mt-1 min-h-24 w-full rounded-lg bg-zinc-900 p-3" /></label>
       <div className="mt-5 flex justify-end gap-2"><button disabled={busy} onClick={() => { setResolution(null); setResolutionKey(""); setResolutionAttempted(false); setError(""); }} className={buttonClass}>Volver</button><button disabled={busy || !resolutionNote.trim() || (refundResolutions.includes(resolution) && !externalReference.trim())} onClick={() => void submitResolution()} className={`${buttonClass} bg-red-600`}>{busy ? "Registrando…" : resolutionAttempted ? "Reintentar el mismo intento" : "Confirmar acción"}</button></div>
     </section></div>}
-  </div>;
+  </main>;
 }

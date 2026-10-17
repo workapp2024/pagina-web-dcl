@@ -1,4 +1,7 @@
 "use client";
+import { matchesWholesaleOrder, customerTrackingEvents, isWholesaleDeliveryComplete } from "@/lib/wholesale-order-presentation";
+import { useWholesaleOrderVisibility } from "@/components/wholesale/useWholesaleOrderVisibility";
+import { WholesaleOrderTracking } from "@/components/wholesale/WholesaleOrderTracking";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,6 +15,7 @@ import { getPublicVehicleTypes, searchPublicVehicleCompatibilities } from "@/lib
 import { addWholesaleProduct, getWholesaleSelectionTotals, persistWholesaleSelection, restoreWholesaleSelection, restoreWholesaleSelectionFromStorage, serializeWholesaleSelection, setWholesaleQuantity, WHOLESALE_SELECTION_STORAGE_KEY } from "@/lib/wholesale-order-selection";
 import type { WholesaleOrderAttempt, WholesaleOrderSelection } from "@/lib/wholesale-order-selection";
 import { buildWholesaleCustomerOrderCards, getOpenWholesaleAttempts, isWholesaleOrderActive, newRequestConfirmation, recoveredOrderMessage, wholesaleOrderNextAction, wholesaleOrderStatusLabel, wholesaleSelectionMatchesAttempt, wholesaleSelectionMatchesOrder } from "@/lib/wholesale-customer-orders";
+import type { WholesaleCustomerOrder } from "@/lib/wholesale-customer-orders";
 import type { WholesaleCatalogItem } from "@/lib/wholesale-server";
 
 export function WholesaleCatalog() {
@@ -33,7 +37,7 @@ export function WholesaleCatalog() {
   const [attempts, setAttempts] = useState<WholesaleOrderAttempt[]>([]);
   const [attemptsLoading, setAttemptsLoading] = useState(true);
   const [attemptsError, setAttemptsError] = useState("");
-  const [orders, setOrders] = useState<Array<{ id: string; order_number: string; status: string; created_at: string; confirmed_at: string | null; total_amount: number | null; currency: string; revision_id?: string; revision_version?: number; revision_status?: string; requires_customer_approval?: boolean; commercial_conditions?: string; items: Array<{ productId: string; name: string; quantity: number; unitPrice: number; lineTotal: number; currency: string }> }>>([]);
+  const [orders, setOrders] = useState<WholesaleCustomerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
@@ -47,6 +51,15 @@ export function WholesaleCatalog() {
   const catalogRequestRef = useRef(0);
   const attemptsRequestRef = useRef(0);
   const ordersRequestRef = useRef(0);
+  const [portalSection, setPortalSection] = useState("catalog");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderStatus, setOrderStatus] = useState("active");
+  const [expandedOrder, setExpandedOrder] = useState("");
+
+  const visibility=useWholesaleOrderVisibility("/api/wholesale/orders/visibility");
+  const [showArchived,setShowArchived]=useState(false);
+  const visibleOrderCards=orderCardsForVisibility();
+  function orderCardsForVisibility(){return buildWholesaleCustomerOrderCards(orders,attempts).filter(({order})=>visibility.ids.includes(order.id)===showArchived);}
 
   const uniqueProducts = useMemo(() => uniqueWholesaleCatalogProducts(products), [products]);
   const categories = useMemo(() => [...new Set(uniqueProducts.map(product => product.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es")), [uniqueProducts]);
@@ -379,7 +392,7 @@ export function WholesaleCatalog() {
 
   return <main className="mx-auto min-h-[70vh] max-w-7xl px-4 py-5 pb-[calc(env(safe-area-inset-bottom)+7rem)] text-white sm:px-6 sm:py-8 sm:pb-10 lg:px-8">
     <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--red)]">DCL CREE LED <span className="text-zinc-400">· MAYORISTAS</span></p><h1 className="mt-1 text-2xl font-black tracking-tight sm:text-4xl">Catálogo</h1><p className="mt-1 text-sm text-zinc-400">Precios exclusivos para clientes mayoristas.</p></div>
+      <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--red)]">DCL CREE LED <span className="text-zinc-400">· MAYORISTAS</span></p><h1 className="mt-1 text-2xl font-black tracking-tight sm:text-4xl">{portalSection === "orders" ? "Mis pedidos" : "Catálogo"}</h1><p className="mt-1 text-sm text-zinc-400">Precios exclusivos para clientes mayoristas.</p></div>
       <div className="flex w-full justify-end gap-2 sm:w-auto sm:shrink-0">
         <button type="button" onClick={() => setCartOpen(true)} aria-label={`Abrir carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`} aria-haspopup="dialog" aria-expanded={cartOpen} className="hidden min-h-12 items-center justify-center gap-2 rounded-full border border-[var(--red)] px-3 text-sm font-bold text-white hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-[var(--red)] sm:inline-flex sm:px-5">
           <span>Carrito</span><span aria-label={`${totalUnits} unidades`} className="rounded-full bg-red-600 px-2 py-0.5 text-xs">{totalUnits}</span>
@@ -389,6 +402,8 @@ export function WholesaleCatalog() {
     </div>
     {cartFeedback && <p role="status" aria-live="polite" className="-mt-2 mb-5 text-sm text-emerald-200">{cartFeedback}</p>}
 
+    <nav aria-label="Navegación mayorista" className="mb-5 grid grid-cols-3 gap-2">{[{id:"catalog",label:"Catálogo"},{id:"orders",label:"Mis pedidos"},{id:"cart",label:"Carrito"}].map(item => <button key={item.id} type="button" aria-pressed={portalSection === item.id} onClick={() => item.id === "cart" ? setCartOpen(true) : setPortalSection(item.id)} className={`min-h-12 rounded-xl border px-2 text-sm font-semibold ${portalSection === item.id ? "border-red-300/40 bg-red-300/10 text-red-200" : "border-white/10"}`}>{item.label}{item.id === "orders" && orders.some(order => order.status === "awaiting_customer" && order.requires_customer_approval) && <span className="ml-1 text-xs text-red-200"> · Por responder</span>}</button>)}</nav>
+    <div hidden={portalSection !== "catalog"}>
     <section aria-label="Buscar productos mayoristas" className="mb-4 rounded-2xl border border-white/10 bg-zinc-950 p-3 sm:p-4">
       <p className="mb-2 px-1 text-sm font-semibold text-white">Encontrá un producto o compatibilidad</p>
       <form onSubmit={event => void search(event)}>
@@ -424,6 +439,7 @@ export function WholesaleCatalog() {
       </details>
     </div>
 
+    </div>
     {(openAttempts.length > 0 || attemptsLoading || attemptsError) && <section aria-label="Solicitudes pendientes de envío" className="mb-6 space-y-3">
       {attemptsLoading && <p role="status" className="rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-400">Cargando intentos recuperables…</p>}
       {attemptsError && <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-sm text-amber-100 sm:p-4"><p role="alert">{attemptsError}</p><button type="button" onClick={() => void refreshAttempts()} className="mt-2 min-h-11 rounded-full border border-amber-200/40 px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]">Reintentar intentos</button></div>}
@@ -445,18 +461,26 @@ export function WholesaleCatalog() {
     {(orderMessage || orderError) && <div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${orderError ? "border-red-400/30 bg-red-950/30 text-red-100" : "border-emerald-300/30 bg-emerald-950/20 text-emerald-100"}`}>
       {orderError ? <p role="alert">{orderError}</p> : <p role="status">{orderMessage}</p>}
     </div>}
+    <div hidden={portalSection !== "orders"}>
+    {visibility.available && <button type="button" className="mb-3 min-h-11 rounded-xl border border-white/15 px-4 text-sm text-red-200" onClick={()=>{setShowArchived(value=>!value);setOrderStatus("all");setExpandedOrder("");}}>{showArchived ? "Ver pedidos habituales" : "Ver archivados"}</button>}
+    {visibility.error && <p role="alert" className="mb-3 text-sm text-amber-200">{visibility.error}</p>}
+    <div className="mb-4 grid gap-3 sm:grid-cols-2"><label className="text-sm text-zinc-400">Buscar pedido<input type="search" value={orderSearch} onChange={event => setOrderSearch(event.target.value)} placeholder="MW-000001" className="mt-1 min-h-12 w-full rounded-xl border border-white/15 bg-zinc-950 px-3 text-white" /></label><label className="text-sm text-zinc-400">Estado<select value={orderStatus} onChange={event => setOrderStatus(event.target.value)} className="mt-1 min-h-12 w-full rounded-xl border border-white/15 bg-zinc-950 px-3 text-white"><option value="active">En curso</option><option value="history">Historial</option><option value="all">Todos</option>{["received","in_review","awaiting_customer","confirmed","rejected","cancelled"].map(status => <option key={status} value={status}>{wholesaleOrderStatusLabel(status)}</option>)}</select></label></div>
     {(ordersLoading || ordersError) && <section aria-label="Estado del historial" className="mb-3 rounded-xl border border-white/10 px-3 py-2">
       {ordersLoading && <p role="status" className="text-sm text-zinc-400">Cargando historial…</p>}
       {ordersError && <div className="text-sm text-amber-100"><p role="alert">{ordersError}</p><button type="button" onClick={() => void refreshOrders()} className="mt-2 min-h-10 rounded-full border border-amber-200/40 px-4 font-semibold">Reintentar historial</button></div>}
     </section>}
     {(orderCards.length > 0 || ordersLoading) && <section aria-label="Mis pedidos" className="mb-6 space-y-3">
       <h2 className="text-lg font-bold text-white">Mis pedidos</h2>
-      {orderCards.map(({ order, recoveryAttempt }) => <article key={order.id} className="min-w-0 rounded-2xl border border-white/10 bg-zinc-950/70 p-4 sm:p-5">
+      {visibleOrderCards.filter(({order}) => matchesWholesaleOrder(order, orderSearch, orderStatus)).map(({ order, recoveryAttempt }) => <article key={order.id} className="min-w-0 rounded-2xl border border-white/10 bg-zinc-950/70 p-4 sm:p-5">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0"><p className="break-words text-base font-bold text-white">{order.order_number}</p><p className="mt-1 text-sm font-semibold text-[var(--red)]">{wholesaleOrderStatusLabel(order.status, order.revision_status)}</p></div>
+          <div className="min-w-0"><p className="break-words text-base font-bold text-white">{order.order_number}</p><p className="mt-1 text-sm font-semibold text-[var(--red)]">{isWholesaleDeliveryComplete(order) && order.status === "confirmed" ? "Entrega completa" : wholesaleOrderStatusLabel(order.status, order.revision_status)}</p></div>
           <p className="shrink-0 text-right text-sm font-bold text-white">{order.total_amount == null ? "Total a confirmar" : money.format(order.total_amount)}</p>
         </div>
-        <p className="mt-2 text-sm leading-6 text-zinc-300">{wholesaleOrderNextAction(order.status, order.revision_status)}</p>
+        <button type="button" aria-expanded={expandedOrder === order.id} onClick={() => setExpandedOrder(expandedOrder === order.id ? "" : order.id)} className="mt-3 min-h-11 rounded-xl border border-white/15 px-4 text-sm text-red-200">{expandedOrder === order.id ? "Cerrar detalle" : "Ver detalle"}</button><p className="mt-1 text-xs text-zinc-400">{new Date(order.created_at).toLocaleDateString("es-AR")}</p>
+        {visibility.available && (["cancelled","rejected"].includes(order.status) || isWholesaleDeliveryComplete(order)) && <button type="button" disabled={visibility.busy} className="ml-2 mt-3 min-h-11 rounded-xl border border-white/15 px-4 text-sm text-zinc-300" onClick={()=>void visibility.setArchived(order.id,!visibility.ids.includes(order.id))}>{visibility.ids.includes(order.id) ? "Restaurar pedido" : "Ocultar de mis pedidos"}</button>}
+        <div hidden={expandedOrder !== order.id}>
+        <WholesaleOrderTracking events={customerTrackingEvents(order)} nextAction={isWholesaleDeliveryComplete(order) && order.status === "confirmed" ? "Entrega completa registrada. Consultá con DCL por las condiciones de cobro." : wholesaleOrderNextAction(order.status, order.revision_status)} />
+        {order.status !== "awaiting_customer" && order.commercial_conditions && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-zinc-300">{order.commercial_conditions}</p>}
         {order.status === "awaiting_customer" && order.requires_customer_approval && order.revision_id && <section aria-label={`Propuesta vigente ${order.order_number}`} className="mt-4 rounded-xl border border-amber-300/30 bg-amber-950/20 p-4">
           <h3 className="font-semibold text-amber-100">Propuesta recibida{order.revision_version ? ` · revisión v${order.revision_version}` : ""}: revisá y respondé</h3>
           <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">{order.commercial_conditions || "La propuesta no incluye condiciones comerciales adicionales."}</p>
@@ -472,10 +496,15 @@ export function WholesaleCatalog() {
           <button type="button" disabled={busy} onClick={() => void acknowledgeAttempt(recoveryAttempt.attemptId)} className="mt-3 min-h-10 rounded-full border border-emerald-200/40 px-4 text-sm font-semibold text-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Cerrar este aviso de recuperación</button>
           <p className="mt-2 text-xs leading-5 text-zinc-400">Esto cierra el aviso de recuperación; no modifica ni cancela el pedido.</p>
         </div>}
+        </div>
       </article>)}
       {Object.keys(selection).length > 0 && <button type="button" disabled={busy} onClick={() => void submitOrder(true)} className="min-h-11 rounded-full border border-[color:var(--red)] px-4 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Crear una solicitud independiente con el carrito</button>}
     </section>}
 
+    {!ordersLoading && orderCards.length > 0 && !visibleOrderCards.some(({order}) => matchesWholesaleOrder(order, orderSearch, orderStatus)) && <p role="status" className="py-5 text-sm text-zinc-400">No hay pedidos para estos filtros.</p>}
+    {!ordersLoading && orderCards.length === 0 && <p className="py-5 text-sm text-zinc-400">Todavía no tenés pedidos.</p>}
+    </div>
+    <div hidden={portalSection !== "catalog"}>
     {loading && <p role="status" className="py-5 text-sm text-zinc-400">Cargando catálogo…</p>}
     {error && <div className="rounded-xl border border-red-500/30 bg-red-950/30 p-4 text-sm text-red-200"><p role="alert">{error}</p><button type="button" onClick={() => { setError(""); setLoading(true); setCatalogRetry(value => value + 1); }} className="mt-2 min-h-10 rounded-full border border-red-200/40 px-4 font-semibold">Reintentar catálogo</button></div>}
     {!loading && catalogLoaded && vehicleLoading && <p role="status" className="py-5 text-sm text-zinc-400">Buscando compatibilidades…</p>}
@@ -494,6 +523,7 @@ export function WholesaleCatalog() {
         </div>}
     </>}
     {!loading && catalogLoaded && !hasActiveSearch && <p className="rounded-2xl border border-white/10 bg-zinc-950/60 p-5 text-sm leading-6 text-zinc-300">Buscá por producto, conector, categoría o vehículo para ver opciones mayoristas.</p>}
+    </div>
     {!cartOpen && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[var(--background)] px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-2xl sm:hidden">
       <button type="button" onClick={() => setCartOpen(true)} aria-label={`Abrir carrito, ${money.format(indicativeTotal)}, ${totalUnits} unidades, ${Object.keys(selection).length} productos`} aria-haspopup="dialog" aria-expanded={cartOpen} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-full bg-[var(--red)] px-4 text-sm font-bold text-[var(--background)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]">
         <span className="text-left"><span className="block">{money.format(indicativeTotal)}</span><span className="block text-xs font-medium">{totalUnits} {totalUnits === 1 ? "unidad" : "unidades"} · {Object.keys(selection).length} {Object.keys(selection).length === 1 ? "producto" : "productos"}</span></span><span className="shrink-0">Ver carrito</span>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAdminIdentity } from "@/components/admin/AdminIdentityProvider";
 import { retailNeedsAttention, retailNextAction, wholesaleNeedsAttention, wholesaleNextAction, wholesaleAdminLabel } from "@/lib/admin-order-attention";
-import type { OperationalOrder } from "@/lib/store/order-operations";
+import { technicalOrderLabels, operationalLabels, type OperationalOrder } from "@/lib/store/order-operations";
 
 type Entry = { id: string; number: string; customer: string; createdAt: string; action: string; label: string; attention: boolean; href: string };
 type Retail = OperationalOrder & { id: string; order_number: string; customer?: { full_name: string }; created_at: string };
@@ -40,7 +40,7 @@ export function SectorHome({ sector }: { sector?: "minoristas" | "mayoristas" })
       try {
         const [retail, wholesale] = await Promise.all([
           sector !== "mayoristas" ? collect("/api/admin/orders?status=all&period=all&view=active&limit=100", controller.signal) : Promise.resolve([]),
-          owner && sector !== "minoristas" ? collect("/api/admin/wholesale-orders?status=all", controller.signal) : Promise.resolve([]),
+          owner && sector !== "minoristas" ? collect("/api/admin/wholesale-orders?status=all&archived=false", controller.signal) : Promise.resolve([]),
         ]);
         const mayoristas: Entry[] = [];
         // Sequential reads avoid a burst of requests; incomplete reads never become a zero count.
@@ -56,7 +56,7 @@ export function SectorHome({ sector }: { sector?: "minoristas" | "mayoristas" })
             attention: wholesaleNeedsAttention(order.status, deliveryPending), href: `/admin/mayoristas/pedidos?order=${order.orderNumber}` });
         }
         const minoristas = (retail as Retail[]).map(order => ({ id: order.id, number: order.order_number, customer: order.customer?.full_name || "Cliente", createdAt: order.created_at,
-          label: retailNextAction(order), action: retailNextAction(order), attention: retailNeedsAttention(order), href: `/admin/minoristas/pedidos?order=${order.order_number}` }));
+          label: `${technicalOrderLabels[order.status] || "Pedido registrado"} · ${operationalLabels[order.operational_status] || "Estado por revisar"}`, action: retailNextAction(order), attention: retailNeedsAttention(order), href: `/admin/minoristas/pedidos?order=${order.order_number}` }));
         if (!controller.signal.aborted) setData({ minoristas, mayoristas });
       } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "No se pudieron consultar los pendientes."); }
     }
@@ -65,7 +65,6 @@ export function SectorHome({ sector }: { sector?: "minoristas" | "mayoristas" })
   }, [owner, refresh, sector]);
   const current = data && sector ? data[sector] : [];
   const pending = current.filter(entry => entry.attention);
-  const entries = pending.length ? pending : current.slice(0, 5);
   return <div className="space-y-6">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-widest text-red-300">DCL Cree LED · Administración</p><h1 className="mt-2 text-3xl font-black">{sector === "minoristas" ? "Minoristas" : sector === "mayoristas" ? "Mayoristas" : "Inicio"}</h1></div><button onClick={() => setRefresh(value => value + 1)} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm">Actualizar pendientes</button></header>
     {error && <p role="alert" className="rounded-xl border border-red-400/30 p-4 text-red-200">{error}</p>}
@@ -74,6 +73,16 @@ export function SectorHome({ sector }: { sector?: "minoristas" | "mayoristas" })
       const count = data?.[key].filter(entry => entry.attention).length;
       const next = data?.[key].find(entry => entry.attention);
       return <Link key={key} href={`/admin/${key}`} className="group min-w-0 p-5 transition hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-red-400 sm:p-6 md:[&+a]:border-l md:[&+a]:border-white/10"><div className="flex items-center justify-between gap-3"><h3 className="text-2xl font-black capitalize">{key}</h3><span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 text-red-300 group-hover:border-red-400">→</span></div><p className="mt-2 text-sm text-zinc-400">{key === "minoristas" ? "Pedidos de la tienda y atención al público" : "Solicitudes y entregas a clientes mayoristas"}</p><p className={`mt-5 text-sm font-semibold ${count ? "text-amber-200" : "text-zinc-300"}`}>{count === undefined ? "Pendientes por consultar" : count ? `${count} pedidos requieren atención` : "Sin acciones pendientes"}</p><p className="mt-2 min-h-10 break-words text-sm text-zinc-400">{next ? `${next.number} · ${next.action}` : "Pedidos, clientes y finanzas del sector"}</p><span className="mt-4 block text-sm font-semibold text-red-300">Abrir {key} →</span></Link>;
-    })}</div></section> : data && <section><h2 className="text-xl font-bold">{pending.length ? `Requieren atención · ${pending.length}` : "Todo al día"}</h2>{!pending.length && <p className="mt-2 text-sm text-zinc-400">Sin acciones pendientes de DCL sobre pedidos. La espera de respuestas o pagos y los saldos se consultan en sus módulos.</p>}<h3 className="mt-5 font-semibold">{pending.length ? "Próximas acciones" : "Actividad reciente"}</h3><ul className="mt-3 divide-y divide-white/10">{entries.map(entry => <li key={entry.id}><Link href={entry.href} className="block py-4 hover:text-red-200"><div className="flex flex-wrap justify-between gap-2"><b>{entry.number} · {entry.customer}</b><time className="text-xs text-zinc-400">{new Date(entry.createdAt).toLocaleDateString("es-AR")}</time></div><p className="mt-2 text-sm text-amber-200">{entry.label}</p>{entry.label !== entry.action && <p className="mt-1 text-sm text-zinc-300">Próxima acción: {entry.action}</p>}</Link></li>)}</ul>{!entries.length && <p className="mt-3 text-sm text-zinc-400">Todavía no hay actividad.</p>}</section>}
+    })}</div></section> : data && <section>
+      <h2 className="text-xl font-bold">{pending.length ? `Requieren atención · ${pending.length}` : "Todo al día. No tenés pedidos pendientes"}</h2>
+      {pending.length > 0 && <ul className="mt-3 grid gap-3">{pending.map(entry => <li key={entry.id} className="min-w-0 rounded-xl border border-white/10">
+        <Link href={entry.href} className="block min-h-11 break-words p-4 hover:bg-white/5 hover:text-red-200">
+          <b>{entry.number} · {entry.customer}</b>
+          <p className="mt-2 text-sm text-zinc-300">{entry.label}</p>
+          <p className="mt-1 text-sm text-amber-200">Próxima acción: {entry.action}</p>
+        </Link>
+      </li>)}</ul>}
+      <Link href={`/admin/${sector}/pedidos`} className="mt-4 inline-flex min-h-11 items-center text-sm text-zinc-400 hover:text-white">Ver todos los pedidos</Link>
+    </section>}
   </div>;
 }

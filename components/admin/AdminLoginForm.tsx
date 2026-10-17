@@ -22,7 +22,11 @@ export function AdminLoginForm({ legacyEnabled }: { legacyEnabled: boolean }) {
     try {
       const response = await fetch("/api/admin/login", { method: "POST", body: formData });
       if (!response.ok) {
-        setError("Credenciales inválidas o usuario inactivo. Consultá al administrador.");
+        setError(response.status === 429
+          ? "Demasiados intentos. Esperá unos minutos e intentá nuevamente."
+          : response.status === 503
+            ? "El acceso no está disponible en este servidor. Revisá la terminal local."
+            : "Credenciales inválidas o usuario inactivo. Consultá al administrador.");
         return;
       }
       router.push("/admin");

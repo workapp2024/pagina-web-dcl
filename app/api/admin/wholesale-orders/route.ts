@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAdminIdentity } from "@/lib/admin-auth";
 import { apiError } from "@/lib/api";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
+import { readWholesaleVisibility } from "@/lib/wholesale-order-visibility-server";
 
 const STATUSES = ["received", "in_review", "awaiting_customer", "confirmed", "rejected", "cancelled"] as const;
 const PAGE_SIZE = 25;
@@ -30,6 +31,8 @@ export async function GET(request: Request) {
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
   const customer = (params.get("customer") ?? "").trim().slice(0, 120);
+  const archived = params.get("archived");
+  if (archived !== null && !["true","false"].includes(archived)) return apiError("BAD_REQUEST","Filtro de archivo inválido.",400);
   if (!Number.isInteger(page) || page < 1 || page > 100000 || (!["all", "attention"].includes(status) && !STATUSES.includes(status as typeof STATUSES[number])) ||
       (from && !isValidDateOnly(from)) || (to && !isValidDateOnly(to)) ||
       (from && to && from > to)) return apiError("BAD_REQUEST", "Filtros inválidos.", 400);
@@ -50,6 +53,14 @@ export async function GET(request: Request) {
       if (!matchedCustomerIds.length) return NextResponse.json({ ok: true, data: [], pagination: { page, pageSize: PAGE_SIZE, total: 0, totalPages: 0 } }, { headers: { "Cache-Control": "no-store" } });
     }
     let query = db.from("wholesale_orders").select("id,order_number,customer_id,status,current_revision_id,created_at,confirmed_at", { count: "exact" });
+    if (archived !== null) {
+      const identity=await getAdminIdentity();
+      if (!identity || identity.legacy || !identity.id) return apiError("FORBIDDEN","No autorizado.",403);
+      const visibility=await readWholesaleVisibility({p_actor:identity.id,p_customer:null});
+      if (!visibility.available) return apiError("INTERNAL_ERROR","Archivo de pedidos no disponible.",503);
+      if (archived === "true" && !visibility.ids.length) return NextResponse.json({ok:true,data:[],pagination:{page,pageSize:PAGE_SIZE,total:0,totalPages:0}},{headers:{"Cache-Control":"no-store"}});
+      if (visibility.ids.length) query = archived === "true" ? query.in("id",visibility.ids) : query.not("id","in",`(${visibility.ids.join(",")})`);
+    }
     if (status === "attention") query = query.in("status", ["received", "in_review"]);
     else if (status !== "all") query = query.eq("status", status);
     if (from) query = query.gte("created_at", `${from}T00:00:00-03:00`);

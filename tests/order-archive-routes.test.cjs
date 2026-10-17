@@ -66,7 +66,7 @@ function ui(eligible = true) {
   const render=()=>{cursor=0;refCursor=0;return OrdersManager();};
   const button=label=>nodes(render()).find(n=>n.type==='button'&&text(n)===label);
   const refresh=async()=>{button('Actualizar pedidos').props.onClick();await settle();};
-  const open=()=>nodes(render()).find(n=>n.type==='button'&&text(n).includes('Test client')).props.onClick();
+  const open=()=>{ if(button('Ver pedidos')) button('Ver pedidos').props.onClick(); nodes(render()).find(n=>n.type==='button'&&text(n).includes('Test client')).props.onClick(); button('Cobros y entregas').props.onClick(); };
   return {render,button,refresh,open,requests,confirmations,setConfirm:v=>{confirm=v;}};
 }
 test('Admin archives with the requested confirmation, isolates search, opens archived detail and restores', async () => {

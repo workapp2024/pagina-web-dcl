@@ -4,6 +4,7 @@ export type InventoryProduct = {
   id: string;
   name: string;
   active: boolean;
+  connectorType?: string | null;
   stock: number;
   stockMin: number;
   costPrice?: number;

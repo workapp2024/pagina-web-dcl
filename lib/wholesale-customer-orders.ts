@@ -21,6 +21,7 @@ export type WholesaleCustomerOrder = {
   requires_customer_approval?: boolean;
   commercial_conditions?: string;
   items: WholesaleCustomerOrderItem[];
+  tracking_events?: { id: string; type: string; at: string }[];
 };
 
 export type WholesaleOrderAttempt = {
