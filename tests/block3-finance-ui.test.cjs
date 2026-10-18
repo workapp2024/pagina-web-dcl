@@ -14,25 +14,29 @@ function harness(file, name, mocks = {}, globals = {}) {
 function nodes(tree){if(Array.isArray(tree))return tree.flatMap(nodes);if(!tree||typeof tree!=='object')return [];return [tree,...nodes(tree.props?.children)];}
 function text(tree){if(Array.isArray(tree))return tree.map(text).join('');if(!tree||typeof tree!=='object')return String(tree??'');return text(tree.props?.children);}
 
-test('simple general money actions reuse actual RPC route with signed amounts and preserve the same retry payload',async()=>{
+test('ordinary income and withdrawal require a sector and cannot post before SQL authorization',async()=>{
+  const calls=[];
+  const render=harness('components/admin/FinanceMoneyActions.tsx','FinanceMoneyActions',{'@/components/admin/FinancesManager':{createFinanceIdempotencyKey:()=> '11111111-1111-4111-8111-111111111111'}},{fetch:async(...args)=>{calls.push(args);return Response.json({ok:true});}});
+  const props={accounts:[{id:'cash',name:'Caja'}],onSaved(){}};
+  nodes(render(props)).find(n=>n.type==='button'&&text(n)==='Retirar dinero').props.onClick();let tree=render(props);
+  const sector=nodes(tree).find(n=>n.type==='select');assert.equal(sector.props.required,true);assert.match(text(sector),/Minoristas.*Mayoristas/);
+  assert.equal(nodes(tree).find(n=>n.type==='button'&&text(n)==='Confirmar movimiento').props.disabled,true);
+  await nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(calls.length,0);
+});
+
+test('locally enabled sector withdrawal sends one sector/account operation and retains date and key on retry',async()=>{
   const calls=[];let fail=true;
-  const render=harness('components/admin/FinanceMoneyActions.tsx','FinanceMoneyActions',{
-    '@/components/admin/FinancesManager':{createFinanceIdempotencyKey:()=> '11111111-1111-4111-8111-111111111111'},
-  },{window:{confirm:()=>true},fetch:async(url,init)=>{calls.push({url,body:JSON.parse(init.body)});return Response.json(fail?{error:'Error de prueba'}:{ok:true},{status:fail?503:200});}});
-  let refreshed=0;const props={accounts:[{id:'cash',name:'Caja'}],onSaved:()=>{refreshed++;}};
-  let tree=render(props);
-  assert.equal(calls.length,0);assert.equal(nodes(tree).find(n=>n.type==='button'&&text(n)==='Transferir dinero').props.disabled,true);
-  nodes(tree).find(n=>n.type==='button'&&text(n)==='Retirar dinero').props.onClick();tree=render(props);
-  nodes(tree).find(n=>n.type==='select').props.onChange({target:{value:'cash'}});tree=render(props);
-  const inputs=nodes(tree).filter(n=>n.type==='input');
-  inputs[0].props.onChange({target:{value:'25.50'}});tree=render(props);
-  nodes(tree).filter(n=>n.type==='input')[1].props.onChange({target:{value:'Titular'}});tree=render(props);
-  nodes(tree).filter(n=>n.type==='input')[2].props.onChange({target:{value:'Retiro autorizado'}});tree=render(props);
-  await nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});tree=render(props);
-  assert.equal(calls[0].body.amount,-25.5);assert.equal(calls[0].body.type,'cash_withdrawal');assert.equal(calls[0].body.sector,undefined);
+  const render=harness('components/admin/FinanceMoneyActions.tsx','FinanceMoneyActions',{'@/components/admin/FinancesManager':{createFinanceIdempotencyKey:()=> '11111111-1111-4111-8111-111111111111'}},{window:{confirm:()=>true},fetch:async(url,init)=>{calls.push([url,JSON.parse(init.body)]);return Response.json(fail?{error:'Resultado incierto'}:{ok:true},{status:fail?503:200});}});
+  const props={sectorEnabled:true,accounts:[{id:'cash',name:'Efectivo'},{id:'mercadopago',name:'Mercado Pago'}],onSaved(){}};
+  nodes(render(props)).find(n=>n.type==='button'&&text(n)==='Retirar dinero').props.onClick();let tree=render(props);
+  nodes(tree).filter(n=>n.type==='select')[0].props.onChange({target:{value:'mayoristas'}});tree=render(props);
+  nodes(tree).filter(n=>n.type==='select')[1].props.onChange({target:{value:'mercadopago'}});tree=render(props);
+  nodes(tree).filter(n=>n.type==='input')[0].props.onChange({target:{value:'25'}});tree=render(props);
+  nodes(tree).filter(n=>n.type==='input')[1].props.onChange({target:{value:'Motivo de prueba'}});tree=render(props);
+  await nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});tree=render(props);fail=false;
   assert.equal(nodes(tree).find(n=>n.type==='fieldset').props.disabled,true);
-  fail=false;await nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
-  assert.deepEqual(calls[0],calls[1]);assert.equal(refreshed,1);
+  await nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
+  assert.deepEqual(calls[0],calls[1]);assert.equal(calls[0][0],'/api/admin/finances/sector');assert.equal(calls[0][1].sector,'mayoristas');assert.equal(calls[0][1].accountId,'mercadopago');assert.equal(calls[0][1].operation,'withdrawal');
 });
 
 test('history combines local-date, amount, type and sector filters and retains references only inside details',()=>{
@@ -67,7 +71,7 @@ test('account transfer reuses the existing transfer action and never sends a sec
     '@/components/admin/FinancesManager':{createFinanceIdempotencyKey:()=> '11111111-1111-4111-8111-111111111111'},
   },{window:{confirm:()=>true},fetch:async(url,init)=>{calls.push(JSON.parse(init.body));return Response.json({ok:true});}});
   const props={accounts:[{id:'cash',name:'Caja'},{id:'bank',name:'Banco'}],onSaved(){}};
-  let tree=render(props);nodes(tree).find(n=>n.type==='button'&&text(n)==='Transferir dinero').props.onClick();tree=render(props);
+  let tree=render(props);nodes(tree).find(n=>n.type==='button'&&text(n)==='Transferir entre cuentas').props.onClick();tree=render(props);
   assert.match(text(tree),/Transferir entre cuentas financieras/);
   nodes(tree).filter(n=>n.type==='select')[0].props.onChange({target:{value:'cash'}});tree=render(props);
   nodes(tree).filter(n=>n.type==='select')[1].props.onChange({target:{value:'bank'}});tree=render(props);

@@ -3,6 +3,7 @@ import { getWholesaleSessionCustomerId } from "@/lib/wholesale-server";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { isWholesaleSessionWriteAllowed } from "@/lib/wholesale-session-origin";
 import { isWholesaleUuid, wholesaleRpcErrorMessage } from "@/lib/wholesale-order-api";
+import { customerPaymentSummary, readCustomerPayments } from "@/lib/wholesale-customer-payment";
 
 const privateHeaders = { "Cache-Control": "no-store, private" };
 const errorResponse = (error: string, status: number) => NextResponse.json({ ok: false, error }, { status, headers: privateHeaders });
@@ -81,7 +82,8 @@ export async function GET(request: Request) {
         if (batch.length < 500) break;
       }
     }
-    const presentedOrders = orders.map(order => ({ ...order, tracking_events: tracking
+    const payments = await readCustomerPayments(db,orderIds);
+    const presentedOrders = orders.map(order => ({ ...order, payment_summary:customerPaymentSummary(order.status,order.total_amount,order.currency,payments.filter(payment=>payment.order_id===order.id)), tracking_events: tracking
       .filter(event => event.order_id === order.id && publicTypes.includes(event.event_type))
       .map(event => ({ id: String(event.id), type: event.event_type, at: event.created_at })) }));
     const last = orders.at(-1) as { created_at?: string; id?: string } | undefined;

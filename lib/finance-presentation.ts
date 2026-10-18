@@ -2,6 +2,7 @@ import type { SectorCash } from "@/lib/finance-sector-cash";
 export type CurrencyAmount = { currency: string; amount: number };
 export type FinanceMovement = { id: string; source?: string; movement_type: string; sale_id?: string | null; amount: number; currency?: string; description: string; occurred_at: string };
 export type FinancePresentationData = {
+  sectorOperationsEnabled?: boolean;
   activated: boolean; totalAvailable?: number; salesTotal?: number; realizedProfit?: number; retailCostsComplete?: boolean;
   cashBySector?: SectorCash;
   retailPending?: { id: string; amount: number; currency: string; reason: string; status: string }[];

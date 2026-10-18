@@ -8,6 +8,7 @@ export type WholesaleCustomerOrderItem = {
 };
 
 export type WholesaleCustomerOrder = {
+  payment_summary?: import("@/lib/wholesale-customer-payment").CustomerPaymentSummary | null;
   id: string;
   order_number: string;
   status: string;
@@ -80,7 +81,7 @@ export function wholesaleOrderNextAction(status: string, revisionStatus?: string
     case "received": return "DCL recibió la solicitud y la revisará.";
     case "in_review": return "DCL está revisando la solicitud.";
     case "awaiting_customer": return "Revisá las condiciones y respondé a DCL desde este pedido.";
-    case "confirmed": return "La solicitud está confirmada. Este portal no gestiona pagos ni entregas.";
+    case "confirmed": return "Pedido confirmado. Revisá el saldo y las opciones de pago.";
     case "rejected": return "La solicitud fue rechazada. No hay una acción disponible en el portal.";
     case "cancelled": return "La solicitud fue cancelada. No hay una acción disponible en el portal.";
     default: return "Consultá con DCL si necesitás información sobre el próximo paso.";

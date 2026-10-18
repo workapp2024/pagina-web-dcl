@@ -2,6 +2,8 @@
 import { matchesWholesaleOrder, customerTrackingEvents, isWholesaleDeliveryComplete } from "@/lib/wholesale-order-presentation";
 import { useWholesaleOrderVisibility } from "@/components/wholesale/useWholesaleOrderVisibility";
 import { WholesaleOrderTracking } from "@/components/wholesale/WholesaleOrderTracking";
+import { WholesaleOrderPayment } from "@/components/wholesale/WholesaleOrderPayment";
+import { commercialStateClass } from "@/lib/wholesale-order-summary";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -18,7 +20,7 @@ import { buildWholesaleCustomerOrderCards, getOpenWholesaleAttempts, isWholesale
 import type { WholesaleCustomerOrder } from "@/lib/wholesale-customer-orders";
 import type { WholesaleCatalogItem } from "@/lib/wholesale-server";
 
-export function WholesaleCatalog() {
+export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"catalog"|"orders"} = {}) {
   const router = useRouter();
   const [products, setProducts] = useState<WholesaleCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export function WholesaleCatalog() {
   const catalogRequestRef = useRef(0);
   const attemptsRequestRef = useRef(0);
   const ordersRequestRef = useRef(0);
-  const [portalSection, setPortalSection] = useState("catalog");
+  const [portalSection, setPortalSection] = useState<"catalog"|"orders">(initialSection);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatus, setOrderStatus] = useState("active");
   const [expandedOrder, setExpandedOrder] = useState("");
@@ -402,7 +404,7 @@ export function WholesaleCatalog() {
     </div>
     {cartFeedback && <p role="status" aria-live="polite" className="-mt-2 mb-5 text-sm text-emerald-200">{cartFeedback}</p>}
 
-    <nav aria-label="Navegación mayorista" className="mb-5 grid grid-cols-3 gap-2">{[{id:"catalog",label:"Catálogo"},{id:"orders",label:"Mis pedidos"},{id:"cart",label:"Carrito"}].map(item => <button key={item.id} type="button" aria-pressed={portalSection === item.id} onClick={() => item.id === "cart" ? setCartOpen(true) : setPortalSection(item.id)} className={`min-h-12 rounded-xl border px-2 text-sm font-semibold ${portalSection === item.id ? "border-red-300/40 bg-red-300/10 text-red-200" : "border-white/10"}`}>{item.label}{item.id === "orders" && orders.some(order => order.status === "awaiting_customer" && order.requires_customer_approval) && <span className="ml-1 text-xs text-red-200"> · Por responder</span>}</button>)}</nav>
+    <nav aria-label="Navegación mayorista" className="mb-5 grid grid-cols-3 gap-2">{([{id:"catalog",label:"Catálogo"},{id:"orders",label:"Mis pedidos"},{id:"cart",label:"Carrito"}] as const).map(item => <button key={item.id} type="button" aria-pressed={portalSection === item.id} onClick={() => item.id === "cart" ? setCartOpen(true) : setPortalSection(item.id)} className={`min-h-12 rounded-xl border px-2 text-sm font-semibold ${portalSection === item.id ? "border-red-300/40 bg-red-300/10 text-red-200" : "border-white/10"}`}>{item.label}{item.id === "orders" && orders.some(order => order.status === "awaiting_customer" && order.requires_customer_approval) && <span className="ml-1 text-xs text-red-200"> · Por responder</span>}</button>)}</nav>
     <div hidden={portalSection !== "catalog"}>
     <section aria-label="Buscar productos mayoristas" className="mb-4 rounded-2xl border border-white/10 bg-zinc-950 p-3 sm:p-4">
       <p className="mb-2 px-1 text-sm font-semibold text-white">Encontrá un producto o compatibilidad</p>
@@ -473,13 +475,14 @@ export function WholesaleCatalog() {
       <h2 className="text-lg font-bold text-white">Mis pedidos</h2>
       {visibleOrderCards.filter(({order}) => matchesWholesaleOrder(order, orderSearch, orderStatus)).map(({ order, recoveryAttempt }) => <article key={order.id} className="min-w-0 rounded-2xl border border-white/10 bg-zinc-950/70 p-4 sm:p-5">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0"><p className="break-words text-base font-bold text-white">{order.order_number}</p><p className="mt-1 text-sm font-semibold text-[var(--red)]">{isWholesaleDeliveryComplete(order) && order.status === "confirmed" ? "Entrega completa" : wholesaleOrderStatusLabel(order.status, order.revision_status)}</p></div>
+          <div className="min-w-0"><p className="break-words text-base font-bold text-white">{order.order_number}</p><p className={`mt-1 rounded-lg px-2 py-1 text-sm font-semibold ${commercialStateClass(order.status)}`}>Estado comercial: {wholesaleOrderStatusLabel(order.status, order.revision_status)}</p><p className="mt-2 text-sm text-zinc-400">Entrega: {isWholesaleDeliveryComplete(order) ? "✓ Completa" : "Sin entrega completa registrada"}</p></div>
           <p className="shrink-0 text-right text-sm font-bold text-white">{order.total_amount == null ? "Total a confirmar" : money.format(order.total_amount)}</p>
         </div>
         <button type="button" aria-expanded={expandedOrder === order.id} onClick={() => setExpandedOrder(expandedOrder === order.id ? "" : order.id)} className="mt-3 min-h-11 rounded-xl border border-white/15 px-4 text-sm text-red-200">{expandedOrder === order.id ? "Cerrar detalle" : "Ver detalle"}</button><p className="mt-1 text-xs text-zinc-400">{new Date(order.created_at).toLocaleDateString("es-AR")}</p>
         {visibility.available && (["cancelled","rejected"].includes(order.status) || isWholesaleDeliveryComplete(order)) && <button type="button" disabled={visibility.busy} className="ml-2 mt-3 min-h-11 rounded-xl border border-white/15 px-4 text-sm text-zinc-300" onClick={()=>void visibility.setArchived(order.id,!visibility.ids.includes(order.id))}>{visibility.ids.includes(order.id) ? "Restaurar pedido" : "Ocultar de mis pedidos"}</button>}
+        {order.status === "confirmed" && <WholesaleOrderPayment order={order} />}
         <div hidden={expandedOrder !== order.id}>
-        <WholesaleOrderTracking events={customerTrackingEvents(order)} nextAction={isWholesaleDeliveryComplete(order) && order.status === "confirmed" ? "Entrega completa registrada. Consultá con DCL por las condiciones de cobro." : wholesaleOrderNextAction(order.status, order.revision_status)} />
+        <WholesaleOrderTracking events={customerTrackingEvents(order)} outcome={order.status} delivered={isWholesaleDeliveryComplete(order)} nextAction={wholesaleOrderNextAction(order.status, order.revision_status)} />
         {order.status !== "awaiting_customer" && order.commercial_conditions && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-zinc-300">{order.commercial_conditions}</p>}
         {order.status === "awaiting_customer" && order.requires_customer_approval && order.revision_id && <section aria-label={`Propuesta vigente ${order.order_number}`} className="mt-4 rounded-xl border border-amber-300/30 bg-amber-950/20 p-4">
           <h3 className="font-semibold text-amber-100">Propuesta recibida{order.revision_version ? ` · revisión v${order.revision_version}` : ""}: revisá y respondé</h3>

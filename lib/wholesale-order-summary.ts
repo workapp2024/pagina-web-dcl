@@ -53,7 +53,7 @@ export function commercialHistory(events: {id:number;type:string;createdAt:strin
 }
 export function commercialStateClass(status:string, delivered=false) {
   if (["cancelled","rejected"].includes(status)) return "border-red-400/40 bg-red-950/30 text-red-200";
-  if (delivered) return "border-emerald-300/30 bg-emerald-950/20 text-emerald-200";
-  if (["received","in_review","awaiting_customer","confirmed"].includes(status)) return "border-amber-300/30 bg-amber-950/20 text-amber-200";
+  if (delivered || status === "confirmed") return "border-emerald-300/30 bg-emerald-950/20 text-emerald-200";
+  if (["in_review","awaiting_customer"].includes(status)) return "border-amber-300/30 bg-amber-950/20 text-amber-200";
   return "border-white/10 bg-white/5 text-zinc-300";
 }

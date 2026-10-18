@@ -1,3 +1,4 @@
+import { sectorFinancePreparedEnabled } from "@/lib/prepared-finance-features";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { getAdminIdentity, isAdminAuthenticated } from "@/lib/admin-auth";
@@ -133,7 +134,7 @@ export async function GET(request: Request) {
       .filter((movement: any) => !movementType || movement.movement_type === movementType)
       .sort((a: any, b: any) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))
       .slice(0, 1000);
-    return NextResponse.json({ok:true,data:{activated:true,cashBySector,retailPending,accounts:balances,accountManagement:accounts||[],totalAvailable:cashBySector.total,periods,selectedPeriod:selected,salesTotal,realizedProfit:salesTotal-realizedCost,retailCostsComplete,realizedCost,investedStock,potentialStockValue,potentialStockProfit,potentialRoi:investedStock>0?potentialStockProfit/investedStock*100:null,movements:financeMovements,wholesale}});
+    return NextResponse.json({ok:true,data:{sectorOperationsEnabled:sectorFinancePreparedEnabled(),activated:true,cashBySector,retailPending,accounts:balances,accountManagement:accounts||[],totalAvailable:cashBySector.total,periods,selectedPeriod:selected,salesTotal,realizedProfit:salesTotal-realizedCost,retailCostsComplete,realizedCost,investedStock,potentialStockValue,potentialStockProfit,potentialRoi:investedStock>0?potentialStockProfit/investedStock*100:null,movements:financeMovements,wholesale}});
   } catch(error){return apiInternalError("admin_finances_list",error)}
 }
 

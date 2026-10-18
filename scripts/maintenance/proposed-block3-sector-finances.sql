@@ -6,14 +6,14 @@ SET LOCAL statement_timeout='15s';
 
 CREATE TABLE public.financial_sector_operations (
   id uuid PRIMARY KEY,
-  action text NOT NULL CHECK (action IN ('income','withdrawal','transfer','reverse')),
+  action text NOT NULL CHECK (action IN ('income','withdrawal','transfer','reverse','reclassify')),
   actor_id uuid NOT NULL REFERENCES public.admin_profiles(id),
   period_id uuid NOT NULL REFERENCES public.financial_periods(id),
   request jsonb NOT NULL,
   reverse_of uuid UNIQUE REFERENCES public.financial_sector_operations(id),
   legacy_movement_id uuid UNIQUE REFERENCES public.cash_movements(id),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CHECK ((action='reverse' AND num_nonnulls(reverse_of,legacy_movement_id)=1) OR (action<>'reverse' AND num_nonnulls(reverse_of,legacy_movement_id)=0))
+  CHECK ((action='reverse' AND num_nonnulls(reverse_of,legacy_movement_id)=1) OR (action='reclassify' AND reverse_of IS NULL AND legacy_movement_id IS NOT NULL) OR (action NOT IN ('reverse','reclassify') AND num_nonnulls(reverse_of,legacy_movement_id)=0))
 );
 CREATE TABLE public.financial_sector_allocations (
   cash_movement_id uuid PRIMARY KEY REFERENCES public.cash_movements(id),
@@ -79,21 +79,22 @@ CREATE FUNCTION public.record_sector_finance(
   p_occurred_at timestamptz,p_party text,p_reason text,p_actor uuid,p_key uuid,p_reverse_of uuid DEFAULT NULL,p_kind text DEFAULT NULL,p_reverse_movement uuid DEFAULT NULL
 ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public SET lock_timeout='3s' AS $$
 DECLARE v_period public.financial_periods%ROWTYPE; v_request jsonb; v_previous jsonb;
+  v_min numeric;
   v_id uuid; v_original public.financial_sector_operations%ROWTYPE; v_row record; v_kind text;
 BEGIN
   IF NOT EXISTS(SELECT 1 FROM public.admin_profiles WHERE id=p_actor AND role='ADMIN' AND active) THEN RAISE EXCEPTION 'SECTOR_FINANCE_ADMIN_REQUIRED'; END IF;
-  IF p_key IS NULL OR p_action IS NULL OR p_action NOT IN ('income','withdrawal','transfer','reverse')
+  IF p_key IS NULL OR p_action IS NULL OR p_action NOT IN ('income','withdrawal','transfer','reverse','reclassify')
     OR p_occurred_at IS NULL OR p_occurred_at>clock_timestamp()
     OR coalesce(btrim(p_reason),'')='' OR length(p_reason)>300
     OR coalesce(btrim(p_party),'')='' OR length(p_party)>120 THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
-  IF p_action<>'reverse' AND (p_account IS NULL OR p_amount IS NULL OR p_amount<=0 OR p_amount>100000000 OR p_amount<>round(p_amount,2)
+  IF p_action NOT IN ('reverse','reclassify') AND (p_account IS NULL OR p_amount IS NULL OR p_amount<=0 OR p_amount>100000000 OR p_amount<>round(p_amount,2)
     OR p_amount::text IN ('NaN','Infinity','-Infinity') OR p_reverse_of IS NOT NULL OR p_reverse_movement IS NOT NULL) THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
-  IF p_action='income' AND (p_from IS NOT NULL OR p_to IS NULL OR p_to NOT IN ('minoristas','mayoristas','unassigned')) THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
-  IF p_action='withdrawal' AND (p_to IS NOT NULL OR p_from IS NULL OR p_from NOT IN ('minoristas','mayoristas','unassigned')) THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
+  IF p_action='income' AND (p_from IS NOT NULL OR p_to IS NULL OR p_to NOT IN ('minoristas','mayoristas')) THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
+  IF p_action='withdrawal' AND (p_to IS NOT NULL OR p_from IS NULL OR p_from NOT IN ('minoristas','mayoristas')) THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
   IF p_action='transfer' AND (p_from IS NULL OR p_to IS NULL OR p_from=p_to OR p_from NOT IN ('minoristas','mayoristas','unassigned') OR p_to NOT IN ('minoristas','mayoristas','unassigned')) THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
   IF p_action='reverse' AND (num_nonnulls(p_reverse_of,p_reverse_movement)<>1 OR p_account IS NOT NULL OR p_amount IS NOT NULL OR p_from IS NOT NULL OR p_to IS NOT NULL) THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
   v_kind:=coalesce(p_kind,CASE p_action WHEN 'income' THEN 'cash_contribution' WHEN 'withdrawal' THEN 'cash_withdrawal' ELSE 'adjustment' END);
-  IF (p_action='income' AND v_kind NOT IN ('income','cash_contribution')) OR (p_action='withdrawal' AND v_kind NOT IN ('expense','cash_withdrawal')) OR (p_action IN ('transfer','reverse') AND v_kind<>'adjustment') THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
+  IF (p_action='income' AND v_kind NOT IN ('income','cash_contribution')) OR (p_action='withdrawal' AND v_kind NOT IN ('expense','cash_withdrawal')) OR (p_action IN ('transfer','reverse','reclassify') AND v_kind<>'adjustment') THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
   v_request:=jsonb_build_object('action',p_action,'kind',v_kind,'account',p_account,'amount',p_amount,'from',p_from,'to',p_to,'date',p_occurred_at,'party',p_party,'reason',p_reason,'actor',p_actor,'reverse',p_reverse_of,'reverse_movement',p_reverse_movement);
   -- Mismo bloqueo que el puente mayorista y el cierre; no se modifican esas funciones.
   PERFORM pg_advisory_xact_lock(hashtext('wholesale_financial_posting'));
@@ -107,6 +108,35 @@ BEGIN
   IF NOT FOUND OR p_occurred_at<v_period.starts_at OR (v_period.ends_at IS NOT NULL AND p_occurred_at>v_period.ends_at) THEN RAISE EXCEPTION 'SECTOR_FINANCE_PERIOD'; END IF;
   -- Evita que cualquier escritor del libro cambie el saldo durante la comprobación.
   LOCK TABLE public.cash_movements IN SHARE ROW EXCLUSIVE MODE NOWAIT;
+  IF p_action='reclassify' THEN
+    IF p_account IS NOT NULL OR p_amount IS NOT NULL OR p_from IS NOT NULL OR p_to IS NULL OR p_to NOT IN ('minoristas','mayoristas') OR p_reverse_of IS NOT NULL OR p_reverse_movement IS NULL THEN RAISE EXCEPTION 'SECTOR_FINANCE_INVALID'; END IF;
+    SELECT * INTO v_row FROM public.cash_movements WHERE id=p_reverse_movement FOR UPDATE;
+    IF NOT FOUND OR v_row.period_id<>v_period.id OR v_row.sale_id IS NOT NULL OR v_row.wholesale_payment_entry_id IS NOT NULL OR v_row.transfer_id IS NOT NULL OR v_row.reversal_of_id IS NOT NULL
+      OR v_row.movement_type NOT IN ('cash_withdrawal','expense') OR v_row.amount>=0
+      OR EXISTS(SELECT 1 FROM public.financial_sector_allocations WHERE cash_movement_id=v_row.id)
+      OR EXISTS(SELECT 1 FROM public.cash_movements WHERE reversal_of_id=v_row.id)
+      OR NOT EXISTS(SELECT 1 FROM public.financial_operation_requests r WHERE r.operation_type='manual_movement' AND r.result_id=v_row.id AND r.idempotency_key=v_row.idempotency_key)
+      OR EXISTS(SELECT 1 FROM public.financial_sector_operations WHERE legacy_movement_id=v_row.id) THEN RAISE EXCEPTION 'SECTOR_FINANCE_RECLASSIFY_INVALID'; END IF;
+    IF p_occurred_at<v_row.occurred_at THEN RAISE EXCEPTION 'SECTOR_FINANCE_REVERSAL_DATE'; END IF;
+    PERFORM 1 FROM public.financial_accounts WHERE id=v_row.account_id AND active FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'SECTOR_FINANCE_ACCOUNT'; END IF;
+    -- Check the destination's entire chronological balance after assigning the old debit.
+    -- No money is moved: an account-total debit check would incorrectly debit it twice.
+    WITH dated AS (
+      SELECT m.occurred_at,sum(CASE WHEN p_to=CASE
+        WHEN m.wholesale_payment_entry_id IS NOT NULL AND m.sale_id IS NULL THEN 'mayoristas'
+        WHEN m.sale_id IS NOT NULL AND m.wholesale_payment_entry_id IS NULL AND m.movement_type IN ('sale_income','sale_reversal') THEN 'minoristas'
+        WHEN m.sale_id IS NULL AND m.wholesale_payment_entry_id IS NULL AND m.movement_type<>'opening_balance' THEN coalesce(a.sector,'unassigned') ELSE 'unassigned' END THEN m.amount ELSE 0 END) amount
+      FROM public.cash_movements m LEFT JOIN public.financial_sector_allocations a ON a.cash_movement_id=m.id
+      WHERE m.period_id=v_row.period_id AND m.account_id=v_row.account_id GROUP BY m.occurred_at
+      UNION ALL SELECT v_row.occurred_at,v_row.amount
+    ), balances AS (SELECT occurred_at,sum(sum(amount)) OVER (ORDER BY occurred_at) balance FROM dated GROUP BY occurred_at)
+    SELECT min(balance) INTO v_min FROM balances WHERE occurred_at>=v_row.occurred_at;
+    IF v_min<0 THEN RAISE EXCEPTION 'SECTOR_FINANCE_INSUFFICIENT'; END IF;
+    INSERT INTO public.financial_sector_operations(id,action,actor_id,period_id,request,legacy_movement_id) VALUES(p_key,'reclassify',p_actor,v_row.period_id,v_request,p_reverse_movement);
+    INSERT INTO public.financial_sector_allocations VALUES(v_row.id,p_key,p_to);
+    RETURN p_key;
+  END IF;
   IF p_action='reverse' AND p_reverse_movement IS NOT NULL THEN
     SELECT * INTO v_row FROM public.cash_movements WHERE id=p_reverse_movement FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'SECTOR_FINANCE_REVERSAL_INVALID'; END IF;
@@ -128,7 +158,7 @@ BEGIN
   END IF;
   IF p_action='reverse' THEN
     SELECT * INTO v_original FROM public.financial_sector_operations WHERE id=p_reverse_of;
-    IF NOT FOUND OR v_original.action='reverse' OR EXISTS(SELECT 1 FROM public.financial_sector_operations WHERE reverse_of=p_reverse_of) THEN RAISE EXCEPTION 'SECTOR_FINANCE_REVERSAL_INVALID'; END IF;
+    IF NOT FOUND OR v_original.action IN ('reverse','reclassify') OR EXISTS(SELECT 1 FROM public.financial_sector_operations WHERE reverse_of=p_reverse_of) THEN RAISE EXCEPTION 'SECTOR_FINANCE_REVERSAL_INVALID'; END IF;
     IF p_occurred_at<(v_original.request->>'date')::timestamptz THEN RAISE EXCEPTION 'SECTOR_FINANCE_REVERSAL_DATE'; END IF;
     IF (SELECT count(*) FROM public.financial_sector_allocations WHERE operation_id=p_reverse_of) <> (CASE WHEN v_original.action='transfer' THEN 2 ELSE 1 END) THEN RAISE EXCEPTION 'SECTOR_FINANCE_INCOMPLETE'; END IF;
     FOR v_row IN SELECT m.*,a.sector FROM public.financial_sector_allocations a JOIN public.cash_movements m ON m.id=a.cash_movement_id WHERE a.operation_id=p_reverse_of ORDER BY m.id LOOP

@@ -39,6 +39,14 @@ export async function GET(_request: Request, context: Context) {
       db.from("financial_accounts").select("id,name").eq("active", true),
     ]);
     if (mappings.error || accounts.error) throw new Error("ledger_read_failed");
+    let checkout: {blocked:boolean;review:boolean;receipts:unknown[]} = {blocked:false,review:false,receipts:[]};
+    const intents = await db.from("wholesale_checkout_intents").select("id,state").eq("order_id",id);
+    if(intents.error && !["42P01","PGRST205"].includes(intents.error.code)) throw new Error("checkout_read_failed");
+    if(!intents.error && intents.data?.length) {
+      const receipts=await db.from("wholesale_checkout_receipts").select("payment_id,outcome,provider_status,amount,currency").in("intent_id",intents.data.map((intent:{id:string})=>intent.id));
+      if(receipts.error) throw new Error("checkout_read_failed");
+      checkout={blocked:intents.data.some((intent:{state:string})=>intent.state!=="approved") || (receipts.data ?? []).some((receipt:{outcome:string})=>receipt.outcome==="review"),review:(receipts.data ?? []).some((receipt:{outcome:string})=>receipt.outcome==="review"),receipts:receipts.data ?? []};
+    }
     const correctionIds = (corrections.data ?? []).map((entry: { id: string }) => entry.id);
     const returnIds = (returns.data ?? []).map((entry: { id: string }) => entry.id);
     const recognitionIds = (recognitions.data ?? []).map((entry: { id: string }) => entry.id);
@@ -57,6 +65,7 @@ export async function GET(_request: Request, context: Context) {
       : { data: [], error: null };
     if (reconciliation.error || correctionItems.error || returnItems.error || recognitionItems.error || recognitionDeliveries.error) throw new Error("ledger_read_failed");
     return NextResponse.json({ ok: true, data: {
+      checkout,
       paymentAccounts: (mappings.data ?? []).flatMap((mapping: {payment_method:string;account_id:string}) => {
         const account = (accounts.data ?? []).find((row: {id:string}) => row.id === mapping.account_id);
         return account ? [{method:mapping.payment_method,name:account.name}] : [];
