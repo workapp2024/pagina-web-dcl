@@ -34,6 +34,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: error instanceof InvalidWebhookSignatureError ? 401 : 500 });
   }
 
+  // Reserved non-payment identity: authenticated transport probe only. Never
+  // instantiate a database client, fetch a payment or acknowledge a real ID.
+  if (paymentId === "dcl-wholesale-webhook-probe") {
+    if (process.env.DCL_WHOLESALE_CHECKOUT_ENABLED === "1"
+      || process.env.DCL_WHOLESALE_WEBHOOK_DIAGNOSTIC_DISABLED === "1") {
+      return NextResponse.json({ ok: false }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true, diagnostic: "signature_verified", paymentProcessed: false }, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
   const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
   if (!token) return NextResponse.json({ ok: false }, { status: 503 });
   try {

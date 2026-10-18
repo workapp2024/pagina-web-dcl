@@ -1,5 +1,7 @@
 # Checkout mayorista: reutilización del webhook de Checkout Pro
 
+> Actualización del 18/10/2026: el simulador no permite seleccionar la URL específica de Checkout Pro. La prueba descrita aquí queda reemplazada por [Validación sin cobros](validacion-webhook-mayorista-sin-cobros.md), con sonda firmada de diagnóstico. No cambiar la URL global para usar el simulador.
+
 Preparación local. No publicada ni activada. Base publicada: `47a3b288`.
 
 ## Solución
