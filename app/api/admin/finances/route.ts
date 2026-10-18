@@ -128,7 +128,7 @@ export async function GET(request: Request) {
       operation:sectorOperations.find(operation=>operation.id===sectorAllocations.find(allocation=>allocation.cash_movement_id===movement.id)?.operation_id),
     })), sectorAllocations);
     const retailPending = await fetchAllRows(db.from("financial_pending_postings").select("id,amount,currency,reason,status").eq("status","pending").order("id"));
-    const balances=(accounts||[]).filter((a:any)=>a.active).map((a:any)=>({...a,balance:allMovements.filter((m:any)=>m.account_id===a.id).reduce((n:number,m:any)=>n+Number(m.amount),0)}));
+    const balances=(accounts||[]).filter((a:any)=>a.active).map((a:any)=>({...a,balance:cashBySector.byAccount[a.id]?.total ?? 0}));
     const investedStock=(products||[]).reduce((n:number,x:any)=>n+Number(x.stock||0)*Number(x.cost_price||0),0),potentialStockValue=(products||[]).reduce((n:number,x:any)=>n+Number(x.stock||0)*Number(x.price||0),0),potentialStockProfit=potentialStockValue-investedStock;
     const financeMovements = [...(wholesale.cashMovements || []), ...(movements || []).filter((movement: any) => !movement.wholesale_payment_entry_id), ...(wholesale.activity || [])]
       .filter((movement: any) => !movementType || movement.movement_type === movementType)

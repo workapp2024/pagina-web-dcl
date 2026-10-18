@@ -13,6 +13,7 @@ export type CashSummary = { available: number; income: number; expense: number }
 export type SectorCash = {
   minoristas: CashSummary; mayoristas: CashSummary; unassigned: CashSummary;
   total: number; movements: AttributedCashRow[]; sharedOpening: boolean; attributionNeedsReview: boolean;
+  byAccount: Record<string, { minoristas: number; mayoristas: number; unassigned: number; total: number }>;
 };
 
 // Un único libro de dinero. Reconocimientos de ventas y cobros pendientes no entran aquí.
@@ -28,6 +29,7 @@ export function buildSectorCash(rows: CashRow[], allocations: CashAllocation[] =
     unassigned: { available: 0, income: 0, expense: 0 },
   };
   const seen = new Set<string>();
+  const byAccount: SectorCash["byAccount"] = {};
   const movements = rows.map(row => {
     if (seen.has(row.id)) throw new Error("Movimiento financiero duplicado.");
     seen.add(row.id);
@@ -38,6 +40,9 @@ export function buildSectorCash(rows: CashRow[], allocations: CashAllocation[] =
     else if (row.sale_id && !row.wholesale_payment_entry_id && ["sale_income", "sale_reversal"].includes(row.movement_type)) sector = "minoristas";
     else if (!row.sale_id && !row.wholesale_payment_entry_id && row.movement_type !== "opening_balance") sector = explicit.get(row.id) ?? "unassigned";
     cents[sector].available += value;
+    const account = byAccount[row.account_id ?? "unassigned_account"] ??= { minoristas: 0, mayoristas: 0, unassigned: 0, total: 0 };
+    account[sector] += value; account.total += value;
+    if (!Object.values(account).every(Number.isSafeInteger)) throw new Error("Saldo financiero fuera de rango.");
     // Aperturas y transferencias trasladan saldos; no son ingresos/egresos externos.
     if (row.movement_type !== "opening_balance" && !row.transfer_id) {
       if (value > 0) cents[sector].income += value;
@@ -48,7 +53,8 @@ export function buildSectorCash(rows: CashRow[], allocations: CashAllocation[] =
   const normalize = (value: CashSummary) => ({ available: value.available / 100, income: value.income / 100, expense: value.expense / 100 });
   const total = cents.minoristas.available + cents.mayoristas.available + cents.unassigned.available;
   if (!Number.isSafeInteger(total)) throw new Error("Saldo financiero fuera de rango.");
-  return { minoristas: normalize(cents.minoristas), mayoristas: normalize(cents.mayoristas), unassigned: normalize(cents.unassigned), total: total / 100,
+  for (const account of Object.values(byAccount)) for (const key of ["minoristas", "mayoristas", "unassigned", "total"] as const) account[key] /= 100;
+  return { minoristas: normalize(cents.minoristas), mayoristas: normalize(cents.mayoristas), unassigned: normalize(cents.unassigned), total: total / 100, byAccount,
     movements: movements.sort((a,b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at) || a.id.localeCompare(b.id)),
     sharedOpening: rows.some(row => row.movement_type === "opening_balance" && Number(row.amount) !== 0),
     attributionNeedsReview: cents.unassigned.available < 0 };

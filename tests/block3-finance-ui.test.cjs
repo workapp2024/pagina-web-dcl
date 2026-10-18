@@ -27,7 +27,7 @@ test('ordinary income and withdrawal require a sector and cannot post before SQL
 test('locally enabled sector withdrawal sends one sector/account operation and retains date and key on retry',async()=>{
   const calls=[];let fail=true;
   const render=harness('components/admin/FinanceMoneyActions.tsx','FinanceMoneyActions',{'@/components/admin/FinancesManager':{createFinanceIdempotencyKey:()=> '11111111-1111-4111-8111-111111111111'}},{window:{confirm:()=>true},fetch:async(url,init)=>{calls.push([url,JSON.parse(init.body)]);return Response.json(fail?{error:'Resultado incierto'}:{ok:true},{status:fail?503:200});}});
-  const props={sectorEnabled:true,accounts:[{id:'cash',name:'Efectivo'},{id:'mercadopago',name:'Mercado Pago'}],onSaved(){}};
+  const props={sectorEnabled:true,sectorBalances:{mercadopago:{minoristas:0,mayoristas:100,unassigned:0,total:100}},accounts:[{id:'cash',name:'Efectivo',balance:0},{id:'mercadopago',name:'Mercado Pago',balance:100}],onSaved(){}};
   nodes(render(props)).find(n=>n.type==='button'&&text(n)==='Retirar dinero').props.onClick();let tree=render(props);
   nodes(tree).filter(n=>n.type==='select')[0].props.onChange({target:{value:'mayoristas'}});tree=render(props);
   nodes(tree).filter(n=>n.type==='select')[1].props.onChange({target:{value:'mercadopago'}});tree=render(props);
@@ -37,6 +37,22 @@ test('locally enabled sector withdrawal sends one sector/account operation and r
   assert.equal(nodes(tree).find(n=>n.type==='fieldset').props.disabled,true);
   await nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});
   assert.deepEqual(calls[0],calls[1]);assert.equal(calls[0][0],'/api/admin/finances/sector');assert.equal(calls[0][1].sector,'mayoristas');assert.equal(calls[0][1].accountId,'mercadopago');assert.equal(calls[0][1].operation,'withdrawal');
+});
+
+test('money form switches sector/account balances and rejects excess or unavailable withdrawals before sending',async()=>{
+  const calls=[];const render=harness('components/admin/FinanceMoneyActions.tsx','FinanceMoneyActions',{'@/components/admin/FinancesManager':{createFinanceIdempotencyKey:()=> '11111111-1111-4111-8111-111111111111'}},{window:{confirm:()=>true},fetch:async(...args)=>{calls.push(args);return Response.json({ok:true});}});
+  const props={sectorEnabled:true,accounts:[{id:'cash',name:'Efectivo',balance:10},{id:'mercadopago',name:'Mercado Pago',balance:90}],sectorBalances:{cash:{minoristas:10,mayoristas:0,unassigned:0,total:10},mercadopago:{minoristas:60,mayoristas:40,unassigned:-10,total:90}},onSaved(){}};
+  nodes(render(props)).find(n=>n.type==='button'&&text(n)==='Retirar dinero').props.onClick();let tree=render(props);
+  assert.equal(nodes(tree).filter(n=>n.type==='select')[1].props.disabled,true);
+  nodes(tree).filter(n=>n.type==='select')[0].props.onChange({target:{value:'minoristas'}});tree=render(props);
+  assert.match(text(tree),/60,00/);assert.match(text(tree),/10,00/);
+  nodes(tree).filter(n=>n.type==='select')[1].props.onChange({target:{value:'mercadopago'}});tree=render(props);
+  nodes(tree).filter(n=>n.type==='input')[0].props.onChange({target:{value:'61'}});tree=render(props);
+  await nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(calls.length,0);assert.match(text(render(props)),/supera el saldo/);
+  nodes(render(props)).filter(n=>n.type==='select')[0].props.onChange({target:{value:'mayoristas'}});tree=render(props);
+  assert.equal(nodes(tree).filter(n=>n.type==='select')[1].props.value,'');assert.match(text(tree),/40,00/);
+  const unavailable={...props,sectorBalances:undefined};nodes(tree).filter(n=>n.type==='select')[1].props.onChange({target:{value:'mercadopago'}});tree=render(unavailable);
+  await nodes(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.equal(calls.length,0);
 });
 
 test('history combines local-date, amount, type and sector filters and retains references only inside details',()=>{

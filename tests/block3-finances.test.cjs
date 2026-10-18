@@ -34,6 +34,17 @@ test('explicit sector transfers net zero and reversals retain references, while 
   assert.equal(buildSectorCash([row('negative',-1,{sale_id:'s',movement_type:'sale_reversal'})]).minoristas.available,-1);
 });
 
+test('account and sector balances reconcile exactly without mixing unassigned funds or double debiting withdrawals',()=>{
+  const rows=[row('retail-cash',0.3,{sale_id:'sale',movement_type:'sale_income'}),row('retail-mp',120,{sale_id:'sale2',movement_type:'sale_income',account_id:'mercadopago'}),row('wholesale-mp',70,{wholesale_payment_entry_id:'pay',account_id:'mercadopago'}),row('shared',50,{movement_type:'opening_balance',account_id:'mercadopago'}),row('manual-out',-20,{account_id:'mercadopago',movement_type:'cash_withdrawal'})];
+  const data=buildSectorCash(rows,[{cash_movement_id:'manual-out',sector:'mayoristas'}]);
+  assert.deepEqual({...data.byAccount.mercadopago},{minoristas:120,mayoristas:50,unassigned:50,total:220});
+  assert.equal(data.byAccount.cash.minoristas,0.3);
+  assert.equal(data.total,220.3);
+  for(const sector of ['minoristas','mayoristas','unassigned'])assert.equal(Math.round(Object.values(data.byAccount).reduce((sum,a)=>sum+a[sector],0)*100),Math.round(data[sector].available*100));
+  assert.equal(Math.round(Object.values(data.byAccount).reduce((sum,a)=>sum+a.total,0)*100),Math.round(data.total*100));
+  assert.throws(()=>buildSectorCash([...rows,rows[4]]),/duplicado/);
+});
+
 test('finance API totals every cash page independently of filtered history, excludes noncash wholesale activity and reports retail pending', async () => {
   const cash=Array.from({length:1003},(_,i)=>row(String(i),1,{sale_id:'s',movement_type:'sale_income'}));
   const datasets={ financial_accounts:[{id:'cash',name:'Caja',active:true}],financial_periods:[{id:'p',name:'Actual',status:'open',starts_at:'2026-01-01'}],financial_activation:{activated_at:'2026-01-01',initial_period_id:'p'},cash_movements:cash,financial_pending_postings:[{id:'pending',amount:50,currency:'ARS',status:'pending'}] };
@@ -88,7 +99,13 @@ test('proposed sector operations are idempotent, balanced, reversible, immutable
     await assert.rejects(db.query('DELETE FROM financial_sector_allocations'),/permission denied/);
     const early=new Date(Date.parse(date)-3600000).toISOString(),middle=new Date(Date.parse(date)-1800000).toISOString(),between=new Date(Date.parse(date)-2700000).toISOString();
     await call('income',20,null,'mayoristas',randomUUID(),null,actor,early);
-    await call('withdrawal',20,'mayoristas',null,randomUUID(),null,actor,middle);
+    const withdrawal=randomUUID();
+    await call('withdrawal',20,'mayoristas',null,withdrawal,null,actor,middle);
+    await call('withdrawal',20,'mayoristas',null,withdrawal,null,actor,middle);
+    const afterWithdrawal=buildSectorCash((await db.query('SELECT * FROM cash_movements')).rows,(await db.query('SELECT * FROM financial_sector_allocations')).rows);
+    assert.equal(afterWithdrawal.byAccount.cash.mayoristas,0);
+    assert.equal(afterWithdrawal.byAccount.cash.minoristas,50);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM financial_sector_allocations WHERE operation_id=$1',[withdrawal])).rows[0].n,1);
     const recent=randomUUID();await call('income',20,null,'mayoristas',recent);
     await assert.rejects(call('withdrawal',1,'mayoristas',null,randomUUID(),null,actor,between),/INSUFFICIENT/);
     await call('reverse',null,null,null,randomUUID(),recent);
