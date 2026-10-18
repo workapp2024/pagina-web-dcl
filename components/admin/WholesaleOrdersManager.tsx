@@ -381,6 +381,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
           <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5">
             <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Solicitud · {detail.customer}</p><h2 className="mt-1 text-2xl font-black sm:text-3xl">{detail.orderNumber}</h2><p className="mt-2 text-sm text-zinc-400">Recibida {when(detail.createdAt)}</p></div>
             <span className={`rounded-xl border px-4 py-3 text-base font-bold ${stateClass}`}>{wholesaleAdminLabel(detail.status, detail.revision.status)}{delivered && " · Entrega completa"}</span>
+            {detail.status === "confirmed" && <a href={`/admin/mayoristas/pedidos/${detail.id}/comprobante`} target="_blank" rel="noopener noreferrer" className={buttonClass}>Compartir comprobante</a>}
           </header>
 
           {nextAction && <p className="mt-4 rounded-xl border border-amber-300/20 p-4 text-sm text-amber-100">Próxima acción: {nextAction}</p>}

@@ -2,6 +2,10 @@ import "server-only";
 import { createAdminServerClient } from "@/lib/supabase/server";
 
 export type OrderReceipt = {
+  kind?: "order";
+  confirmedPaid?: number;
+  refundedAmount?: number;
+  pendingAmount?: number;
   orderNumber: string;
   soldAt: string;
   customerName: string;
@@ -9,7 +13,7 @@ export type OrderReceipt = {
   currency: string;
   total: number;
   paymentMethod: string;
-  paymentStatus: "Aprobado" | "Reembolsado" | "Cancelado";
+  paymentStatus: "Aprobado" | "Reembolsado" | "Cancelado" | "Pendiente" | "Pago parcial" | "Pagado";
   status: "valid" | "refunded" | "cancelled";
   resolvedAt?: string;
   items: { name: string; quantity: number; unitPrice: number; lineTotal: number }[];

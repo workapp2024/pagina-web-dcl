@@ -12,7 +12,7 @@ export function OrderReceipt({ receipt }: { receipt: ReceiptData }) {
   return <article className={styles.receipt} aria-labelledby="receipt-title">
     <header className={styles.header}>
       <div className={styles.brand}><Image src="/brand/logo-dcl.png.png" width={100} height={100} alt="Logo DCL" unoptimized loading="eager" /><p className={styles.company}>DCL Cree LED</p></div>
-      <div><h1 id="receipt-title">COMPROBANTE DE COMPRA</h1><p className={styles.nonFiscal}>Comprobante comercial — No es factura fiscal</p></div>
+      <div><h1 id="receipt-title">{receipt.kind === "order" ? "COMPROBANTE DE PEDIDO MAYORISTA" : "COMPROBANTE DE COMPRA"}</h1><p className={styles.nonFiscal}>Comprobante comercial — No es factura fiscal</p></div>
     </header>
     <div className={receipt.status === "valid" ? styles.valid : styles.reversed}>
       <strong>{states[receipt.status]}</strong>
@@ -21,7 +21,7 @@ export function OrderReceipt({ receipt }: { receipt: ReceiptData }) {
     </div>
     <dl className={styles.details}>
       <div><dt>Pedido</dt><dd className={styles.reference}>{receipt.orderNumber}</dd></div>
-      <div><dt>Fecha de venta · Argentina</dt><dd>{date(receipt.soldAt)}</dd></div>
+      <div><dt>{receipt.kind === "order" ? "Fecha de confirmación" : "Fecha de venta"} · Argentina</dt><dd>{date(receipt.soldAt)}</dd></div>
       <div><dt>Cliente</dt><dd>{receipt.customerName}</dd></div>
       {receipt.maskedPhone && <div><dt>Teléfono · últimos 4 dígitos</dt><dd>{receipt.maskedPhone}</dd></div>}
     </dl>
@@ -35,8 +35,9 @@ export function OrderReceipt({ receipt }: { receipt: ReceiptData }) {
     </table>
     <div className={styles.summary}>
       <dl className={styles.payment}><div><dt>Medio de pago</dt><dd>{receipt.paymentMethod}</dd></div><div><dt>Estado del pago</dt><dd>{receipt.paymentStatus}</dd></div></dl>
+      {receipt.kind === "order" && <dl className={styles.payment}><div><dt>Pagos registrados confirmados</dt><dd>{money(receipt.confirmedPaid!)}</dd></div><div><dt>Reembolsos registrados</dt><dd>{money(receipt.refundedAmount!)}</dd></div><div><dt>Saldo pendiente</dt><dd>{money(receipt.pendingAmount!)}</dd></div></dl>}
       <div className={styles.total}><span>TOTAL <small>{receipt.currency}</small></span><strong>{money(receipt.total)}</strong></div>
     </div>
-    <footer className={styles.footer}><strong>DCL Cree LED</strong><span>WhatsApp: +54 9 261 779-1393</span><p>Comprobante comercial de la venta registrada. No acredita la entrega del pedido.</p></footer>
+    <footer className={styles.footer}><strong>DCL Cree LED</strong><span>WhatsApp: +54 9 261 779-1393</span><p>{receipt.kind === "order" ? "Comprobante del pedido confirmado. El total del pedido no acredita su pago. Los avisos de transferencia y pagos pendientes no se incluyen como cobrados. No acredita la entrega." : "Comprobante comercial de la venta registrada. No acredita la entrega del pedido."}</p></footer>
   </article>;
 }

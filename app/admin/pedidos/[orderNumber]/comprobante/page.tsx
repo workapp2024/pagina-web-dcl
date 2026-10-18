@@ -5,6 +5,7 @@ import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getOrderReceipt } from "@/lib/store/order-receipt";
 import { OrderReceipt } from "@/components/admin/OrderReceipt";
 import { ReceiptPrintButton } from "@/components/admin/ReceiptPrintButton";
+import { ReceiptShareButton } from "@/components/admin/ReceiptShareButton";
 import styles from "./comprobante.module.css";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +18,10 @@ export default async function ReceiptPage({ params }: { params: Promise<{ orderN
   return <main className={styles.page}>
     <div className={styles.controls}>
       <Link href="/admin/pedidos">← Volver a Pedidos</Link>
-      {result.status === "ok" && <ReceiptPrintButton />}
+      {result.status === "ok" && <><ReceiptShareButton receipt={result.receipt} source={`/api/admin/orders/${orderNumber}/receipt`} /><ReceiptPrintButton /></>}
     </div>
     {result.status === "ok" ? <>
-      <p className={styles.printHelp}>Para guardar una copia, elegí “Guardar como PDF” en el diálogo de impresión. El estado corresponde a esta consulta; una copia guardada no se actualiza automáticamente.</p>
+      <p className={styles.printHelp}>Compartí el PDF o descargalo para enviarlo desde tu teléfono. También podés usar Imprimir / Guardar PDF. Una copia guardada no se actualiza automáticamente.</p>
       <OrderReceipt receipt={result.receipt} />
     </> : <section role="alert" className={styles.incident}>
       <h1>{result.status === "incident" ? "Comprobante pendiente de revisión" : "Comprobante no disponible"}</h1>
