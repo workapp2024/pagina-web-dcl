@@ -3,6 +3,8 @@ import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { InvalidWebhookSignatureError, WebhookSignatureValidator } from "mercadopago";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminServerClient } from "@/lib/supabase/server";
+import { wholesaleCheckoutPreparedEnabled } from "@/lib/prepared-finance-features";
+import { reconcileWholesaleCheckoutPayment } from "@/lib/wholesale-checkout";
 
 // Este handler recibe eventos payment de Checkout Pro. Los eventos Order de
 // Card Payment Brick continúan en /api/payments/mercadopago/webhook.
@@ -35,8 +37,14 @@ export async function POST(request: NextRequest) {
   const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
   if (!token) return NextResponse.json({ ok: false }, { status: 503 });
   try {
-    await reconcileCheckoutPro(createAdminServerClient(), paymentId, token);
-    scheduleAnalyticsFlush();
+    const db = createAdminServerClient();
+    let wholesale = false;
+    await reconcileCheckoutPro(db, paymentId, token, async payment => {
+      wholesale = true;
+      if (!wholesaleCheckoutPreparedEnabled()) throw new Error("Wholesale checkout disabled");
+      return reconcileWholesaleCheckoutPayment(db as unknown as Parameters<typeof reconcileWholesaleCheckoutPayment>[0], paymentId, token, payment);
+    });
+    if (!wholesale) scheduleAnalyticsFlush();
     return NextResponse.json({ ok: true });
   } catch {
     developmentLog("verification_or_recovery_failed", { paymentId });

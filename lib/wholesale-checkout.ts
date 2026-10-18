@@ -30,7 +30,7 @@ export async function prepareWholesaleCheckout(db:DB,customer:string,order:strin
     const claim=await db.rpc("claim_wholesale_checkout",{p_customer:customer,p_intent:intent.id});
     if(claim.error)throw Error("Checkout claim unavailable");
     if(claim.data===true){
-      const response=await fetch("https://api.mercadopago.com/checkout/preferences",{method:"POST",redirect:"error",cache:"no-store",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json","X-Idempotency-Key":intent.id},body:JSON.stringify({external_reference:`wholesale:${intent.id}`,items:[{id:intent.order_id,title:"Pedido mayorista DCL",quantity:1,currency_id:intent.currency.trim(),unit_price:Number(intent.amount)}],metadata:{sector:"mayoristas",wholesale_intent_id:intent.id,wholesale_order_id:intent.order_id,wholesale_revision_id:intent.revision_id},notification_url:new URL("/api/wholesale/checkout/webhook",origin.origin).toString(),back_urls:{success:new URL("/mayoristas?seccion=pedidos",origin.origin).toString(),pending:new URL("/mayoristas?seccion=pedidos",origin.origin).toString(),failure:new URL("/mayoristas?seccion=pedidos",origin.origin).toString()},auto_return:"approved",expires:true,expiration_date_to:intent.expires_at})});
+      const response=await fetch("https://api.mercadopago.com/checkout/preferences",{method:"POST",redirect:"error",cache:"no-store",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json","X-Idempotency-Key":intent.id},body:JSON.stringify({external_reference:`wholesale:${intent.id}`,items:[{id:intent.order_id,title:"Pedido mayorista DCL",quantity:1,currency_id:intent.currency.trim(),unit_price:Number(intent.amount)}],metadata:{sector:"mayoristas",wholesale_intent_id:intent.id,wholesale_order_id:intent.order_id,wholesale_revision_id:intent.revision_id},notification_url:new URL("/api/payments/mercadopago/checkout-pro-webhook",origin.origin).toString(),back_urls:{success:new URL("/mayoristas?seccion=pedidos",origin.origin).toString(),pending:new URL("/mayoristas?seccion=pedidos",origin.origin).toString(),failure:new URL("/mayoristas?seccion=pedidos",origin.origin).toString()},auto_return:"approved",expires:true,expiration_date_to:intent.expires_at})});
       if(!response.ok)throw Error("Provider request result uncertain; do not create another preference");
       preference=await response.json();
     } else {
@@ -50,6 +50,12 @@ export async function prepareWholesaleCheckout(db:DB,customer:string,order:strin
 
 export async function reconcileWholesaleCheckout(db:DB,paymentId:string,token:string) {
   const payment=await providerGet(`/v1/payments/${encodeURIComponent(paymentId)}`,token);
+  return reconcileWholesaleCheckoutPayment(db,paymentId,token,payment);
+}
+
+// Internal server entry point for the shared webhook after its provider GET.
+// Merchant order, preference, amount and intent proofs remain mandatory below.
+export async function reconcileWholesaleCheckoutPayment(db:DB,paymentId:string,token:string,payment:Record<string,unknown>) {
   const reference=typeof payment.external_reference === "string" && payment.external_reference.startsWith("wholesale:") ? payment.external_reference.slice(10) : null;
   if(String(payment.id)!==paymentId||!isUuid(reference))throw Error("Provider identity mismatch");
   const lookup=await db.from("wholesale_checkout_intents").select("id,customer_id,order_id,revision_id,amount,currency,expires_at,preference_id").eq("id",reference).maybeSingle();

@@ -23,7 +23,7 @@ test('checkout provider creation is claimed once; uncertain retries recover inst
   let postCount=0,claim=true;const calls=[];
   const {prepareWholesaleCheckout}=load('lib/wholesale-checkout.ts',{
     '@/lib/store/mercadopago-recovery':{providerGet:async path=>path.includes('/search?')?{elements:[{id:'fixture-pref'}]}:preference},
-  },{fetch:async(url,init)=>{postCount++;assert.equal(url,'https://api.mercadopago.com/checkout/preferences');const body=JSON.parse(init.body);assert.equal(body.external_reference,`wholesale:${id}`);assert.equal(body.metadata.sector,'mayoristas');assert.equal(body.items[0].unit_price,40);return Response.json(preference);}});
+  },{fetch:async(url,init)=>{postCount++;assert.equal(url,'https://api.mercadopago.com/checkout/preferences');const body=JSON.parse(init.body);assert.equal(body.external_reference,`wholesale:${id}`);assert.equal(body.metadata.sector,'mayoristas');assert.equal(body.items[0].unit_price,40);assert.equal(body.notification_url,'https://dcl.test/api/payments/mercadopago/checkout-pro-webhook');return Response.json(preference);}});
   const db={rpc:async(name,args)=>{calls.push([name,args]);return {data:name==='begin_wholesale_checkout'?intent:name==='claim_wholesale_checkout'?claim:null,error:null};}};
   await prepareWholesaleCheckout(db,customer,intent.order_id,40,id,'test-token','https://dcl.test');claim=false;
   await prepareWholesaleCheckout(db,customer,intent.order_id,40,id,'test-token','https://dcl.test');

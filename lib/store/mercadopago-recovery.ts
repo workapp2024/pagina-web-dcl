@@ -73,9 +73,15 @@ export async function providerGet(path: string, token: string): Promise<Record<s
   return response.json();
 }
 
-export async function reconcileCheckoutPro(db: DB, paymentId: string, token: string) {
+export async function reconcileCheckoutPro(db: DB, paymentId: string, token: string,
+  onWholesalePayment?: (payment: Record<string, unknown>) => Promise<unknown>) {
   const payment = await providerGet(`/v1/payments/${encodeURIComponent(paymentId)}`, token);
   if (String(payment.id) !== paymentId) throw new Error("Provider payment ID mismatch");
+  // Route only from provider-owned facts, never from the callback body or URL.
+  // Without an explicit wholesale handler, retain the original retail rejection.
+  if (typeof payment.external_reference === "string" && payment.external_reference.startsWith("wholesale:") && onWholesalePayment) {
+    return onWholesalePayment(payment);
+  }
   const transaction = await findTransaction(db, payment.external_reference);
   const origin = payment.order as { id?: string | number; type?: string } | undefined;
   // GET payment -> merchant order -> preference is provider-owned evidence, not redirect/query data.
