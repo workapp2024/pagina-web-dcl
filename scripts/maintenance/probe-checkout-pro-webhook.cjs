@@ -2,6 +2,9 @@
 const { createHmac, randomUUID } = require('node:crypto');
 
 async function main() {
+  if (process.env.VERCEL === '1' || process.env.CI) {
+    throw new Error('Manual diagnostic only: never run this probe in a build or deployment.');
+  }
   const [target, ...extra] = process.argv.slice(2);
   const url = new URL(target);
   if (extra.length || url.username || url.password || url.search || url.hash ||

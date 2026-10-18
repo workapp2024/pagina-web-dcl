@@ -1,5 +1,17 @@
 # Validación del webhook mayorista sin cobros — 18/10/2026
 
+## Corrección del procedimiento de compilación
+
+Auditoría del 18/10/2026: el despliegue `dpl_6uUD9bZ1kXTazEWPDq3JS15NboDY` falló con `MODULE_NOT_FOUND` porque su comando particular de Vercel intentó ejecutar `scripts/maintenance/probe-checkout-pro-webhook.cjs`, excluido por `.vercelignore`. Ese comando fue introducido durante la comprobación anterior mediante `projectSettings.buildCommand` de la API de despliegues; no provenía de `package.json` ni de un archivo `vercel.json`.
+
+El dominio público apunta al despliegue exitoso `dpl_6f7aof1vUJiLNXwNcnmwfV2mkc3R`, commit `cfae4cd52ee504fe10d8ade79272dcd247e9ca55`. Su comando particular recuperó el ejecutor desde Git y ejecutó el diagnóstico antes del build. La configuración actual del proyecto tiene `buildCommand=null` (valor predeterminado), pero no se debe reutilizar el comando particular de aquel despliegue mediante Redeploy.
+
+Corrección preparada localmente: `vercel.json` fija `buildCommand` a `npm run build`; `package.json` conserva `next build` sin hooks de diagnóstico. La sonda rechaza ejecución con `VERCEL=1` o `CI` definido antes de acceder a la red o necesitar el secreto. No introducir la sonda en build, install, hooks, comandos alternativos ni futuros despliegues. Conservar su ejecución manual desde una terminal privada fuera de CI, según el procedimiento siguiente. El secreto sensible de Vercel no es recuperable por API: disponer del secreto original en el gestor privado para pruebas manuales; su inaccesibilidad no justifica ejecutar diagnósticos desde un build.
+
+El usuario autorizó explícitamente el 18/10/2026 commit, push y despliegue de esta corrección, manteniendo mayoristas apagado y sin lanzamiento comercial. Crear un despliegue normal del nuevo commit, sin heredar overrides de los despliegues de diagnóstico. La auditoría anterior no hizo commit, push, deploy ni cambios remotos. La bandera de activación estaba ausente en Production y debe verificarse nuevamente antes de publicar. La evidencia de lectura está en `.local-test-regularization/webhook-diagnostic/build-audit.json`, excluida de Git.
+
+Comprobación pública de lectura: tienda `/` 200, checkout `/checkout` 200 y administrador `/admin` 307 hacia `/admin/login`. Esto verifica disponibilidad y protección de acceso, no una sesión administrativa ni un cobro completo. Las regresiones de pagos se verifican aisladamente, sin crear operaciones productivas.
+
 Este procedimiento reemplaza la instrucción de elegir Checkout Pro en el simulador contenida en `checkout-mayorista-webhook-compartido.md`. El usuario comprobó que el selector solamente ofrece las URLs globales de prueba y producción, ambas en `/api/payments/mercadopago/webhook`. No envió notificaciones ni cambió configuración.
 
 ## Integración existente
