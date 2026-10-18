@@ -32,8 +32,13 @@ export async function GET(_request: Request, context: Context) {
     ]);
     if (payments.error || corrections.error || returns.error || recognitions.error || reversals.error || accountingJournals.error) throw new Error("ledger_read_failed");
     const paymentIds = (payments.data ?? []).map((entry: { id: string }) => entry.id);
-    const postings = paymentIds.length ? await db.from("wholesale_financial_postings").select("payment_entry_id,status").in("payment_entry_id",paymentIds) : {data:[],error:null};
+    const postings = paymentIds.length ? await db.from("wholesale_financial_postings").select("payment_entry_id,status,account_id,cash_movement_id").in("payment_entry_id",paymentIds) : {data:[],error:null};
     if (postings.error) throw new Error("ledger_read_failed");
+    const [mappings, accounts] = await Promise.all([
+      db.from("wholesale_financial_account_mappings").select("payment_method,account_id"),
+      db.from("financial_accounts").select("id,name").eq("active", true),
+    ]);
+    if (mappings.error || accounts.error) throw new Error("ledger_read_failed");
     const correctionIds = (corrections.data ?? []).map((entry: { id: string }) => entry.id);
     const returnIds = (returns.data ?? []).map((entry: { id: string }) => entry.id);
     const recognitionIds = (recognitions.data ?? []).map((entry: { id: string }) => entry.id);
@@ -52,7 +57,14 @@ export async function GET(_request: Request, context: Context) {
       : { data: [], error: null };
     if (reconciliation.error || correctionItems.error || returnItems.error || recognitionItems.error || recognitionDeliveries.error) throw new Error("ledger_read_failed");
     return NextResponse.json({ ok: true, data: {
-      payments: (payments.data ?? []).map((entry: {id:string})=>({...entry,posting_status:(postings.data ?? []).find((posting: {payment_entry_id:string})=>posting.payment_entry_id===entry.id)?.status ?? null})), reconciliations: reconciliation.data ?? [],
+      paymentAccounts: (mappings.data ?? []).flatMap((mapping: {payment_method:string;account_id:string}) => {
+        const account = (accounts.data ?? []).find((row: {id:string}) => row.id === mapping.account_id);
+        return account ? [{method:mapping.payment_method,name:account.name}] : [];
+      }),
+      payments: (payments.data ?? []).map((entry: {id:string})=>{
+        const posting = (postings.data ?? []).find((row: {payment_entry_id:string})=>row.payment_entry_id===entry.id);
+        return {...entry,posting_status:posting?.status ?? null,financial_account_name:(accounts.data ?? []).find((row: {id:string})=>row.id===posting?.account_id)?.name ?? null};
+      }), reconciliations: reconciliation.data ?? [],
       accountingJournals: accountingJournals.data ?? [],
       recognitions: (recognitions.data ?? []).map((entry: { id: string }) => ({
         ...entry,
