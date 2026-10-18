@@ -4,6 +4,7 @@ import { getAdminIdentity } from "@/lib/admin-auth";
 import { apiError } from "@/lib/api";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { readWholesaleVisibility } from "@/lib/wholesale-order-visibility-server";
+import { readTransferNotices,wholesalePaymentNoticesEnabled } from "@/lib/wholesale-payment-notices";
 
 const STATUSES = ["received", "in_review", "awaiting_customer", "confirmed", "rejected", "cancelled"] as const;
 const PAGE_SIZE = 25;
@@ -61,7 +62,16 @@ export async function GET(request: Request) {
       if (archived === "true" && !visibility.ids.length) return NextResponse.json({ok:true,data:[],pagination:{page,pageSize:PAGE_SIZE,total:0,totalPages:0}},{headers:{"Cache-Control":"no-store"}});
       if (visibility.ids.length) query = archived === "true" ? query.in("id",visibility.ids) : query.not("id","in",`(${visibility.ids.join(",")})`);
     }
-    if (status === "attention") query = query.in("status", ["received", "in_review"]);
+    if (status === "attention") {
+      const noticeOrders=new Set<string>();
+      if(wholesalePaymentNoticesEnabled())for(let offset=0;;offset+=500){
+        const result=await db.from("wholesale_transfer_notices").select("id,order_id").eq("status","pending").order("id").range(offset,offset+499);
+        if(result.error)throw Error('Notice list unavailable');
+        for(const notice of result.data??[])noticeOrders.add(notice.order_id);
+        if((result.data??[]).length<500)break;
+      }
+      query=noticeOrders.size?query.or(`status.in.(received,in_review),id.in.(${[...noticeOrders].join(',')})`):query.in("status",["received","in_review"]);
+    }
     else if (status !== "all") query = query.eq("status", status);
     if (from) query = query.gte("created_at", `${from}T00:00:00-03:00`);
     if (to) query = query.lt("created_at", `${to}T00:00:00-03:00`);
@@ -71,6 +81,7 @@ export async function GET(request: Request) {
     const orders = await query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(start, start + PAGE_SIZE - 1) as { data: { id: string; order_number: string; customer_id: string; current_revision_id: string; status: string; created_at: string; confirmed_at: string | null }[] | null; count: number | null; error: { message: string } | null };
     if (orders.error) throw new Error(orders.error.message);
     const rows = orders.data ?? [];
+    const transferNotices=await readTransferNotices(db,rows.map(row=>row.id));
     const customerIdSet = [...new Set(rows.map(row => row.customer_id))];
     const revisionIds = [...new Set(rows.map(row => row.current_revision_id))];
     const [customers, revisions] = await Promise.all([
@@ -82,6 +93,7 @@ export async function GET(request: Request) {
     const totals = new Map((revisions.data ?? []).map(row => [row.id, { total: Number(row.total_amount), currency: row.currency, revisionStatus: row.status }]));
     const data = rows.map(row => ({
       id: row.id, orderNumber: row.order_number, customerId: row.customer_id,
+      transferNoticePending:transferNotices.some(n=>n.order_id===row.id&&n.status==='pending'),
       customerName: customerNames.get(row.customer_id) ?? "Cliente", status: row.status,
       createdAt: row.created_at, confirmedAt: row.confirmed_at,
       ...(totals.get(row.current_revision_id) ?? { total: null, currency: null }),

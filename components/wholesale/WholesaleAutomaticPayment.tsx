@@ -13,6 +13,7 @@ export function WholesaleAutomaticPayment({orderId,due,pending}:{orderId:string;
       const payload=attempt??{amount:value,idempotencyKey:createClientUuid()};setAttempt(payload);
       const response=await fetch(`/api/wholesale/orders/${orderId}/checkout`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
       const body=await response.json();if(!response.ok||!body.checkoutUrl)throw Error(body.error||"No pudimos preparar el pago.");
+      try { window.sessionStorage.setItem(`dcl.wholesale.payment-return.${orderId}`,payload.idempotencyKey); } catch { /* Optional navigation hint; never payment proof. */ }
       window.location.assign(body.checkoutUrl);
     }catch(cause){setError(cause instanceof Error?cause.message:"Reintentá el mismo pago. No crees otro intento.");}
     finally{inFlight.current=false;setBusy(false);}

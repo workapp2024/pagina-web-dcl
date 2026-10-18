@@ -8,6 +8,8 @@ export type WholesaleCustomerOrderItem = {
 };
 
 export type WholesaleCustomerOrder = {
+  whatsapp?: string | null;
+  transfer_notices?: import("@/lib/wholesale-payment-notices").TransferNotice[];
   payment_summary?: import("@/lib/wholesale-customer-payment").CustomerPaymentSummary | null;
   id: string;
   order_number: string;

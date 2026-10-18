@@ -1,5 +1,5 @@
 "use client";
-import { matchesWholesaleOrder, customerTrackingEvents, isWholesaleDeliveryComplete } from "@/lib/wholesale-order-presentation";
+import { matchesWholesaleOrder, customerTrackingEvents, isWholesaleDeliveryComplete, customerOrderNextAction, matchingOpenWholesaleOrder } from "@/lib/wholesale-order-presentation";
 import { useWholesaleOrderVisibility } from "@/components/wholesale/useWholesaleOrderVisibility";
 import { WholesaleOrderTracking } from "@/components/wholesale/WholesaleOrderTracking";
 import { WholesaleOrderPayment } from "@/components/wholesale/WholesaleOrderPayment";
@@ -16,7 +16,7 @@ import type { WholesaleVehicleMatch } from "@/lib/wholesale-catalog-search";
 import { getPublicVehicleTypes, searchPublicVehicleCompatibilities } from "@/lib/supabase/vehicle-compatibility";
 import { addWholesaleProduct, getWholesaleSelectionTotals, persistWholesaleSelection, restoreWholesaleSelection, restoreWholesaleSelectionFromStorage, serializeWholesaleSelection, setWholesaleQuantity, WHOLESALE_SELECTION_STORAGE_KEY } from "@/lib/wholesale-order-selection";
 import type { WholesaleOrderAttempt, WholesaleOrderSelection } from "@/lib/wholesale-order-selection";
-import { buildWholesaleCustomerOrderCards, getOpenWholesaleAttempts, isWholesaleOrderActive, newRequestConfirmation, recoveredOrderMessage, wholesaleOrderNextAction, wholesaleOrderStatusLabel, wholesaleSelectionMatchesAttempt, wholesaleSelectionMatchesOrder } from "@/lib/wholesale-customer-orders";
+import { buildWholesaleCustomerOrderCards, getOpenWholesaleAttempts, recoveredOrderMessage, wholesaleOrderStatusLabel, wholesaleSelectionMatchesAttempt } from "@/lib/wholesale-customer-orders";
 import type { WholesaleCustomerOrder } from "@/lib/wholesale-customer-orders";
 import type { WholesaleCatalogItem } from "@/lib/wholesale-server";
 
@@ -49,6 +49,8 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
   const [cartFeedback, setCartFeedback] = useState("");
   const [detailsProduct, setDetailsProduct] = useState<{ product: WholesaleCatalogItem; compatibility?: string } | null>(null);
   const submissionInFlight = useRef(false);
+  const submissionAttempt = useRef<{id:string;selection:WholesaleOrderSelection} | null>(null);
+  const [duplicateOrder, setDuplicateOrder] = useState<WholesaleCustomerOrder | null>(null);
   const selectionVersionRef = useRef(0);
   const catalogRequestRef = useRef(0);
   const attemptsRequestRef = useRef(0);
@@ -218,7 +220,6 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
   const money = useMemo(() => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }), []);
   const orderCards = buildWholesaleCustomerOrderCards(orders, attempts);
   const openAttempts = getOpenWholesaleAttempts(attempts);
-  const activeOrderNumbers = orderCards.filter(({ order }) => isWholesaleOrderActive(order.status)).map(({ order }) => order.order_number);
 
   function saveSelection(next: WholesaleOrderSelection) {
     selectionVersionRef.current += 1;
@@ -254,6 +255,7 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
   }
 
   function updateQuantity(productId: string, quantity: number, product?: WholesaleCatalogItem) {
+    setDuplicateOrder(null);
     if (submissionInFlight.current) return;
     const result = setWholesaleQuantity(selectionRef.current, productId, quantity, product);
     if (!result.changed) return;
@@ -278,7 +280,7 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
     setBusy(true); setOrderError(""); setOrderMessage("");
     try {
       if (!await postAttempt(attemptId)) return;
-      setOrderMessage("El envío se completó. Revisá Mis pedidos para consultar el número y el estado; el carrito actual se conservó por separado.");
+      setOrderMessage("Solicitud recibida. Podés seguirla en Mis pedidos.");
       await Promise.all([refreshAttempts(), refreshOrders()]);
     } catch (cause) {
       setOrderError(cause instanceof Error ? cause.message : "No se pudo enviar la solicitud. Intentá nuevamente.");
@@ -299,22 +301,33 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
       setOrderError("Primero reintentá o cerrá la solicitud pendiente. Después podrás iniciar una solicitud independiente.");
       return;
     }
-    const matchesExistingOrder = orderCards.some(({ order }) => wholesaleSelectionMatchesOrder(currentSelection, order.items));
-    const confirmation = newRequestConfirmation(activeOrderNumbers, newIntent);
-    if (confirmation && (newIntent || !matchesExistingOrder) && !window.confirm(confirmation)) return;
+    const matching = matchingOpenWholesaleOrder(orders, currentSelection);
+    if (!newIntent && !pendingAttempt && !submissionAttempt.current && matching) {
+      setDuplicateOrder(matching); setCartOpen(true); return;
+    }
+    setDuplicateOrder(null);
     submissionInFlight.current = true;
     setBusy(true); setOrderError(""); setOrderMessage("");
     const items = Object.values(currentSelection).map(({ product, quantity }) => ({ productId: product.id, quantity }));
     try {
+      if (submissionAttempt.current) {
+        if (!await postAttempt(submissionAttempt.current.id)) return;
+        clearSubmittedSelection(submissionAttempt.current.selection);
+        submissionAttempt.current = null;
+        setOrderMessage("Solicitud recibida. Podés seguirla en Mis pedidos.");
+        await Promise.all([refreshAttempts(), refreshOrders()]);
+        return;
+      }
       const attemptResponse = await fetch("/api/wholesale/orders/attempts", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newIntent ? { items, newIntent: true } : { items }),
+        body: JSON.stringify({ items, newIntent: true }),
       });
       const attemptBody = await attemptResponse.json();
       if (attemptResponse.status === 401) { router.replace("/mayoristas/ingresar"); return; }
       if (!attemptResponse.ok || !attemptBody.ok) throw new Error(attemptBody.error || "No se pudo iniciar el intento.");
       const attemptId = attemptBody.data?.attemptId;
       if (typeof attemptId !== "string") throw new Error("No se pudo recuperar el intento del servidor.");
+      submissionAttempt.current = {id:attemptId,selection:currentSelection};
       if (attemptBody.data?.recovered === true) {
         const recoveredOrder = orderCards.find(({ order }) => order.id === attemptBody.data.orderId)?.order;
         setOrderMessage(recoveredOrderMessage(recoveredOrder?.order_number));
@@ -323,8 +336,9 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
         return;
       }
       if (!await postAttempt(attemptId)) return;
+      submissionAttempt.current = null;
       clearSubmittedSelection(currentSelection);
-      setOrderMessage("El envío se completó. DCL debe verificar disponibilidad y confirmar las condiciones antes de que exista una compra confirmada. Consultá el estado en Mis pedidos.");
+      setOrderMessage("Solicitud recibida. Próximo paso: DCL la revisará. Consultá su estado en Mis pedidos.");
       setCartOpen(true);
       await Promise.all([refreshAttempts(), refreshOrders()]);
     } catch (cause) {
@@ -346,22 +360,6 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
     } catch (cause) {
       setOrderError(cause instanceof Error ? cause.message : "No se pudo cerrar el intento.");
       await Promise.all([refreshAttempts(), refreshOrders()]).catch(() => undefined);
-    } finally { setBusy(false); }
-  }
-
-  async function acknowledgeAttempt(attemptId: string) {
-    setBusy(true); setOrderError("");
-    try {
-      const response = await fetch("/api/wholesale/orders/attempts/acknowledge", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attemptId }),
-      });
-      const body = await response.json();
-      if (response.status === 401) { router.replace("/mayoristas/ingresar"); return; }
-      if (!response.ok || !body.ok) throw new Error(body.error || "No se pudo reconocer el resultado.");
-      await Promise.all([refreshAttempts(), refreshOrders()]);
-    } catch (cause) {
-      setOrderError(cause instanceof Error ? cause.message : "No se pudo reconocer el resultado.");
-      await refreshAttempts().catch(() => undefined);
     } finally { setBusy(false); }
   }
 
@@ -443,11 +441,11 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
 
     </div>
     {(openAttempts.length > 0 || attemptsLoading || attemptsError) && <section aria-label="Solicitudes pendientes de envío" className="mb-6 space-y-3">
-      {attemptsLoading && <p role="status" className="rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-400">Cargando intentos recuperables…</p>}
+      {attemptsLoading && <p role="status" className="rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-400">Actualizando solicitudes…</p>}
       {attemptsError && <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-sm text-amber-100 sm:p-4"><p role="alert">{attemptsError}</p><button type="button" onClick={() => void refreshAttempts()} className="mt-2 min-h-11 rounded-full border border-amber-200/40 px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)]">Reintentar intentos</button></div>}
       {openAttempts.map(attempt => <article key={attempt.attemptId} className="rounded-2xl border border-amber-300/40 bg-amber-950/20 p-3 sm:p-4">
         <h2 className="font-bold text-amber-100">Hay una solicitud pendiente de envío</h2>
-        <p className="mt-1 text-sm leading-6 text-zinc-300">Todavía no hay un pedido registrado para esta solicitud. Este intento conserva sus artículos originales. Podés reintentar el envío o cerrarlo si querés empezar otra solicitud; el carrito actual se mantiene aparte.</p>
+        <p className="mt-1 text-sm leading-6 text-zinc-300">No pudimos completar el envío. Podés reintentar o descartar esta solicitud; tu carrito se conserva.</p>
         <ul className="mt-3 space-y-1 text-sm text-zinc-200">{attempt.items.map(item => {
           const product = uniqueProducts.find(candidate => candidate.id === item.productId);
           return <li key={item.productId}>{item.quantity} × {product?.name || item.productId}</li>;
@@ -473,16 +471,16 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
     </section>}
     {(orderCards.length > 0 || ordersLoading) && <section aria-label="Mis pedidos" className="mb-6 space-y-3">
       <h2 className="text-lg font-bold text-white">Mis pedidos</h2>
-      {visibleOrderCards.filter(({order}) => matchesWholesaleOrder(order, orderSearch, orderStatus)).map(({ order, recoveryAttempt }) => <article key={order.id} className="min-w-0 rounded-2xl border border-white/10 bg-zinc-950/70 p-4 sm:p-5">
+      {visibleOrderCards.filter(({order}) => matchesWholesaleOrder(order, orderSearch, orderStatus)).map(({ order }) => <article key={order.id} className="min-w-0 rounded-2xl border border-white/10 bg-zinc-950/70 p-4 sm:p-5">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0"><p className="break-words text-base font-bold text-white">{order.order_number}</p><p className={`mt-1 rounded-lg px-2 py-1 text-sm font-semibold ${commercialStateClass(order.status)}`}>Estado comercial: {wholesaleOrderStatusLabel(order.status, order.revision_status)}</p><p className="mt-2 text-sm text-zinc-400">Entrega: {isWholesaleDeliveryComplete(order) ? "✓ Completa" : "Sin entrega completa registrada"}</p></div>
+          <div className="min-w-0"><p className="break-words text-base font-bold text-white">{order.order_number}</p><p className={`mt-1 rounded-lg px-2 py-1 text-sm font-semibold ${commercialStateClass(order.status)}`}>Estado comercial: {wholesaleOrderStatusLabel(order.status, order.revision_status)}</p><p className={`mt-2 text-sm ${isWholesaleDeliveryComplete(order)?"text-emerald-200":"text-amber-200"}`}>Entrega: {isWholesaleDeliveryComplete(order) ? "✓ Completa" : "Sin entrega completa registrada"}</p></div>
           <p className="shrink-0 text-right text-sm font-bold text-white">{order.total_amount == null ? "Total a confirmar" : money.format(order.total_amount)}</p>
         </div>
         <button type="button" aria-expanded={expandedOrder === order.id} onClick={() => setExpandedOrder(expandedOrder === order.id ? "" : order.id)} className="mt-3 min-h-11 rounded-xl border border-white/15 px-4 text-sm text-red-200">{expandedOrder === order.id ? "Cerrar detalle" : "Ver detalle"}</button><p className="mt-1 text-xs text-zinc-400">{new Date(order.created_at).toLocaleDateString("es-AR")}</p>
         {visibility.available && (["cancelled","rejected"].includes(order.status) || isWholesaleDeliveryComplete(order)) && <button type="button" disabled={visibility.busy} className="ml-2 mt-3 min-h-11 rounded-xl border border-white/15 px-4 text-sm text-zinc-300" onClick={()=>void visibility.setArchived(order.id,!visibility.ids.includes(order.id))}>{visibility.ids.includes(order.id) ? "Restaurar pedido" : "Ocultar de mis pedidos"}</button>}
-        {order.status === "confirmed" && <WholesaleOrderPayment order={order} />}
+        {order.status === "confirmed" && <WholesaleOrderPayment order={order} onUpdated={refreshOrders} />}
         <div hidden={expandedOrder !== order.id}>
-        <WholesaleOrderTracking events={customerTrackingEvents(order)} outcome={order.status} delivered={isWholesaleDeliveryComplete(order)} nextAction={wholesaleOrderNextAction(order.status, order.revision_status)} />
+        <WholesaleOrderTracking events={customerTrackingEvents(order)} outcome={order.status} delivered={isWholesaleDeliveryComplete(order)} nextAction={customerOrderNextAction(order)} />
         {order.status !== "awaiting_customer" && order.commercial_conditions && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-zinc-300">{order.commercial_conditions}</p>}
         {order.status === "awaiting_customer" && order.requires_customer_approval && order.revision_id && <section aria-label={`Propuesta vigente ${order.order_number}`} className="mt-4 rounded-xl border border-amber-300/30 bg-amber-950/20 p-4">
           <h3 className="font-semibold text-amber-100">Propuesta recibida{order.revision_version ? ` · revisión v${order.revision_version}` : ""}: revisá y respondé</h3>
@@ -494,14 +492,8 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
           <p className="mt-3 text-xs leading-5 text-zinc-400">Aceptar no confirma el pedido, no registra un pago y no acredita una entrega. DCL debe confirmar el pedido comercial.</p>
         </section>}
         <ul className="mt-3 space-y-2 border-t border-white/10 pt-3 text-sm text-zinc-200">{order.items.map(item => <li key={item.productId} className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1"><span className="min-w-0 break-words">{item.quantity} × {item.name}</span><span className="shrink-0 text-zinc-300">{money.format(item.lineTotal)}</span></li>)}</ul>
-        {recoveryAttempt && <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-950/20 p-3">
-          <p className="text-sm leading-6 text-emerald-100">Este pedido ya figura en Mis pedidos. La recuperación se vinculó aquí; no es una solicitud adicional.</p>
-          <button type="button" disabled={busy} onClick={() => void acknowledgeAttempt(recoveryAttempt.attemptId)} className="mt-3 min-h-10 rounded-full border border-emerald-200/40 px-4 text-sm font-semibold text-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Cerrar este aviso de recuperación</button>
-          <p className="mt-2 text-xs leading-5 text-zinc-400">Esto cierra el aviso de recuperación; no modifica ni cancela el pedido.</p>
-        </div>}
         </div>
       </article>)}
-      {Object.keys(selection).length > 0 && <button type="button" disabled={busy} onClick={() => void submitOrder(true)} className="min-h-11 rounded-full border border-[color:var(--red)] px-4 text-sm font-semibold text-[var(--red)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">Crear una solicitud independiente con el carrito</button>}
     </section>}
 
     {!ordersLoading && orderCards.length > 0 && !visibleOrderCards.some(({order}) => matchesWholesaleOrder(order, orderSearch, orderStatus)) && <p role="status" className="py-5 text-sm text-zinc-400">No hay pedidos para estos filtros.</p>}
@@ -532,7 +524,7 @@ export function WholesaleCatalog({initialSection = "catalog"}:{initialSection?:"
         <span className="text-left"><span className="block">{money.format(indicativeTotal)}</span><span className="block text-xs font-medium">{totalUnits} {totalUnits === 1 ? "unidad" : "unidades"} · {Object.keys(selection).length} {Object.keys(selection).length === 1 ? "producto" : "productos"}</span></span><span className="shrink-0">Ver carrito</span>
       </button>
     </div>}
-    <WholesaleCartDrawer open={cartOpen} onClose={() => setCartOpen(false)} selection={selection} busy={busy} error={orderError} message={orderMessage} onQuantityChange={updateQuantity} onSubmit={() => void submitOrder()} />
+    <WholesaleCartDrawer open={cartOpen} onClose={() => setCartOpen(false)} selection={selection} busy={busy} error={orderError} message={orderMessage} onQuantityChange={updateQuantity} onSubmit={() => void submitOrder()} duplicate={duplicateOrder ? {orderNumber:duplicateOrder.order_number,onView:()=>{setCartOpen(false);setPortalSection("orders");setOrderStatus("all");setOrderSearch(duplicateOrder.order_number);setExpandedOrder(duplicateOrder.id);},onCreate:()=>void submitOrder(true)} : undefined} />
     <WholesaleProductDetails product={detailsProduct?.product ?? null} compatibility={detailsProduct?.compatibility} onClose={() => setDetailsProduct(null)} />
   </main>;
 }

@@ -75,7 +75,7 @@ function WholesaleCartItem({
 }
 
 export function WholesaleCartDrawer({
-  open, onClose, selection, busy, error, message, onQuantityChange, onSubmit,
+  open, onClose, selection, busy, error, message, onQuantityChange, onSubmit, duplicate,
 }: {
   open: boolean;
   onClose: () => void;
@@ -85,6 +85,7 @@ export function WholesaleCartDrawer({
   message: string;
   onQuantityChange: (productId: string, quantity: number) => void;
   onSubmit: () => void;
+  duplicate?: {orderNumber:string;onView:()=>void;onCreate:()=>void};
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const items = Object.values(selection);
@@ -124,7 +125,7 @@ export function WholesaleCartDrawer({
         <p className="mt-3 text-right text-lg font-bold">Total orientativo: {money.format(indicativeTotal)}</p>
         <p className="mt-2 text-sm leading-6 text-zinc-400">Enviar crea una solicitud para revisión. DCL debe verificar disponibilidad y confirmar las condiciones antes de que exista una compra confirmada.</p>
         {error && <p role="alert" className="mt-3 rounded-lg bg-red-950/50 p-3 text-sm text-red-200">{error}</p>}
-        <button type="button" disabled={busy} onClick={onSubmit} className="mt-4 min-h-12 w-full rounded-full bg-[var(--red)] px-5 text-sm font-bold text-[var(--background)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">{busy ? "Enviando solicitud…" : "Enviar solicitud"}</button>
+        {duplicate ? <div role="status" className="mt-4 space-y-3 rounded-xl border border-amber-300/30 p-3 text-sm text-amber-100"><p>Ya tenés un pedido con estos artículos: {duplicate.orderNumber}.</p><button type="button" disabled={busy} onClick={duplicate.onView} className="min-h-12 w-full rounded-xl border border-white/20 px-4">Ver pedido existente</button><button type="button" disabled={busy} onClick={duplicate.onCreate} className="min-h-12 w-full rounded-xl bg-[var(--red)] px-4 font-bold text-white">{busy ? "Enviando…" : "Crear otro pedido"}</button></div> : <button type="button" disabled={busy} onClick={onSubmit} className="mt-4 min-h-12 w-full rounded-full bg-[var(--red)] px-5 text-sm font-bold text-[var(--background)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--red)] disabled:opacity-50">{busy ? "Enviando solicitud…" : "Enviar solicitud"}</button>}
       </> : <p className="py-8 text-sm leading-6 text-zinc-300">Todavía no agregaste productos. Buscá por producto, conector, categoría o vehículo para empezar.</p>}
     </section>
   </dialog>;

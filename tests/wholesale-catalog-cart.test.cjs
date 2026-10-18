@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -141,7 +140,7 @@ test('add increments an existing product once, quantity updates reject invalid v
   assert.equal(removedProduct.selection['h7-led'], undefined);
   const source = fs.readFileSync('components/wholesale/WholesaleCatalog.tsx', 'utf8');
   assert.match(source, /setWholesaleQuantity\(selectionRef\.current, productId, quantity, product\)/);
-  assert.match(source, /carrito actual se mantiene aparte/);
+  assert.match(source, /tu carrito se conserva/);
   assert.match(source, /window\.addEventListener\("storage", syncSelection\)/);
   assert.match(source, /savedSelection !== serializeWholesaleSelection\(submitted\)/);
   assert.match(source, /cartFeedback/);

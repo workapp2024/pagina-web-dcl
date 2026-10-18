@@ -4,6 +4,7 @@ import { getAdminIdentity } from "@/lib/admin-auth";
 import { apiError, boundedString, isUuid, readJsonObject } from "@/lib/api";
 import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { isWholesaleSessionWriteAllowed } from "@/lib/wholesale-session-origin";
+import { readTransferNotices } from "@/lib/wholesale-payment-notices";
 
 const METHODS = ["cash", "bank_transfer", "mercadopago", "debit_card", "credit_card", "other"] as const;
 type Context = { params: Promise<{ id: string }> };
@@ -22,6 +23,7 @@ export async function GET(_request: Request, context: Context) {
   if (!isUuid(id)) return apiError("BAD_REQUEST", "El pedido seleccionado no es válido.", 400);
   try {
     const db = createAdminServerClient() as any;
+    const transferNotices=await readTransferNotices(db,[id]);
     const [payments, corrections, returns, recognitions, reversals, accountingJournals] = await Promise.all([
       db.from("wholesale_payment_entries").select("id,revision_id,entry_type,refund_of,amount,currency,payment_method,external_reference,occurred_at,actor_id,created_at").eq("order_id", id).order("occurred_at", { ascending: true }),
       db.from("wholesale_delivery_corrections").select("id,delivery_id,revision_id,reason,actor_id,created_at").eq("order_id", id).order("created_at", { ascending: true }),
@@ -66,6 +68,7 @@ export async function GET(_request: Request, context: Context) {
     if (reconciliation.error || correctionItems.error || returnItems.error || recognitionItems.error || recognitionDeliveries.error) throw new Error("ledger_read_failed");
     return NextResponse.json({ ok: true, data: {
       checkout,
+      transferNotices,
       paymentAccounts: (mappings.data ?? []).flatMap((mapping: {payment_method:string;account_id:string}) => {
         const account = (accounts.data ?? []).find((row: {id:string}) => row.id === mapping.account_id);
         return account ? [{method:mapping.payment_method,name:account.name}] : [];

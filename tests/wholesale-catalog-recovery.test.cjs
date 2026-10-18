@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const load = require('./load-ts.cjs');
@@ -108,6 +107,25 @@ function textContent(node) {
   const children = node.props?.children;
   return (Array.isArray(children) ? children : [children]).map(textContent).join(' ');
 }
+
+for(const completed of [false,true])test(`identical purchases are voluntary new identities; completed=${completed}`,async()=>{
+ const values=new Map();
+ selectionTools.persistWholesaleSelection({setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)},{p1:{product:product('p1'),quantity:2}});
+ const previous={id:'old',order_number:'MW-OLD',status:'confirmed',created_at:'2026-10-18',confirmed_at:'2026-10-18',currency:'ARS',total_amount:20,items:[{productId:'p1',quantity:2}],payment_summary:{total:20,paid:completed?20:0,due:completed?0:20},tracking_events:completed?[{id:'delivered',type:'order_fully_delivered',at:'2026-10-18'}]:[]};
+ const starts=[],submissions=[];
+ const h=createHarness(async(url,init={})=>{
+  if(url==='/api/wholesale/catalog')return response({ok:true,data:[product('p1')]});
+  if(url==='/api/wholesale/orders/attempts'&&init.method==='POST'){starts.push(JSON.parse(init.body));return response({ok:true,data:{attemptId:'new-attempt'}});}
+  if(url==='/api/wholesale/orders'&&init.method==='POST'){submissions.push(JSON.parse(init.body));return response({ok:true,orderId:'new-order'});}
+  if(url==='/api/wholesale/orders/attempts')return response({ok:true,data:[]});
+  if(url.startsWith('/api/wholesale/orders'))return response({ok:true,data:[previous]});
+  return response({ok:true,data:[]});
+ },values);
+ await h.render();await settle(h);
+ let drawer=findNode(h.tree,n=>n.type==='cart-drawer');drawer.props.onSubmit();await settle(h);
+ if(!completed){drawer=findNode(h.tree,n=>n.type==='cart-drawer');assert.equal(drawer.props.duplicate.orderNumber,'MW-OLD');assert.equal(starts.length,0);drawer.props.duplicate.onCreate();drawer.props.duplicate.onCreate();await settle(h);}
+ assert.equal(starts.length,1);assert.equal(starts[0].newIntent,true);assert.deepEqual(submissions,[{attemptId:'new-attempt'}]);
+});
 async function settle(harness) {
   await new Promise(resolve => setTimeout(resolve, 0));
   await harness.render();

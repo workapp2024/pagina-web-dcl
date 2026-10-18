@@ -4,6 +4,7 @@ import { createAdminServerClient, isServiceRoleConfigured } from "@/lib/supabase
 import { isWholesaleSessionWriteAllowed } from "@/lib/wholesale-session-origin";
 import { isWholesaleUuid, wholesaleRpcErrorMessage } from "@/lib/wholesale-order-api";
 import { customerPaymentSummary, readCustomerPayments } from "@/lib/wholesale-customer-payment";
+import { readTransferNotices } from "@/lib/wholesale-payment-notices";
 
 const privateHeaders = { "Cache-Control": "no-store, private" };
 const errorResponse = (error: string, status: number) => NextResponse.json({ ok: false, error }, { status, headers: privateHeaders });
@@ -83,7 +84,10 @@ export async function GET(request: Request) {
       }
     }
     const payments = await readCustomerPayments(db,orderIds);
-    const presentedOrders = orders.map(order => ({ ...order, payment_summary:customerPaymentSummary(order.status,order.total_amount,order.currency,payments.filter(payment=>payment.order_id===order.id)), tracking_events: tracking
+    const notices=await readTransferNotices(db,orderIds);
+    const settings=await db.from("site_settings").select("whatsapp").eq("id",1).maybeSingle() as unknown as {data:{whatsapp:string|null}|null;error:unknown};
+    if(settings.error)throw settings.error;
+    const presentedOrders = orders.map(order => ({ ...order, whatsapp:settings.data?.whatsapp??null,transfer_notices:notices.filter(n=>n.order_id===order.id),payment_summary:customerPaymentSummary(order.status,order.total_amount,order.currency,payments.filter(payment=>payment.order_id===order.id)), tracking_events: tracking
       .filter(event => event.order_id === order.id && publicTypes.includes(event.event_type))
       .map(event => ({ id: String(event.id), type: event.event_type, at: event.created_at })) }));
     const last = orders.at(-1) as { created_at?: string; id?: string } | undefined;

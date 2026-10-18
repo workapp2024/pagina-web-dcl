@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -235,13 +234,13 @@ test('order history API validates pagination and maps only customer-scoped RPC r
   const route = load('app/api/wholesale/orders/route.ts', {
     'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
     '@/lib/wholesale-server': { getWholesaleSessionCustomerId: async () => customerId },
-    '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ rpc: async () => ({ data: [{ id: 'order-1' }], error: null }), from: table => { if(table==='wholesale_payment_entries') return {select(){return this;},in(){return this;},order(){return this;},range:async()=>({data:[],error:null})}; assert.equal(table,'wholesale_order_events'); return query; } }) },
+    '@/lib/supabase/server': { isServiceRoleConfigured: () => true, createAdminServerClient: () => ({ rpc: async () => ({ data: [{ id: 'order-1' }], error: null }), from: table => { if(table==='site_settings') return {select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{whatsapp:'5492617791393'},error:null})}; if(table==='wholesale_payment_entries') return {select(){return this;},in(){return this;},order(){return this;},range:async()=>({data:[],error:null})}; assert.equal(table,'wholesale_order_events'); return query; } }) },
     '@/lib/store/buyer-session': { isSameOriginWrite: () => true },
   });
   const response = await route.GET(new Request('https://dcl.test/api/wholesale/orders?limit=25'));
   assert.equal(response.status, 200);
   const result = await response.json();
-  assert.deepEqual(result.data, [{ id: 'order-1', payment_summary:null, tracking_events:[{id:'1',type:'delivery_recorded',at:'2026-10-13T12:00:00Z'}] }]);
+  assert.deepEqual(result.data, [{ id: 'order-1', whatsapp:'5492617791393',transfer_notices:[],payment_summary:null, tracking_events:[{id:'1',type:'delivery_recorded',at:'2026-10-13T12:00:00Z'}] }]);
   assert.deepEqual(reads[0],['select','id,order_id,event_type,created_at']);
   assert.deepEqual(reads[1],['in','order_id',['order-1']]);
   assert.doesNotMatch(JSON.stringify(result),/PRIVATE|other-customer|private_note|actor_id|notes/);

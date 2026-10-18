@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { WholesalePaymentForm } from "@/components/admin/WholesalePaymentForm";
@@ -6,6 +5,7 @@ import { wholesalePostingMessage } from "@/lib/wholesale-payment-presentation";
 import { refundablePayment, wholesaleMoneySummary } from "@/lib/wholesale-order-summary";
 import { createClientUuid } from "@/lib/client-uuid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { TransferNotice } from "@/lib/wholesale-payment-notices";
 
 type Item = { productId: string; quantity: number };
 type Delivery = { id: string; deliveredAt: string; items: Item[] };
@@ -14,7 +14,7 @@ type Correction = { id?:string;delivery_id: string; items: Item[];reason?:string
 type Reconciliation = { payment_entry_id: string; event_type: "reconciled" | "reconciliation_reversed" };
 type Recognition = { id: string; revision_id: string; completion_event_id: number; amount: number | string; currency: string; recognized_at: string; items: { productId: string; name: string; quantity: number; unitPrice: number | string; lineTotal: number | string; currency: string }[]; deliveries: { deliveryId: string; productId: string; quantity: number }[]; reversal: { reversal_event_id: number; amount: number | string; currency: string; reason: string; reversed_at: string } | null };
 type AccountingJournal = { id: string; source_type: string; source_id: string; revision_id: string|null; recognition_id: string|null; payment_entry_id: string|null; source_event_id: number|null; currency: string; amount: number|string; status: "awaiting_account_mapping"|"ready"; occurred_at: string; wholesale_accounting_journal_lines: { role: string; account_reference: string|null; debit: number|string; credit: number|string }[] };
-type Ledger = { checkout?:{blocked:boolean;review:boolean;receipts?:{payment_id:string;outcome:string;provider_status:string;amount:number|string;currency:string}[]}; paymentAccounts?: {method:string;name:string}[]; payments: Payment[]; reconciliations: Reconciliation[]; deliveryCorrections: Correction[]; physicalReturns: Correction[]; recognitions: Recognition[]; accountingJournals: AccountingJournal[] };
+type Ledger = { transferNotices?:TransferNotice[]; checkout?:{blocked:boolean;review:boolean;receipts?:{payment_id:string;outcome:string;provider_status:string;amount:number|string;currency:string}[]}; paymentAccounts?: {method:string;name:string}[]; payments: Payment[]; reconciliations: Reconciliation[]; deliveryCorrections: Correction[]; physicalReturns: Correction[]; recognitions: Recognition[]; accountingJournals: AccountingJournal[] };
 const field = "mt-1 min-h-10 w-full rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white";
 const button = "min-h-11 rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold disabled:opacity-50";
 function newKey() { return createClientUuid(); }
@@ -29,6 +29,17 @@ export function WholesaleOrderLedger({ orderId, revisionId, status, total, curre
   const [keys,setKeys]=useState<Record<string,string>>({});
   const [readFailed,setReadFailed]=useState(false);
   const operationInFlight=useRef(false);
+  async function resolveNotice(notice:TransferNotice,status:"verified"|"not_received",paymentId?:string) {
+    if(operationInFlight.current)return;
+    if(!window.confirm(status==='not_received'?"¿Confirmás que no recibiste esta transferencia? Se liberará el importe para un nuevo pago.":"¿Vincular el aviso al cobro seleccionado, cuya recepción ya verificaste? No se registrará otro cobro."))return;
+    operationInFlight.current=true;setSaving(true);setError("");
+    try {
+      const r=await fetch(`/api/admin/wholesale-orders/${orderId}/transfer-notice`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticeId:notice.id,status,paymentId:paymentId??null})});
+      const body=await r.json();if(!r.ok)throw Error(body.error||'No se pudo resolver el aviso.');
+      await refresh();
+    }catch(cause){setError(cause instanceof Error?cause.message:'No se pudo resolver el aviso.');}
+    finally{operationInFlight.current=false;setSaving(false);}
+  }
   const pendingOperations=useRef(new Map<string,Record<string,unknown>>());
   const refresh=useCallback(async()=>{try{const response=await fetch(`/api/admin/wholesale-orders/${orderId}/ledger`,{cache:"no-store"});const body=await response.json();if(!response.ok||!body.ok)throw new Error(body.message||"No se pudo cargar el libro mayorista.");setLedger(body.data);setLoaded(true);setReadFailed(false);setError("");}catch(cause){setReadFailed(true);setError(cause instanceof Error?cause.message:"No se pudo cargar el libro mayorista.");}},[orderId]);
   useEffect(()=>{void refresh();},[refresh]);
@@ -47,6 +58,7 @@ export function WholesaleOrderLedger({ orderId, revisionId, status, total, curre
   }
   return <section aria-label="Libro mayorista de pagos y devoluciones" className="mt-4 min-w-0 space-y-4 rounded-2xl border border-white/10 p-4 sm:p-5">
     {view !== "summary" && <h3 className="text-lg font-bold">{view === "history" ? "Consulta contable avanzada" : "Cobros y entregas"}</h3>}
+    {view!=="history"&&ledger.transferNotices?.filter(n=>n.status==='pending').map(n=><article key={n.id} className="space-y-2 rounded-xl border border-amber-300/30 bg-amber-950/20 p-3 text-sm"><p className="font-bold text-amber-200">◷ Transferencia informada · Revisar pago</p><p>{money(Number(n.amount))} · {new Date(n.created_at).toLocaleString('es-AR')}</p><p className="text-xs text-zinc-400">El cliente indicó que va a informar una transferencia. Verificá la recepción en Mercado Pago y registrá el cobro por el procedimiento habitual. Este aviso no acredita dinero.</p>{ledger.payments.filter(p=>p.entry_type==='payment'&&Number(p.amount)===Number(n.amount)&&['mercadopago','bank_transfer'].includes(p.payment_method)).map(p=><button key={p.id} type="button" className={button} disabled={saving} onClick={()=>void resolveNotice(n,'verified',p.id)}>Vincular cobro verificado · {money(Number(p.amount))} · {new Date(p.occurred_at).toLocaleString('es-AR')}</button>)}<button type="button" className={button} disabled={saving} onClick={()=>void resolveNotice(n,'not_received')}>No recibida · Habilitar reintento</button></article>)}
     {!loaded && !error && <p role="status" className="text-sm text-zinc-400">Cargando cobros y entregas…</p>}
     {loaded && !error && !summary && <p role="alert" className="text-sm text-amber-200">No se pudo verificar el saldo. Revisá el detalle por moneda.</p>}
     {summary && <div className="space-y-2 text-sm text-zinc-300">{view !== "summary" && <><dl className="grid gap-3"><div><dt>Total del pedido</dt><dd className="font-bold">{money(total)}</dd></div><div><dt>Importe cobrado neto</dt><dd className="font-bold">{money(summary.paid)}</dd></div><div><dt>Saldo pendiente</dt><dd className="font-bold">{money(summary.due)}</dd></div></dl><p className={`inline-block rounded-lg px-3 py-2 font-bold ${summary.due <= 0 ? "bg-emerald-400/10 text-emerald-200" : "bg-amber-400/10 text-amber-200"}`}>Estado del cobro: {summary.due <= 0 ? "Pagado" : summary.paid > 0 ? "Parcial" : "Pendiente"}</p></>}

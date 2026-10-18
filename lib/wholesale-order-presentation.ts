@@ -1,4 +1,4 @@
-import { isWholesaleOrderActive, wholesaleOrderStatusLabel, type WholesaleCustomerOrder } from "@/lib/wholesale-customer-orders";
+import { isWholesaleOrderActive, wholesaleOrderStatusLabel, wholesaleOrderNextAction, wholesaleSelectionMatchesOrder, type WholesaleCustomerOrder } from "@/lib/wholesale-customer-orders";
 
 export function matchesWholesaleOrder(order: WholesaleCustomerOrder, search: string, status: string) {
   const active = isWholesaleOrderActive(order.status) && !isWholesaleDeliveryComplete(order);
@@ -9,6 +9,24 @@ export function matchesWholesaleOrder(order: WholesaleCustomerOrder, search: str
 
 export function isWholesaleDeliveryComplete(order: WholesaleCustomerOrder) {
   return order.tracking_events?.filter(event => ["order_fully_delivered", "order_delivery_completion_reversed"].includes(event.type)).at(-1)?.type === "order_fully_delivered";
+}
+
+export function canCoordinateWholesaleDelivery(order: WholesaleCustomerOrder) {
+  return order.status === "confirmed" && Boolean(order.payment_summary && order.payment_summary.total > 0 && order.payment_summary.due === 0
+    && order.payment_summary.paid >= order.payment_summary.total) && !isWholesaleDeliveryComplete(order);
+}
+
+export function customerOrderNextAction(order: WholesaleCustomerOrder) {
+  if (order.status === "confirmed" && order.payment_summary?.due === 0) {
+    return isWholesaleDeliveryComplete(order) ? "Pedido pagado y entregado." : "Pago completo. Coordiná la entrega o el retiro con DCL.";
+  }
+  return wholesaleOrderNextAction(order.status, order.revision_status);
+}
+
+export function matchingOpenWholesaleOrder(orders: WholesaleCustomerOrder[], selection: Record<string, { quantity: number }>) {
+  return orders.find(order => isWholesaleOrderActive(order.status)
+    && !(isWholesaleDeliveryComplete(order) && order.payment_summary?.due === 0)
+    && wholesaleSelectionMatchesOrder(selection, order.items));
 }
 
 const eventLabels: Record<string, string> = {
