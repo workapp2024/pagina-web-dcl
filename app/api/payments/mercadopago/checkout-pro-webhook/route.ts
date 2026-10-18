@@ -3,7 +3,6 @@ import { scheduleAnalyticsFlush } from "@/lib/store/analytics-outbox";
 import { InvalidWebhookSignatureError, WebhookSignatureValidator } from "mercadopago";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminServerClient } from "@/lib/supabase/server";
-import { wholesaleCheckoutPreparedEnabled } from "@/lib/prepared-finance-features";
 import { reconcileWholesaleCheckoutPayment } from "@/lib/wholesale-checkout";
 
 // Este handler recibe eventos payment de Checkout Pro. Los eventos Order de
@@ -53,7 +52,8 @@ export async function POST(request: NextRequest) {
     let wholesale = false;
     await reconcileCheckoutPro(db, paymentId, token, async payment => {
       wholesale = true;
-      if (!wholesaleCheckoutPreparedEnabled()) throw new Error("Wholesale checkout disabled");
+      // The opt-in gates new preferences, never verified notifications already
+      // issued. Reconciliation still requires an existing intent and all proofs.
       return reconcileWholesaleCheckoutPayment(db as unknown as Parameters<typeof reconcileWholesaleCheckoutPayment>[0], paymentId, token, payment);
     });
     if (!wholesale) scheduleAnalyticsFlush();
