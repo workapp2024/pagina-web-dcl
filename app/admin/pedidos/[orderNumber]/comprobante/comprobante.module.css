@@ -8,9 +8,10 @@
 .receipt { max-width: 920px; margin: auto; padding: 40px; background: #f0f1f3; color: #202124; border: 1px solid #dddfe3; border-radius: 12px; box-shadow: 0 8px 28px #0000000a; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .receipt { position: relative; isolation: isolate; }
 .watermark { position: absolute; inset: 0; z-index: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: inherit; pointer-events: none; }
-.watermark img { width: 85%; max-width: 650px; height: auto; opacity: .22; }
+.watermark img { width: var(--watermark-size, 85%); max-width: 760px; max-height: 90%; object-fit: contain; height: auto; opacity: var(--watermark-opacity, .22); }
 .receipt > :not(.watermark) { position: relative; z-index: 1; }
-.header { display: flex; flex-wrap: wrap; gap: 22px; justify-content: space-between; align-items: center; padding-bottom: 22px; border-bottom: 3px solid #b91c1c; }
+.reversed { background: var(--receipt-background, #f0f1f3); }
+.header { display: flex; flex-wrap: wrap; gap: 22px; justify-content: space-between; align-items: center; padding-bottom: 22px; border-bottom: 3px solid var(--receipt-accent, #b91c1c); }
 .brand { display: flex; align-items: center; gap: 14px; }
 .brand img { width: 76px; height: 76px; object-fit: contain; background: #dfe2e6; border-radius: 8px; padding: 4px; }
 .company { font-size: 22px; font-weight: 800; margin: 0; }
@@ -27,7 +28,7 @@
 .items { width: 100%; border-collapse: collapse; font-size: 13px; }
 .items caption { text-align: left; font-size: 15px; font-weight: 700; padding-bottom: 10px; }
 .items thead th { background: #f4f4f5; font-size: 11px; font-weight: 700; color: #454b54; }
-.items th, .items td { padding: 13px 10px; text-align: right; border-bottom: 1px solid #dedfe2; }
+.items th, .items td { padding: 13px 10px; text-align: right; border-bottom: 1px solid var(--receipt-accent, #dedfe2); }
 .items th:first-child { text-align: left; width: 44%; }
 .items tbody th { font-weight: 600; }
 .items td { font-variant-numeric: tabular-nums; }
@@ -37,11 +38,14 @@
 .total span { display: block; font-size: 12px; font-weight: 700; }
 .total small { margin-left: 5px; color: #626873; }
 .total strong { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.footer { border-top: 1px solid #dedfe2; margin-top: 34px; padding-top: 18px; font-size: 12px; color: #555a63; }
+.footer { border-top: 1px solid var(--receipt-accent, #dedfe2); margin-top: 34px; padding-top: 18px; font-size: 12px; color: #555a63; }
 .footer strong, .footer span { display: block; }
 .footer p { margin: 12px 0 0; font-size: 11px; }
 .incident { max-width: 700px; margin: 40px auto; border: 1px solid #e8cda5; border-radius: 12px; background: #fffaf0; padding: 24px; }
 .incident h1 { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+/* Remain readable even behind a solid dark logo at the maximum intensity. */
+.receipt .details dt, .receipt .payment dt, .receipt .nonFiscal, .receipt .valid,
+.receipt .footer, .receipt .total small, .receipt .items td::before { color: #30343b; }
 
 @media screen and (max-width: 600px) {
   .page { padding: 16px 10px 28px; }
@@ -50,7 +54,7 @@
   .items, .items tbody { display: block; }
   .items caption { display: block; }
   .items thead { display: none; }
-  .items tr { display: block; border-bottom: 1px solid #dedfe2; padding: 12px 0; }
+  .items tr { display: block; border-bottom: 1px solid var(--receipt-accent, #dedfe2); padding: 12px 0; }
   .items tbody th, .items th:first-child { display: block; width: auto; border: 0; padding: 0 0 8px; }
   .items td { display: flex; justify-content: space-between; gap: 16px; border: 0; padding: 3px 0; }
   .items td::before { content: attr(data-label); color: #626873; text-align: left; }

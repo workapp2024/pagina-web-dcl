@@ -30,6 +30,7 @@ test('both sectors render through the same receipt with a soft gray print-preser
 
 test('wholesale page authenticates ADMIN before any read',async()=>{
  let reads=0;const mocks={[css]:styles,'next/navigation':{redirect(){throw Error('redirect');}},'@/lib/admin-auth':{getAdminIdentity:async()=>({role:'VENDEDOR'})},'@/lib/store/wholesale-receipt':{getWholesaleReceipt:async()=>{reads++;return validate();}},'@/components/admin/ReceiptShareButton':{ReceiptShareButton:()=>null},'@/components/admin/ReceiptPrintButton':{ReceiptPrintButton:()=>null},'@/components/admin/OrderReceipt':{OrderReceipt:()=>null}};
+ mocks['@/lib/receipt-identity-server']={withReceiptIdentity:async result=>result};
  const Page=load('app/admin/mayoristas/pedidos/[id]/comprobante/page.tsx',mocks).default;
  await assert.rejects(Page({params:Promise.resolve({id:'order'})}),/redirect/);assert.equal(reads,0);
 });

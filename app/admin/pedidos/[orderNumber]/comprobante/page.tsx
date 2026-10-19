@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getOrderReceipt } from "@/lib/store/order-receipt";
+import { withReceiptIdentity } from "@/lib/receipt-identity-server";
 import { OrderReceipt } from "@/components/admin/OrderReceipt";
 import { ReceiptPrintButton } from "@/components/admin/ReceiptPrintButton";
 import { ReceiptShareButton } from "@/components/admin/ReceiptShareButton";
@@ -14,7 +15,7 @@ export const metadata: Metadata = { title: "Comprobante de compra | DCL Cree LED
 export default async function ReceiptPage({ params }: { params: Promise<{ orderNumber: string }> }) {
   if (!(await isAdminAuthenticated("commercial"))) redirect("/admin/login");
   const { orderNumber } = await params;
-  const result = await getOrderReceipt(orderNumber);
+  const result = await withReceiptIdentity(await getOrderReceipt(orderNumber));
   return <main className={styles.page}>
     <div className={styles.controls}>
       <Link href="/admin/pedidos">← Volver a Pedidos</Link>

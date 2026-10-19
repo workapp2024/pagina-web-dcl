@@ -22,6 +22,7 @@ test('cancellation is quiet; generation errors and changed receipt cannot share'
 test('both fresh-data endpoints authenticate before any receipt read and prevent caching',async()=>{
  for(const [path,authName,loaderName,param] of [['app/api/admin/orders/[orderNumber]/receipt/route.ts','isAdminAuthenticated','getOrderReceipt','orderNumber'],['app/api/admin/wholesale-orders/[id]/receipt/route.ts','getAdminIdentity','getWholesaleReceipt','id']]){
  let reads=0;const mocks={'@/lib/admin-auth':{[authName]:async()=>authName==='getAdminIdentity'?{role:'VENDEDOR'}:false},[loaderName==='getOrderReceipt'?'@/lib/store/order-receipt':'@/lib/store/wholesale-receipt']:{[loaderName]:async()=>{reads++;return {status:'ok',receipt:{orderNumber:'MW-000007'}};}}};
+ mocks['@/lib/receipt-identity-server']={withReceiptIdentity:async result=>result};
  let route=load(path,mocks);const props={params:Promise.resolve({[param]:'number'})};assert.equal((await route.GET(new Request('https://local.invalid'),props)).status,401);assert.equal(reads,0);
  mocks['@/lib/admin-auth'][authName]=async()=>authName==='getAdminIdentity'?{role:'ADMIN'}:true;route=load(path,mocks);const response=await route.GET(new Request('https://local.invalid'),props);assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/no-store/);assert.equal(reads,1);
  }

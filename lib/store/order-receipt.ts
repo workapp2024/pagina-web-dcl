@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminServerClient } from "@/lib/supabase/server";
 
 export type OrderReceipt = {
+  visual?: import("@/lib/receipt-identity").ReceiptIdentity;
   kind?: "order";
   confirmedPaid?: number;
   refundedAmount?: number;

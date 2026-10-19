@@ -18,7 +18,8 @@
     "pdf-lib": "^1.17.1",
     "posthog-js": "^1.425.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "sharp": "0.35.3"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

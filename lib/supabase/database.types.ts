@@ -363,6 +363,7 @@ export interface Database {
       };
       site_settings: {
         Row: {
+          receipt_identity: Json | null;
           id: number;
           logo_url: string;
           whatsapp: string;
@@ -401,6 +402,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
+          receipt_identity?: Json | null;
           id?: number;
           logo_url?: string;
           whatsapp?: string;
@@ -439,6 +441,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: {
+          receipt_identity?: Json | null;
           id?: number;
           logo_url?: string;
           whatsapp?: string;

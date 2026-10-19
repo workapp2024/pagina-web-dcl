@@ -1,4 +1,6 @@
 import Image from "next/image";
+import type { CSSProperties } from "react";
+import { DEFAULT_RECEIPT_IDENTITY, receiptLogoSource } from "@/lib/receipt-identity";
 import type { OrderReceipt as ReceiptData } from "@/lib/store/order-receipt";
 import styles from "@/app/admin/pedidos/[orderNumber]/comprobante/comprobante.module.css";
 
@@ -8,11 +10,15 @@ const date = (value: string) => new Intl.DateTimeFormat("es-AR", {
 const states = { valid: "VIGENTE", refunded: "REEMBOLSADO", cancelled: "ANULADO" };
 
 export function OrderReceipt({ receipt }: { receipt: ReceiptData }) {
+  const visual = receipt.visual ?? DEFAULT_RECEIPT_IDENTITY;
+  const mainLogo = receiptLogoSource(visual.mainLogo);
+  const watermark = receiptLogoSource(visual.watermarkLogo, visual.watermarkTone === "monochrome");
+  const design = { backgroundColor: visual.background, "--receipt-background": visual.background, "--receipt-accent": visual.accent, "--watermark-size": `${visual.watermarkSize}%`, "--watermark-opacity": visual.watermarkOpacity } as CSSProperties;
   const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: receipt.currency }).format(value);
-  return <article className={styles.receipt} aria-labelledby="receipt-title">
-    <div className={styles.watermark} aria-hidden="true"><Image src="/brand/logo-dcl.png.png" width={650} height={650} alt="" unoptimized loading="eager" /></div>
+  return <article className={styles.receipt} style={design} aria-labelledby="receipt-title">
+    {watermark && <div className={styles.watermark} aria-hidden="true"><Image src={watermark} width={650} height={650} alt="" unoptimized loading="eager" /></div>}
     <header className={styles.header}>
-      <div className={styles.brand}><Image src="/brand/logo-dcl.png.png" width={100} height={100} alt="Logo DCL" unoptimized loading="eager" /><p className={styles.company}>DCL Cree LED</p></div>
+      <div className={styles.brand}>{mainLogo && <Image src={mainLogo} width={100} height={100} alt="Logo DCL" unoptimized loading="eager" />}<p className={styles.company}>DCL Cree LED</p></div>
       <div><h1 id="receipt-title">{receipt.kind === "order" ? "COMPROBANTE DE COMPRA MAYORISTA" : "COMPROBANTE DE COMPRA"}</h1><p className={styles.nonFiscal}>Comprobante comercial — No es factura fiscal</p></div>
     </header>
     <div className={receipt.status === "valid" ? styles.valid : styles.reversed}>

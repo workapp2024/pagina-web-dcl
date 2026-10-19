@@ -280,6 +280,7 @@ test('receipt HTML renders all three states, historical amounts and only approve
 test('page authenticates before reading; no browser-supplied totals and no print button on incident', async () => {
   let calls = 0;
   const makePage = (auth, result) => load('app/admin/pedidos/[orderNumber]/comprobante/page.tsx', {
+    '@/lib/receipt-identity-server': { withReceiptIdentity: async result => result },
     ...cssMocks, 'next/navigation': { redirect() { throw new Error('redirect'); } },
     '@/lib/admin-auth': { isAdminAuthenticated: async () => auth },
     '@/lib/store/order-receipt': { getOrderReceipt: async number => { calls++; assert.equal(number, 'DCL-900999'); return result; } },

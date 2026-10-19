@@ -27,7 +27,7 @@ export async function createReceiptPdf(receipt:ReceiptData):Promise<File>{
     // Bound canvas memory on phones; very large receipts retain native printing.
     const scale=Math.min(1.5,Math.sqrt(8_000_000/(article.getBoundingClientRect().width*height)));
     if(scale<0.75)throw Error('Receipt too large');
-    const canvas=await html2canvas(article,{scale,backgroundColor:'#f0f1f3',logging:false,windowWidth:794,windowHeight:1123});
+    const canvas=await html2canvas(article,{scale,backgroundColor:receipt.visual?.background??'#f0f1f3',logging:false,windowWidth:794,windowHeight:1123});
     const bounds=article.getBoundingClientRect();
     const blocks=[...article.querySelectorAll('header,tr,dl,footer')].map(el=>{const r=el.getBoundingClientRect();return {top:(r.top-bounds.top)*scale,bottom:(r.bottom-bounds.top)*scale};});
     const pdf=await PDFDocument.create();pdf.setTitle(`DCL · ${receipt.orderNumber}`);pdf.setCreator('DCL Cree LED');
