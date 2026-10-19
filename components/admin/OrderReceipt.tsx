@@ -9,14 +9,14 @@ const date = (value: string) => new Intl.DateTimeFormat("es-AR", {
 }).format(new Date(value));
 const states = { valid: "VIGENTE", refunded: "REEMBOLSADO", cancelled: "ANULADO" };
 
-export function OrderReceipt({ receipt }: { receipt: ReceiptData }) {
+export function OrderReceipt({ receipt, previewLogos }: { receipt: ReceiptData; previewLogos?: Partial<Record<"mainLogo" | "watermarkLogo", string>> }) {
   const visual = receipt.visual ?? DEFAULT_RECEIPT_IDENTITY;
-  const mainLogo = receiptLogoSource(visual.mainLogo);
-  const watermark = receiptLogoSource(visual.watermarkLogo, visual.watermarkTone === "monochrome");
+  const mainLogo = previewLogos?.mainLogo ?? receiptLogoSource(visual.mainLogo);
+  const watermark = previewLogos?.watermarkLogo ?? receiptLogoSource(visual.watermarkLogo, visual.watermarkTone === "monochrome");
   const design = { backgroundColor: visual.background, "--receipt-background": visual.background, "--receipt-accent": visual.accent, "--watermark-size": `${visual.watermarkSize}%`, "--watermark-opacity": visual.watermarkOpacity } as CSSProperties;
   const money = (value: number) => new Intl.NumberFormat("es-AR", { style: "currency", currency: receipt.currency }).format(value);
   return <article className={styles.receipt} style={design} aria-labelledby="receipt-title">
-    {watermark && <div className={styles.watermark} aria-hidden="true"><Image src={watermark} width={650} height={650} alt="" unoptimized loading="eager" /></div>}
+    {watermark && <div className={styles.watermark} aria-hidden="true"><Image src={watermark} width={650} height={650} alt="" unoptimized loading="eager" style={previewLogos?.watermarkLogo && visual.watermarkTone === "monochrome" ? {filter:"grayscale(1)"} : undefined} /></div>}
     <header className={styles.header}>
       <div className={styles.brand}>{mainLogo && <Image src={mainLogo} width={100} height={100} alt="Logo DCL" unoptimized loading="eager" />}<p className={styles.company}>DCL Cree LED</p></div>
       <div><h1 id="receipt-title">{receipt.kind === "order" ? "COMPROBANTE DE COMPRA MAYORISTA" : "COMPROBANTE DE COMPRA"}</h1><p className={styles.nonFiscal}>Comprobante comercial — No es factura fiscal</p></div>

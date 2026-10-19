@@ -20,6 +20,25 @@ test('real PNG transparency survives normalization; JPG is decoded as a safe sta
  for(const [bytes,mime] of [[Buffer.from('<svg/>'),'image/svg+xml'],[png,'image/jpeg'],[Buffer.from('invalid'),'image/png'],[new Uint8Array(2097153),'image/png']])await assert.rejects(normalizeReceiptLogo(bytes,mime));
  const wide=await sharp({create:{width:4097,height:1,channels:3,background:'#fff'}}).png().toBuffer();await assert.rejects(normalizeReceiptLogo(wide,'image/png'));
 });
+test('Canva-sized 3000 x 3000 transparent PNG is accepted and optimized with alpha and proportions intact',async()=>{
+ const png=await sharp({create:{width:3000,height:3000,channels:4,background:{r:200,g:10,b:10,alpha:.5}}}).png().toBuffer();
+ assert.ok(png.length<2097152);const result=await load('lib/receipt-logo.ts').normalizeReceiptLogo(png,'image/png');
+ const meta=await sharp(result).metadata();assert.equal(meta.width,1600);assert.equal(meta.height,1600);assert.equal(meta.hasAlpha,true);assert.ok(result.length<=2097152);
+ const pixels=await sharp(result).raw().toBuffer();assert.ok(pixels[3]>=127&&pixels[3]<=128);
+});
+test('an opaque black PNG retains its black pixels; normalization never manufactures transparency or adds a background',async()=>{
+ const png=await sharp({create:{width:20,height:10,channels:4,background:{r:0,g:0,b:0,alpha:1}}}).png().toBuffer();
+ const output=await load('lib/receipt-logo.ts').normalizeReceiptLogo(png,'image/png');const pixels=await sharp(output).raw().toBuffer();assert.deepEqual(Array.from(pixels.subarray(0,4)),[0,0,0,255]);
+});
+test('local dimension validation admits 3000 PNG and JPG; rejects spoofed, animated and oversized dimensions before bitmap decoding',async()=>{
+ const {receiptLogoDimensions,RECEIPT_LOGO_ORIGINAL_MAX_BYTES}=load('lib/receipt-logo-client.ts');assert.equal(RECEIPT_LOGO_ORIGINAL_MAX_BYTES,5242880);
+ const png=await sharp({create:{width:3000,height:3000,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).png().toBuffer();
+ assert.equal(receiptLogoDimensions(new Uint8Array(png),'image/png').width,3000);
+ const jpg=await sharp(png).flatten({background:'#000000'}).jpeg().toBuffer();assert.equal(receiptLogoDimensions(new Uint8Array(jpg),'image/jpeg').height,3000);
+ assert.throws(()=>receiptLogoDimensions(new Uint8Array(png),'image/jpeg'));assert.throws(()=>receiptLogoDimensions(new Uint8Array([1,2,3]),'image/png'));
+ const huge=Buffer.from(png);huge.writeUInt32BE(5000,16);assert.throws(()=>receiptLogoDimensions(new Uint8Array(huge),'image/png'),/4096/);
+ const animated=Buffer.from(png);animated.write('acTL',37,'ascii');assert.throws(()=>receiptLogoDimensions(new Uint8Array(animated),'image/png'),/estático/);
+});
 function store(initial=null){
  let saved=initial, failure=null;const updates=[];
  const client={from(table){assert.equal(table,'site_settings');let patch,expected,missing=false;return {
