@@ -1,11 +1,17 @@
 # Comprobantes comunes — preparación local
 
+## Ajuste visual posterior a `10380af` — pendiente de publicación
+
+El componente común incorpora el logo original grande como marca de agua decorativa, detrás del contenido, con opacidad del 22 %, sobre el fondo gris aprobado. Se conserva el logo del encabezado. La marca no recibe clics ni se anuncia nuevamente a lectores de pantalla; se mantiene al generar PDF e imprimir. Se retiró el párrafo del pie sobre acreditación y entrega, sin agregar leyendas nuevas. El título mayorista ahora dice «Comprobante de compra mayorista»; se conservan los estados reales y todos los importes.
+
+Solo cambiaron el componente, sus estilos y pruebas/documentación. No se alteraron el generador PDF, la función de compartir, los lectores de datos, SQL ni operaciones comerciales. Pasaron 30 pruebas focalizadas, TypeScript y lint; se verificaron las cuatro variantes a 390 px y el generador real de PDF para Minoristas, Mayoristas pendiente/parcial/pagado y 50 artículos en tres páginas. Se inspeccionaron visualmente las imágenes del PDF y la vista móvil. El envío real a WhatsApp desde un teléfono sigue dependiendo de la revisión del administrador, sin enviar mensajes durante las pruebas.
+
 Cambios posteriores a `cc42681`, sin SQL, migraciones, escrituras productivas, commit, push o deploy. No se ejecutaron regularizaciones ni se consultaron datos comerciales productivos para probar esta mejora.
 
 - Fondo del documento `#f0f1f3`; superficie del logo `#dfe2e6`. Se conserva el archivo original del logo. Textos e importes oscuros, estilos adaptables y conservación del color en impresión. Una impresora o navegador puede ignorar fondos si el usuario los deshabilita.
 - Ambos sectores usan `OrderReceipt`, el mismo CSS, `ReceiptPrintButton`, `ReceiptShareButton` y el mismo generador de archivos PDF. Minoristas conserva su validación histórica y sus estados de anulado/reembolsado.
 - En el detalle administrativo de un pedido mayorista confirmado, «Compartir comprobante» abre `/admin/mayoristas/pedidos/[id]/comprobante`. La página comprueba rol ADMIN antes de leer. No hay enlace público ni acceso nuevo para clientes o vendedores.
-- La vista mayorista identifica expresamente **comprobante de pedido**, total, pagos registrados confirmados, reembolsos y saldo pendiente. No es factura, no acredita entrega y el total no acredita pago. No consulta intentos de Checkout Pro ni avisos de transferencia para contarlos como dinero. La fuente son entradas comerciales registradas del pedido original; un pago registrado no prueba disponibilidad bancaria ni constituye un comprobante emitido por Mercado Pago.
+- La vista mayorista muestra el comprobante de compra, total, pagos registrados confirmados, reembolsos y saldo pendiente. Mantiene los estados reales sin cambios. No consulta intentos de Checkout Pro ni avisos de transferencia para contarlos como dinero. La fuente son entradas comerciales registradas del pedido original; un pago registrado no prueba disponibilidad bancaria ni constituye un comprobante emitido por Mercado Pago.
 - Lecturas acotadas y paginadas de pedido, revisión confirmada, artículos históricos de esa revisión y pagos/reembolsos del mismo pedido. Se comprueban vínculos, importes en centavos, duplicados, monedas y referencias de reembolsos. Inconsistencias impiden emitir el comprobante. Solo se lee el nombre actual del cliente para Mayoristas, que no tiene el snapshot minorista de nombre; se excluyen teléfonos, correo, direcciones, identificadores internos y referencias del proveedor del documento compartido.
 
 ## Compartir y descargar

@@ -22,7 +22,8 @@ test('both sectors render through the same receipt with a soft gray print-preser
  const {OrderReceipt}=load('components/admin/OrderReceipt.tsx',{[css]:styles,'next/image':props=>{const copy={...props};delete copy.unoptimized;return React.createElement('img',copy);}});
  const receipt=validate([payment()]).receipt;
  const html=renderToStaticMarkup(React.createElement(OrderReceipt,{receipt}));
- assert.match(html,/COMPROBANTE DE PEDIDO MAYORISTA/);assert.match(html,/Pago parcial/);assert.match(html,/Saldo pendiente/);assert.match(html,/60,00/);assert.match(html,/Producto histórico/);assert.doesNotMatch(html,/private-customer|revision|payment_id|preference_id/);
+ assert.match(html,/COMPROBANTE DE COMPRA MAYORISTA/);assert.match(html,/Pago parcial/);assert.match(html,/Saldo pendiente/);assert.match(html,/60,00/);assert.match(html,/Producto histórico/);assert.doesNotMatch(html,/private-customer|revision|payment_id|preference_id/);
+ assert.match(html,/class="watermark" aria-hidden="true"/);assert.doesNotMatch(html,/no acredita|no confirma/i);
  const retail=renderToStaticMarkup(React.createElement(OrderReceipt,{receipt:{...receipt,kind:undefined,paymentStatus:'Aprobado'}}));assert.match(retail,/COMPROBANTE DE COMPRA/);assert.doesNotMatch(retail,/Saldo pendiente/);
  const content=fs.readFileSync('app/admin/pedidos/[orderNumber]/comprobante/comprobante.module.css','utf8');assert.match(content,/background: #f0f1f3/);assert.match(content,/print-color-adjust: exact/);assert.match(content,/@media screen and \(max-width: 600px\)/);
 });
