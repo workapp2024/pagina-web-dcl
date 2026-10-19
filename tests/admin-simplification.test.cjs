@@ -84,12 +84,13 @@ test('financial screens render distinct sector amounts, one consolidated balance
   assert.equal((wholesale.match(/<dt /g) || []).length, 3);
 });
 
-test('navigation retains every existing module without repeated exact destinations or general finances in sectors', () => {
+test('navigation hides analytics and retains other modules without repeated destinations or general finances in sectors', () => {
   const sidebar = fs.readFileSync('components/admin/AdminSidebar.tsx', 'utf8');
   const groups = sidebar.slice(sidebar.indexOf('const groups = ['), sidebar.indexOf('const frequent ='));
   const hrefs = [...groups.matchAll(/href: "([^"]+)"/g)].map(match => match[1]);
   assert.equal(hrefs.length, new Set(hrefs).size);
-  for (const path of ['/admin/ventas', '/admin/instalaciones', '/admin/garantias', '/admin/productos', '/admin/inventario', '/admin/inventario-mayorista', '/admin/compatibilidades', '/admin/home', '/admin/promociones', '/admin/galeria', '/admin/music', '/admin/vehiculos', '/admin/analitica', '/admin/usuarios', '/admin/configuracion', '/admin/finanzas']) assert.ok(hrefs.includes(path), path);
+  assert.doesNotMatch(sidebar, /\/admin\/analitica/);
+  for (const path of ['/admin/ventas', '/admin/instalaciones', '/admin/garantias', '/admin/productos', '/admin/inventario', '/admin/inventario-mayorista', '/admin/compatibilidades', '/admin/home', '/admin/promociones', '/admin/galeria', '/admin/music', '/admin/vehiculos', '/admin/usuarios', '/admin/configuracion', '/admin/finanzas']) assert.ok(hrefs.includes(path), path);
   for (const sector of ['minoristas', 'mayoristas']) {
     assert.ok(hrefs.includes(`/admin/${sector}/finanzas`));
     const page = fs.readFileSync(`app/admin/${sector}/finanzas/page.tsx`, 'utf8');
