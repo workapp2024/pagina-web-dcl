@@ -397,6 +397,11 @@ export interface Database {
           payment_presentation_description: string;
           payment_presentation_methods: Json;
           payment_presentation_home: boolean;
+          faq_enabled: boolean;
+          faq_items: Json;
+          home_payment_enabled: boolean;
+          home_payment_title: string;
+          home_payment_image: string;
           payment_presentation_wholesale: boolean;
           payment_presentation_checkout: boolean;
           updated_at: string;
@@ -436,6 +441,11 @@ export interface Database {
           payment_presentation_description?: string;
           payment_presentation_methods?: Json;
           payment_presentation_home?: boolean;
+          faq_enabled?: boolean;
+          faq_items?: Json;
+          home_payment_enabled?: boolean;
+          home_payment_title?: string;
+          home_payment_image?: string;
           payment_presentation_wholesale?: boolean;
           payment_presentation_checkout?: boolean;
           updated_at?: string;
@@ -475,6 +485,11 @@ export interface Database {
           payment_presentation_description?: string;
           payment_presentation_methods?: Json;
           payment_presentation_home?: boolean;
+          faq_enabled?: boolean;
+          faq_items?: Json;
+          home_payment_enabled?: boolean;
+          home_payment_title?: string;
+          home_payment_image?: string;
           payment_presentation_wholesale?: boolean;
           payment_presentation_checkout?: boolean;
           updated_at?: string;

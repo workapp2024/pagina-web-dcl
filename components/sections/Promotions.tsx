@@ -14,6 +14,8 @@ export function Promotions() {
   const activePromotions = useMemo(() => content.promotions.filter((promo) => promo.active), [content.promotions]);
   useEffect(() => { activePromotions.forEach(promo => capture(analyticsEvents.promotionView, { promotion_id: promo.id })); }, [activePromotions]);
 
+  if (!activePromotions.length) return null;
+
   return (
     <section id="promociones" className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
       <div className="mb-8 max-w-2xl">

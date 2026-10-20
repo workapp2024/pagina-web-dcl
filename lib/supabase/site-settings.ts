@@ -1,3 +1,4 @@
+import { readHomePresentation } from "@/lib/home-presentation";
 import { normalizeWhyUsCards } from "@/lib/why-us";
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
@@ -73,6 +74,7 @@ export async function getSupabaseSiteSettings(): Promise<Partial<SiteSettings> |
     settings.paymentPresentationWholesale = row.payment_presentation_wholesale;
     settings.paymentPresentationCheckout = row.payment_presentation_checkout;
 
+    Object.assign(settings, readHomePresentation(row as unknown as Record<string, unknown>));
     return settings;
   } catch (err) {
     console.warn("Excepción al consultar site_settings en Supabase:", err);

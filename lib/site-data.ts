@@ -70,7 +70,7 @@ export type Promotion = {
   order: number;
 };
 
-export type SiteSettings = {
+export type SiteSettings = import("@/lib/home-presentation").HomePresentation & {
   themePreset: ThemePreset;
   logo: string;
   whatsapp: string;
@@ -156,6 +156,7 @@ export const needCategories: NeedCategory[] = [
 
 export const defaultSiteContent: SiteContent = {
   siteSettings: {
+    faqEnabled: false, faqItems: [], homePaymentEnabled: false, homePaymentTitle: "Medios de pago", homePaymentImage: "",
     themePreset: DEFAULT_THEME,
     logo: "/brand/logo-dcl.png.png",
     whatsapp: whatsappUrl("Hola DCL Cree LED, quiero consultar por iluminación para mi vehículo."),

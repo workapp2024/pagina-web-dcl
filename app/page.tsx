@@ -20,9 +20,8 @@ import { getPremiumProductIds } from "@/lib/supabase/premium";
 import { resolvePremiumProducts } from "@/lib/premium";
 import { PremiumProducts } from "@/components/sections/PremiumProducts";
 import { WholesaleCTA } from "@/components/sections/WholesaleCTA";
-import { PaymentMethods } from "@/components/sections/PaymentMethods";
+import { HomeFaq, HomePaymentImage } from "@/components/sections/HomePresentation";
 import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
-import { defaultSiteContent } from "@/lib/site-data";
 
 // Se revalida periódicamente para reflejar altas/bajas de productos hechas desde el panel sin necesidad de un nuevo deploy.
 export const revalidate = 60;
@@ -30,6 +29,7 @@ export const revalidate = 60;
 export default async function Home() {
   const [products, gallery, remoteStations, premiumIds, remoteSettings] = await Promise.all([getSupabaseProducts(), getPublicGallery(16), getPublicRadioStations(), getPremiumProductIds(), getSupabaseSiteSettings()]);
   const premiumProducts = resolvePremiumProducts(premiumIds, products ?? []);
+  const homePresentation = { faqEnabled: remoteSettings?.faqEnabled ?? false, faqItems: remoteSettings?.faqItems ?? [], homePaymentEnabled: remoteSettings?.homePaymentEnabled ?? false, homePaymentTitle: remoteSettings?.homePaymentTitle ?? "Medios de pago", homePaymentImage: remoteSettings?.homePaymentImage ?? "" };
   const stations = remoteStations.length ? remoteStations : [DEFAULT_RADIO_STATION];
 
   return (
@@ -39,16 +39,17 @@ export default async function Home() {
 
         <main>
           <Hero />
-          <PaymentMethods settings={{ ...defaultSiteContent.siteSettings, ...remoteSettings }} surface="home" />
-          <PremiumProducts products={premiumProducts} />
-          <WholesaleCTA />
           <VehicleSelector homeVisibility />
+          <PremiumProducts products={premiumProducts} />
+          <Promotions />
+          <HomePaymentImage settings={homePresentation} />
+          <WholesaleCTA />
           <NeedCategories />
           <WhyUs />
-          <Promotions />
           <DclMusic stations={stations} />
           {gallery.length > 0 && <EventOnMount event={analyticsEvents.galleryView} />}
           <WorkGallery items={gallery} />
+          <HomeFaq settings={homePresentation} />
           <FinalCTA />
         </main>
 

@@ -59,6 +59,7 @@ export async function POST(request: Request) {
     }
 
     if (!data) return NextResponse.json({ ok: false, error: "No existe site_settings (id=1). No se creó ni reseteó configuración." }, { status: 409 });
+    if (body.section === "homePresentation") revalidatePath("/");
     if (body.section === "payments" || body.section === "transfer") {
       revalidatePath("/");
       revalidatePath("/mayoristas");

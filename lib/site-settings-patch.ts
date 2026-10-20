@@ -1,3 +1,4 @@
+import { validateHomePresentation } from "@/lib/home-presentation";
 import { validateWhyUsCards } from "@/lib/why-us";
 import type { SiteSettings } from "@/lib/site-data";
 import type { Database } from "@/lib/supabase/database.types";
@@ -7,6 +8,7 @@ import { normalizePaymentPresentationMethods, isSafeLogoUrl } from "@/lib/paymen
 
 // Each editor owns only these columns. Never send a full cached SiteSettings row.
 export const siteSettingsSections = {
+  homePresentation: ["faqEnabled", "faqItems", "homePaymentEnabled", "homePaymentTitle", "homePaymentImage"],
   configuration: ["whatsapp", "instagram", "facebook", "email", "phone", "address"],
   home: ["logo", "vehicleSectionTitle", "needsSectionTitle", "whyUsSectionTitle", "whyUsEnabled", "whyUsCards", "productsSectionTitle", "promotionsSectionTitle"],
   appearance: ["themePreset"],
@@ -40,6 +42,12 @@ export function buildSiteSettingsPatch(section: unknown, settings: unknown): Set
     throw new Error("Sección no válida. Recargá el Admin antes de guardar.");
   }
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw new Error("Datos de configuración no válidos.");
+  if (section === "homePresentation") {
+    const keys = siteSettingsSections.homePresentation;
+    if (Object.keys(settings).some(key => !(keys as readonly string[]).includes(key))) throw new Error("Hay campos que no pertenecen a esta sección de la Home.");
+    const v = validateHomePresentation(settings);
+    return { faq_enabled: v.faqEnabled, faq_items: v.faqItems, home_payment_enabled: v.homePaymentEnabled, home_payment_title: v.homePaymentTitle, home_payment_image: v.homePaymentImage };
+  }
   const allowed: readonly string[] = siteSettingsSections[section as SiteSettingsSection];
   const entries = Object.entries(settings);
   if (!entries.length) throw new Error("No hay cambios para guardar.");
