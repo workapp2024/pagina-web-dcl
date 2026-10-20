@@ -12,6 +12,8 @@ test('Home contains the existing appearance editor closed by default; Configurat
     'next/navigation': { redirect: () => { throw new Error('redirect'); } },
     '@/components/admin/EditorForms': { AdminHomeEditor: () => React.createElement('div', null, 'Home editor'), AdminSiteSettingsForm: () => React.createElement('div', null, 'Contact editor') },
     '@/components/admin/PremiumManager': { PremiumManager: () => React.createElement('div', null, 'Premium editor') },
+    '@/components/admin/HomePresentationEditor': { HomePresentationEditor: () => React.createElement('div', null, 'Home FAQ and payment image editor') },
+    '@/components/admin/ReceiptIdentitySettings': { ReceiptIdentitySettings: () => React.createElement('div', null, 'Receipt identity editor') },
     '@/components/admin/AppearanceSettings': { AppearanceSettings: () => React.createElement('div', null, 'Appearance editor'), TransferSettings: () => React.createElement('div', null, 'Transfer editor'), PaymentPresentationSettings: () => React.createElement('div', null, 'Payment presentation editor') },
   };
   const home = renderToStaticMarkup(await load('app/admin/home/page.tsx', mocks).default());
@@ -19,7 +21,7 @@ test('Home contains the existing appearance editor closed by default; Configurat
   assert.doesNotMatch(home, /<details[^>]*\bopen\b/);
   assert.match(home, /Home editor/); assert.match(home, /Premium editor/);
   const config = renderToStaticMarkup(await load('app/admin/configuracion/page.tsx', mocks).default());
-  assert.doesNotMatch(config, /Appearance editor/);
+  assert.doesNotMatch(config, /Appearance editor|Payment presentation editor/);
   assert.match(config, /Contact editor/); assert.match(config, /Transfer editor/);
 });
 

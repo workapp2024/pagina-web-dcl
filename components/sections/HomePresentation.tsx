@@ -5,7 +5,9 @@ export function HomePaymentImage({ settings }: { settings: HomePresentation }) {
   if (!settings.homePaymentEnabled || !settings.homePaymentImage) return null;
   return <section aria-labelledby="home-payment-title" className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
     <h2 id="home-payment-title" className="mb-6 text-center text-2xl font-black sm:text-3xl">{settings.homePaymentTitle}</h2>
-    <img src={settings.homePaymentImage} alt="Medios de pago aceptados por DCL Cree LED" className="mx-auto block h-auto max-h-64 w-auto max-w-full object-contain" />
+    <div className="mx-auto rounded-2xl border border-zinc-200/80 bg-zinc-50 px-5 py-6 shadow-[0_8px_30px_rgba(0,0,0,0.12)] sm:rounded-3xl sm:px-10 sm:py-8">
+      <img src={settings.homePaymentImage} alt="Medios de pago aceptados por DCL Cree LED" className="mx-auto block h-auto max-h-64 w-auto max-w-full object-contain" />
+    </div>
   </section>;
 }
 
