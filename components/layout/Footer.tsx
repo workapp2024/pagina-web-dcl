@@ -1,8 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
-import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
-import { publicContact, publicPresentation } from "@/lib/public-site-content";
+import { getSupabaseSiteSettings } from "@/lib/server-site-presentation";
+import { publicContact } from "@/lib/public-site-content";
 
 const footerLinks = [
   { label: "Inicio", href: "/" },
@@ -17,7 +17,7 @@ const footerLinks = [
 export async function Footer() {
   const settings = await getSupabaseSiteSettings();
   const contact = publicContact(settings);
-  const { logo } = publicPresentation(settings);
+  const logo = settings?.logo || "";
   const socialLinks = [
     { label: "Instagram", href: settings?.instagram },
     { label: "Facebook", href: settings?.facebook },
@@ -32,7 +32,7 @@ export async function Footer() {
   });
   return <footer id="contacto" className="border-t border-white/10 bg-black px-4 py-10 sm:px-6 lg:px-8">
     <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-3">
-      <div className="min-w-0"><img src={logo} alt="DCL Cree LED" className="h-16 w-auto max-w-full object-contain object-left sm:h-20"/><p className="mt-4 max-w-xs text-sm leading-6 text-zinc-400">Iluminación LED para vehículos pensada para circular con mejor visibilidad, estilo y confianza.</p></div>
+      <div className="min-w-0">{logo && <img src={logo} alt="DCL Cree LED" className="h-16 w-auto max-w-full object-contain object-left sm:h-20"/>}<p className="mt-4 max-w-xs text-sm leading-6 text-zinc-400">Iluminación LED para vehículos pensada para circular con mejor visibilidad, estilo y confianza.</p></div>
       <div><h3 className="text-sm font-bold uppercase tracking-[0.22em] text-zinc-300">Navegación</h3><ul className="mt-3 text-sm text-zinc-400">{footerLinks.map(item => <li key={item.label}><Link href={item.href} className="inline-flex min-h-11 items-center transition hover:text-red-400">{item.label}</Link></li>)}</ul></div>
       <div className="min-w-0"><h3 className="text-sm font-bold uppercase tracking-[0.22em] text-zinc-300">Contacto</h3><div className="mt-3 text-sm text-zinc-400"><WhatsAppButton label="WhatsApp" className="min-h-11 bg-transparent p-0 text-zinc-400 hover:bg-transparent hover:text-red-400"/>
         {contact.email && <a href={`mailto:${contact.email}`} className="flex min-h-11 items-center [overflow-wrap:anywhere]">{contact.email}</a>}

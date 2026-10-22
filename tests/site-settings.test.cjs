@@ -19,7 +19,7 @@ test('Footer renders only configured HTTPS social links, with safe external navi
     const { Footer } = load('components/layout/Footer.tsx', {
       'next/link': ({ children, ...props }) => React.createElement('a', props, children),
       '@/components/ui/WhatsAppButton': { WhatsAppButton: () => React.createElement('span', null, 'WhatsApp') },
-      '@/lib/supabase/site-settings': { getSupabaseSiteSettings: async () => settings },
+      '@/lib/server-site-presentation': { getSupabaseSiteSettings: async () => settings },
     });
     const html = renderToStaticMarkup(await Footer());
     for (const key of ['facebook', 'instagram']) {

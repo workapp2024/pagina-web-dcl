@@ -1,6 +1,6 @@
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
-import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
+import { SiteContentProvider } from "@/components/providers/ServerSiteContentProvider";
 import { CartPageContent } from "@/components/store/CartPageContent";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { getSupabaseProducts } from "@/lib/supabase/products";

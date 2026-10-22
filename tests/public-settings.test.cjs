@@ -47,9 +47,9 @@ test('vehicle edits are cosmetic, keep canonical IDs and hide only Home entries'
 });
 test('Footer uses configured logo and contact; blank/unavailable configuration never exposes demo contacts', async () => {
   for (const settings of [null, {}, { logo: '/logo.webp', email: 'ventas@example.org', phone: '+54 9 261 779-1393', address: 'Dirección configurada' }]) {
-    const { Footer } = load('components/layout/Footer.tsx', { ...mocks(), '@/lib/supabase/site-settings': { getSupabaseSiteSettings: async () => settings }, '@/components/ui/WhatsAppButton': { WhatsAppButton: () => null } });
+    const { Footer } = load('components/layout/Footer.tsx', { ...mocks(), '@/lib/server-site-presentation': { getSupabaseSiteSettings: async () => settings }, '@/components/ui/WhatsAppButton': { WhatsAppButton: () => null } });
     const html = renderToStaticMarkup(await Footer());
-    assert.ok(html.includes(`src="${settings?.logo || defaultSiteContent.siteSettings.logo}"`));
+    if (settings?.logo) assert.ok(html.includes(`src="${settings.logo}"`)); else assert.ok(!html.includes(defaultSiteContent.siteSettings.logo));
     if (settings?.email) { assert.ok(html.includes('mailto:ventas@example.org')); assert.ok(html.includes('tel:+5492617791393')); assert.ok(html.includes('Dirección configurada')); }
     else assert.ok(!/mailto:|tel:|ventas@dclcreeled|0000-0000/.test(html));
   }

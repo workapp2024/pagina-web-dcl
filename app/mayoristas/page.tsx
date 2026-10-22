@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { WholesaleCatalog } from "@/components/wholesale/WholesaleCatalog";
 import { isWholesaleSessionValid } from "@/lib/wholesale-server";
 import { HomePaymentImage } from "@/components/sections/HomePresentation";
-import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
+import { getSupabaseSiteSettings } from "@/lib/server-site-presentation";
 import { defaultSiteContent } from "@/lib/site-data";
 
 export const metadata: Metadata = {

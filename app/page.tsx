@@ -9,7 +9,7 @@ import { DclMusic } from "@/components/sections/DclMusic";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
-import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
+import { SiteContentProvider } from "@/components/providers/ServerSiteContentProvider";
 import { getSupabaseProducts } from "@/lib/supabase/products";
 import { getPublicGallery } from "@/lib/supabase/gallery";
 import { DEFAULT_RADIO_STATION } from "@/lib/radio-stations";
@@ -21,7 +21,7 @@ import { resolvePremiumProducts } from "@/lib/premium";
 import { PremiumProducts } from "@/components/sections/PremiumProducts";
 import { WholesaleCTA } from "@/components/sections/WholesaleCTA";
 import { HomeFaq, HomePaymentImage } from "@/components/sections/HomePresentation";
-import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
+import { getSupabaseSiteSettings } from "@/lib/server-site-presentation";
 
 // Se revalida periódicamente para reflejar altas/bajas de productos hechas desde el panel sin necesidad de un nuevo deploy.
 export const revalidate = 60;

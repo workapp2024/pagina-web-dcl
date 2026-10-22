@@ -1,7 +1,7 @@
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
-import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
+import { SiteContentProvider } from "@/components/providers/ServerSiteContentProvider";
 import { VehicleSelector } from "@/components/sections/VehicleSelector";
 import { getSupabaseProducts } from "@/lib/supabase/products";
 import { parseProductFilters, type CatalogParams } from "@/lib/product-filters";

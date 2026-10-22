@@ -120,7 +120,7 @@ test('vehicle URL context reaches the shared flow without repeating the type que
   const { default: Page } = load('app/vehiculos/page.tsx', {
     '@/components/layout/Header': { Header: () => null }, '@/components/layout/Footer': { Footer: () => null },
     '@/components/ui/WhatsAppButton': { WhatsAppButton: () => null },
-    '@/components/providers/SiteContentProvider': { SiteContentProvider: () => null },
+    '@/components/providers/ServerSiteContentProvider': { SiteContentProvider: () => null },
     '@/components/sections/VehicleSelector': { VehicleSelector: Selector },
     '@/lib/supabase/products': { getSupabaseProducts: async () => [] },
   }, { URLSearchParams });

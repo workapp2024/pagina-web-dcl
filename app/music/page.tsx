@@ -1,7 +1,7 @@
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { MusicStationGrid } from "@/components/music/MusicStationGrid";
-import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
+import { SiteContentProvider } from "@/components/providers/ServerSiteContentProvider";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { DEFAULT_RADIO_STATION } from "@/lib/radio-stations";
 import { getPublicRadioStations } from "@/lib/supabase/radio-stations";

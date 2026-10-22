@@ -33,18 +33,30 @@ type SiteContentProviderProps = {
   children: ReactNode;
   /** Productos ya consultados en el servidor (Supabase) para evitar el flash de contenido de ejemplo. */
   initialProducts?: Product[];
+  initialPresentation?: Pick<SiteContent, "siteSettings" | "promotions" | "vehicleCategories">;
 };
 
-export function SiteContentProvider({ children, initialProducts }: SiteContentProviderProps) {
+export function SiteContentProvider({ children, initialProducts, initialPresentation }: SiteContentProviderProps) {
   const { refresh: refreshWhatsApp } = useWhatsAppConfiguration();
   const [content, setContent] = useState<SiteContent>(() =>
-    initialProducts && initialProducts.length > 0
-      ? { ...defaultSiteContent, products: initialProducts }
-      : defaultSiteContent,
+    ({ ...defaultSiteContent, ...initialPresentation,
+      products: initialProducts && initialProducts.length > 0 ? initialProducts : defaultSiteContent.products }),
   );
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
+    // Public pages hydrate the exact server snapshot. Never replay local drafts or
+    // race a second set of visual reads against it. Keep the product flow separate.
+    if (initialPresentation) {
+      if (!initialProducts?.length) {
+        let active = true;
+        getSupabaseProducts().then(products => {
+          if (active && products?.length) setContent(previous => ({ ...previous, products }));
+        });
+        return () => { active = false; };
+      }
+      return;
+    }
     const initialContent = getStoredSiteContent();
     // Fusión única post-hidratación con el cache local; evita el mismatch de SSR vs. localStorage.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -118,7 +130,7 @@ export function SiteContentProvider({ children, initialProducts }: SiteContentPr
     return () => {
       isMounted = false;
     };
-  }, [initialProducts, refreshWhatsApp]);
+  }, [initialProducts, initialPresentation, refreshWhatsApp]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = isThemePreset(content.siteSettings.themePreset)

@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { ProductImageGallery } from "@/components/public/ProductImageGallery";
-import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
+import { SiteContentProvider } from "@/components/providers/ServerSiteContentProvider";
 import { getSupabaseProducts } from "@/lib/supabase/products";
 import { whatsappUrl } from "@/lib/whatsapp";
 import { EventOnMount } from "@/components/analytics/EventOnMount";

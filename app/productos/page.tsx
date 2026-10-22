@@ -2,7 +2,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { ProductCatalog } from "@/components/public/ProductCatalog";
-import { SiteContentProvider } from "@/components/providers/SiteContentProvider";
+import { SiteContentProvider } from "@/components/providers/ServerSiteContentProvider";
 import { getSupabaseProducts } from "@/lib/supabase/products";
 import { hasCatalogContext, parseProductFilters, type CatalogParams } from "@/lib/product-filters";
 

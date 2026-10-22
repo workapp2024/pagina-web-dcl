@@ -16,7 +16,7 @@ export function VehicleCategories({ onSelect, homeVisibility = false }: { onSele
       const category = content.vehicleCategories.find(category => category.id === option.id);
       if (homeVisibility && category?.active === false) return null;
       const fallback = defaultSiteContent.vehicleCategories.find(category => category.id === option.id);
-      const image = category?.image || fallback?.image;
+      const image = category?.image;
       const title = publicText(category?.title, option.label);
       const description = publicText(category?.description, fallback?.description || "");
       const filters = { vehicleType: option.id };

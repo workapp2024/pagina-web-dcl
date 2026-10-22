@@ -4,7 +4,8 @@ import { RadioProvider } from "@/components/layout/RadioPlayer";
 import { defaultSiteContent } from "@/lib/site-data";
 import { DEFAULT_RADIO_STATION } from "@/lib/radio-stations";
 import { getPublicRadioStations } from "@/lib/supabase/radio-stations";
-import { getSupabaseSiteSettings } from "@/lib/supabase/site-settings";
+import { getSupabaseSiteSettings } from "@/lib/server-site-presentation";
+import { DEFAULT_THEME, isThemePreset } from "@/lib/theme";
 import "./globals.css";
 import { Suspense } from "react";
 import { PublicAnalytics } from "@/components/analytics/PublicAnalytics";
@@ -38,6 +39,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="es-AR"
+      data-theme={isThemePreset(settings.themePreset) ? settings.themePreset : DEFAULT_THEME}
       className="h-full antialiased"
     >
       <body className="min-h-full bg-black text-white"><WhatsAppProvider configured={remoteSettings?.whatsapp}><RadioProvider settings={settings} stations={stations}><CartProvider>{children}</CartProvider></RadioProvider></WhatsAppProvider><Suspense><PublicAnalytics/></Suspense></body>
