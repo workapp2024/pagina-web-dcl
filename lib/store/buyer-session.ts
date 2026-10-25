@@ -13,7 +13,25 @@ export const hashBuyerToken = (token: string) => createHash("sha256").update(tok
 export const isOrderNumber = (value: unknown): value is string => typeof value === "string" && /^DCL-[0-9]{6,19}$/.test(value);
 export const buyerNotFound = () => Response.json({ ok: false, error: "Pedido no disponible en este navegador." }, { status: 404, headers: { "Cache-Control": "no-store" } });
 export function isSameOriginWrite(request: Request) {
-  return request.headers.get("origin") === new URL(request.url).origin && request.headers.get("sec-fetch-site") !== "cross-site";
+  if (request.headers.get("sec-fetch-site") === "cross-site") return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  if (origin === new URL(request.url).origin) return true;
+
+  // Behind a reverse proxy, Next.js may expose its internal listening address
+  // in request.url. Accept only the configured public HTTPS origin AND its
+  // matching Host; never derive a trusted origin from forwarded headers.
+  const configured = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!configured) return false;
+  try {
+    const site = new URL(configured);
+    return site.protocol === "https:" && !site.username && !site.password
+      && site.pathname === "/" && !site.search && !site.hash
+      && origin === site.origin
+      && request.headers.get("host") === site.host;
+  } catch {
+    return false;
+  }
 }
 export async function getBuyerSession(): Promise<{ id: string } | null> {
   const token = (await cookies()).get(BUYER_COOKIE)?.value;
