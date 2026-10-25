@@ -12,7 +12,7 @@ import { PublicAnalytics } from "@/components/analytics/PublicAnalytics";
 import { WhatsAppProvider } from "@/components/providers/WhatsAppProvider";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://pagina-web-dcl.vercel.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://pagina-web-dcl.vercel.app"),
   title: "DCL Cree LED | Iluminación CREE LED para vehículos",
   description:
     "Iluminación CREE LED para autos, camionetas, motos y vehículos. Encontrá la iluminación adecuada para tu vehículo y consultanos por WhatsApp.",
