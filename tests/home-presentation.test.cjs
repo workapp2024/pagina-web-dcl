@@ -32,13 +32,16 @@ test('public FAQ is collapsed, escaped, ordered and hides disabled or empty sect
   const image=render(HomePaymentImage,{...defaults,homePaymentEnabled:true,homePaymentImage:'https://cdn.example/transparent.png'});
   assert.match(image,/object-contain/);assert.match(image,/h-auto/);assert.doesNotMatch(image,/object-cover|<button/);
 });
-test('Home reorders existing finder without changing checkout payment presentation',()=>{
+test('Home reorders existing finder and checkout reuses compact image without legacy payment badges',()=>{
   const home=fs.readFileSync('app/page.tsx','utf8');
   const tags=['<Hero','<VehicleSelector','<PremiumProducts','<Promotions','<HomePaymentImage','<WholesaleCTA','<DclMusic','<WorkGallery','<HomeFaq','<FinalCTA','<Footer'];
   for(let i=1;i<tags.length;i++)assert.ok(home.indexOf(tags[i])>home.indexOf(tags[i-1]),tags[i]);
   assert.equal((home.match(/<VehicleSelector/g)||[]).length,1);
   assert.doesNotMatch(home,/<PaymentMethods/);
-  assert.match(fs.readFileSync('app/checkout/page.tsx','utf8'),/PaymentMethods/);
+  const checkout=fs.readFileSync('app/checkout/page.tsx','utf8');
+  assert.doesNotMatch(checkout, /<PaymentMethods/);
+  assert.match(checkout, /HomePaymentImage settings=\{settings\} compact/);
+  assert.doesNotMatch(checkout, /enabledMethods|MERCADOPAGO_ACCESS_TOKEN/);
 });
 test('admin read is protected; unavailable migration cannot appear as a successful empty configuration',async()=>{
   let allowed=false,failed=false,calls=0;
