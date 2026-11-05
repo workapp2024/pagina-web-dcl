@@ -56,6 +56,7 @@ function uiHarness(file, extra = {}) {
   return { render: props => { cursor = 0; return component.WholesaleConfirmation(props); } };
 }
 function nodes(tree) {
+  if (Array.isArray(tree)) return tree.flatMap(nodes);
   if (!tree || typeof tree !== 'object') return [];
   const children = tree.props?.children;
   return [tree, ...(Array.isArray(children) ? children.flatMap(nodes) : nodes(children))];
@@ -67,20 +68,26 @@ function text(tree) {
   return text(tree.props?.children);
 }
 
-async function sectorPendingView(sector, orders) {
+async function sectorPendingView(sector, orders, role = "ADMIN", wholesaleFailure = false, requests = []) {
   const states=[]; let cursor=0; let effect;
   const jsx=(type,props)=>({type,props});
   const {SectorHome}=load('components/admin/SectorHome.tsx',{
-    react:{useEffect:callback=>{effect=callback;},useState:initial=>{const index=cursor++;if(!(index in states))states[index]=initial;return [states[index],value=>{states[index]=value;}];}},
+    react:{useEffect:callback=>{effect=callback;},useState:initial=>{const index=cursor++;if(!(index in states))states[index]=initial;return [states[index],value=>{states[index]=typeof value === "function" ? value(states[index]) : value;}];}},
     'react/jsx-runtime':{jsx,jsxs:jsx},'next/link':'a',
-    '@/components/admin/AdminIdentityProvider':{useAdminIdentity:()=>({role:'ADMIN'})},
+    '@/components/admin/AdminIdentityProvider':{useAdminIdentity:()=>({role})},
   },{fetch:async url=>{
+    requests.push(url);
     const params=new URL('https://local.test'+url).searchParams;
-    if(sector==='mayoristas') {
+    if(url.includes('/api/admin/wholesale-orders')) {
+      assert.equal(role, 'ADMIN');
+      if (wholesaleFailure) return Response.json({ message: 'Consulta mayorista no disponible' }, { status: 503 });
       assert.match(url,/\/api\/admin\/wholesale-orders/);
-      if(url.endsWith('/delivered')) return Response.json({data:{deliveryProgress:[{ordered:1,delivered:1}]}});
+      assert.equal(params.get('includeDeliveryPending'),'true');
+      const start = (Number(params.get('page')) - 1) * 25;
+      return Response.json({ data: orders.slice(start, start + 25), pagination: { total: orders.length } });
       assert.equal(params.get('archived'),'false');
     } else {
+      assert.notEqual(sector, 'mayoristas');
       assert.match(url,/\/api\/admin\/orders\?/);
       assert.equal(params.get('view'),'active');
     }
@@ -94,7 +101,7 @@ async function sectorPendingView(sector, orders) {
 
 test('wholesale home respects administrative archive and never falls back to historical activity',async()=>{
   const rows=['cancelled','rejected','awaiting_customer'].map((status,index)=>({id:status,orderNumber:`MW-${index}`,status,customerName:'Cliente'}));
-  rows.push({id:'delivered',orderNumber:'MW-DELIVERED',status:'confirmed',customerName:'Cliente'});
+  rows.push({id:'delivered',orderNumber:'MW-DELIVERED',status:'confirmed',deliveryPending:false,customerName:'Cliente'});
   const tree=await sectorPendingView('mayoristas',rows);
   assert.match(text(tree),/Todo al día. No tenés pedidos pendientes/);
   assert.doesNotMatch(text(tree),/MW-|Actividad reciente|Próxima acción/);
@@ -162,9 +169,10 @@ test('sector home reads all pages, distinguishes full delivery and never marks a
       '@/components/admin/AdminIdentityProvider': { useAdminIdentity: () => ({ role: 'ADMIN' }) },
     }, { AbortController, setTimeout, clearTimeout, URLSearchParams, fetch: async url => {
       if (url.includes('/api/admin/orders')) throw new Error('Other sector must not be loaded');
-      if (url.includes('/wholesale-orders/delivered')) return fail ? Response.json({ message: 'Consulta incompleta' }, { status: 500 }) : Response.json({ data: { deliveryProgress: [{ ordered: 2, delivered: 2 }] } });
+      assert.match(url, /wholesale-orders\?/);
       const page = Number(new URL('https://test.invalid' + url).searchParams.get('page'));
-      const order = page === 1 ? { id: 'accepted', orderNumber: 'MW-000001', status: 'in_review', revisionStatus: 'approved' } : { id: 'delivered', orderNumber: 'MW-000002', status: 'confirmed' };
+      if (page === 2 && fail) return Response.json({ message: 'Consulta incompleta' }, { status: 500 });
+      const order = page === 1 ? { id: 'accepted', orderNumber: 'MW-000001', status: 'in_review', revisionStatus: 'approved' } : { id: 'delivered', orderNumber: 'MW-000002', status: 'confirmed', deliveryPending: false };
       return Response.json({ data: [{ ...order, customerName: 'Cliente', createdAt: '2026-10-01T12:00:00Z' }], pagination: { total: 2 } });
     } });
     const render = () => { cursor = 0; return SectorHome({ sector: 'mayoristas' }); };
@@ -180,4 +188,107 @@ test('sector home reads all pages, distinguishes full delivery and never marks a
   const failed = await renderHome();
   assert.match(failed, /Consulta incompleta/);
   assert.doesNotMatch(failed, /Todo al día/);
+});
+
+test('general home exposes only the seller channel and opens the exact retail record', async () => {
+  const order = { id: 'retail', order_number: 'DCL-123456', status: 'pending_manual_verification', operational_status: 'received', payment: null };
+  const tree = await sectorPendingView(undefined, [order], 'VENDEDOR');
+  assert.match(text(tree), /Pendientes de trabajo.*requiere revisión de Administración/);
+  assert.doesNotMatch(text(tree), /Mayoristas|Editar página de inicio/);
+  assert.ok(nodes(tree).some(node => node.props?.href === '/admin/minoristas/pedidos?order=DCL-123456'));
+});
+
+test('general home preserves retail results when the wholesale source fails', async () => {
+  const order = { ...paid, id: 'retail', order_number: 'DCL-123456' };
+  const tree = await sectorPendingView(undefined, [order], 'ADMIN', true);
+  assert.match(text(tree), /DCL-123456.*Consulta mayorista no disponible/);
+  assert.doesNotMatch(text(tree), /Todo al día/);
+});
+
+test('navigation allows the existing retail aliases and excludes admin-only destinations for sellers', () => {
+  const { canShowAdminLink } = load('components/admin/AdminSidebar.tsx', {
+    '@/components/admin/AdminIdentityProvider': {},
+  });
+  for (const path of ['/admin', '/admin/minoristas/pedidos', '/admin/minoristas/clientes', '/admin/productos']) {
+    assert.equal(canShowAdminLink('VENDEDOR', path), true, path);
+  }
+  for (const path of ['/admin/mayoristas', '/admin/mayoristas/clientes', '/admin/minoristas/finanzas', '/admin/home', '/admin/analitica']) {
+    assert.equal(canShowAdminLink('VENDEDOR', path), false, path);
+    assert.equal(canShowAdminLink('ADMIN', path), true, path);
+  }
+});
+
+test('100 confirmed wholesale orders require four list requests and no detail requests', async () => {
+  const orders = Array.from({ length: 100 }, (_, i) => ({
+    id: String(i), orderNumber: 'MW-' + (1000 + i), status: 'confirmed', deliveryPending: i === 99,
+  }));
+  const requests = [];
+  const tree = await sectorPendingView('mayoristas', orders, 'ADMIN', false, requests);
+  assert.equal(requests.length, 4);
+  assert.ok(requests.every(url => url.startsWith('/api/admin/wholesale-orders?')));
+  assert.match(text(tree), /Requieren atención · 1.*MW-1099/);
+  assert.doesNotMatch(text(tree), /MW-1000/);
+});
+
+test('wholesale list computes the same delivery pending by order and current revision with read-only batches', async () => {
+  const orders = ['partial', 'complete', 'missing', 'notice'].map(id => ({
+    id, status: 'confirmed', current_revision_id: 'rev-' + id, order_number: 'MW-' + id, customer_id: 'customer',
+  }));
+  const tables = {
+    wholesale_orders: orders,
+    customers: [{ id: 'customer', full_name: 'Cliente' }],
+    wholesale_order_revisions: orders.map(order => ({ id: order.current_revision_id, total_amount: 100, currency: 'ARS' })),
+    wholesale_order_revision_items: [
+      { revision_id: 'rev-partial', product_id: 'led', quantity: 4 },
+      { revision_id: 'rev-complete', product_id: 'led', quantity: 4 },
+      { revision_id: 'rev-complete', product_id: 'other', quantity: 2 },
+    ],
+    wholesale_delivery_items: [
+      ...Array.from({ length: 2 }, () => ({ wholesale_deliveries: { order_id: 'complete' }, product_id: 'led', quantity: 2 })),
+      { wholesale_deliveries: { order_id: 'complete' }, product_id: 'other', quantity: 2 },
+      { wholesale_deliveries: { order_id: 'partial' }, product_id: 'led', quantity: 3 },
+    ],
+  };
+  const reads = [];
+  let role = 'ADMIN';
+  const { GET } = load('app/api/admin/wholesale-orders/route.ts', {
+    '@/lib/admin-auth': { getAdminIdentity: async () => ({ role, id: 'actor' }) },
+    '@/lib/wholesale-order-visibility-server': { readWholesaleVisibility: async () => ({ available: true, ids: [] }) },
+    '@/lib/wholesale-payment-notices': { readTransferNotices: async () => [{ order_id: 'notice', status: 'pending' }] },
+    '@/lib/supabase/server': {
+      isServiceRoleConfigured: () => true,
+      createAdminServerClient: () => ({ from(table) {
+        let rows = tables[table];
+        reads.push(table);
+        const result = () => ({ data: rows, count: rows.length, error: null });
+        const q = {
+          select: () => q, order: () => q,
+          in(key, ids) {
+            rows = rows.filter(row => ids.includes(key.split('.').reduce((obj, part) => obj[part], row)));
+            return q;
+          },
+          range: async (start, end) => ({ ...result(), data: rows.slice(start, end + 1) }),
+          then: resolve => Promise.resolve(result()).then(resolve),
+        };
+        return q;
+      } }),
+    },
+  });
+  const request = new Request('https://test.invalid?archived=false&includeDeliveryPending=true');
+  role = 'VENDEDOR';
+  assert.equal((await GET(request)).status, 401);
+  assert.deepEqual(reads, []);
+  role = 'ADMIN';
+  const response = await GET(request);
+  assert.equal(response.status, 200);
+  const { data } = await response.json();
+  assert.deepEqual(data.map(row => [row.id, row.deliveryPending, row.transferNoticePending]), [
+    ['partial', true, false], ['complete', false, false], ['missing', true, false], ['notice', undefined, true],
+  ]);
+  assert.equal(reads.filter(table => table === 'wholesale_order_revision_items').length, 1);
+  assert.equal(reads.filter(table => table === 'wholesale_delivery_items').length, 1);
+  assert.match(response.headers.get('cache-control'), /no-store/);
+  const ordinary = await GET(new Request('https://test.invalid'));
+  assert.ok((await ordinary.json()).data.every(row => !Object.hasOwn(row, 'deliveryPending')));
+  assert.equal(reads.filter(table => table === 'wholesale_delivery_items').length, 1);
 });

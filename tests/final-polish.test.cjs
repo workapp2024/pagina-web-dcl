@@ -14,7 +14,7 @@ test('customer balances support partial/full receipts, cancellation and currency
   assert.equal(customerPaymentSummary('confirmed',100,'ARS',[{...p(40),currency:'USD'}]),null);
 });
 test('client payment view offers continuation only for a confirmed outstanding balance and no automatic checkout',()=>{
-  const {WholesaleOrderPayment}=load('components/wholesale/WholesaleOrderPayment.tsx',{react:{useState:initial=>[initial,()=>{}],useEffect(){}}});
+  const {WholesaleOrderPayment}=load('components/wholesale/WholesaleOrderPayment.tsx',{react:{...React,useEffect(){}}});
   function render(status,paid){return renderToStaticMarkup(React.createElement(WholesaleOrderPayment,{order:{id:'o',order_number:'MW-1',currency:'ARS',status,payment_summary:customerPaymentSummary(status,100,'ARS',paid?[{entry_type:'payment',amount:paid,currency:'ARS'}]:[])}}));}
   assert.match(render('confirmed',40),/Continuar al pago/);assert.match(render('confirmed',40),/60,00/);
   assert.match(render('confirmed',100),/Pago completo/);assert.doesNotMatch(render('confirmed',100),/Continuar al pago/);
@@ -23,8 +23,9 @@ test('client payment view offers continuation only for a confirmed outstanding b
 test('payment instructions are session-owned, freshly calculated and strictly read-only',async()=>{
   let customer=null,owned=true;const reads=[];
   const {GET}=load('app/api/wholesale/orders/[id]/payment/route.ts',{
+    '@/lib/wholesale-payment-notices':{...load('lib/wholesale-payment-notices.ts'),wholesalePaymentNoticesEnabled:()=>false,readTransferNotices:async()=>[]},
     '@/lib/wholesale-server':{getWholesaleSessionCustomerId:async()=>customer},
-    '@/lib/supabase/server':{createAdminServerClient:()=>({from(table){const q={select:()=>q,eq(key,value){reads.push([table,key,value]);return q;},in:()=>q,order:()=>q,range:async()=>({data:[{order_id:'o',entry_type:'payment',amount:40,currency:'ARS'}],error:null}),maybeSingle:async()=>({data:table==='wholesale_orders'?(owned?{id:'o',order_number:'MW-1',current_revision_id:'v',status:'confirmed'}:null):{transfer_alias:'configured.alias',transfer_holder:'Titular de prueba',transfer_cbu_cvu:'',transfer_institution:'Mercado Pago',transfer_instructions:'Enviar comprobante',whatsapp:''},error:null}),single:async()=>({data:{total_amount:100,currency:'ARS'},error:null})};return q;},rpc(){throw Error('No writes');}})},
+    '@/lib/supabase/server':{createAdminServerClient:()=>({from(table){const q={select:()=>q,eq(key,value){reads.push([table,key,value]);return q;},in:()=>q,order:()=>q,limit:()=>q,not:()=>q,range:async()=>({data:[{order_id:'o',entry_type:'payment',amount:40,currency:'ARS'}],error:null}),maybeSingle:async()=>({data:table==='wholesale_orders'?(owned?{id:'o',order_number:'MW-1',current_revision_id:'v',status:'confirmed'}:null):table==='site_settings'?{transfer_alias:'configured.alias',transfer_holder:'Titular de prueba',transfer_cbu_cvu:'',transfer_institution:'Mercado Pago',transfer_instructions:'Enviar comprobante',whatsapp:''}:null,error:null}),single:async()=>({data:{total_amount:100,currency:'ARS'},error:null})};return q;},rpc(){throw Error('No writes');}})},
   });
   const request=new Request('https://dcl.test'),context={params:Promise.resolve({id:'11111111-1111-4111-8111-111111111111'})};
   assert.equal((await GET(request,context)).status,401);assert.equal(reads.length,0);

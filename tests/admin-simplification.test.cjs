@@ -46,12 +46,20 @@ test('retail profit uses the API estimate only with explicit historical cost cov
   assert.equal(sectorFinancialPresentation({ ...data, realizedProfit: 1, retailCostsComplete: true }, 'mayoristas').profit, null);
 });
 
-test('admin entry redirects to the sector and no longer renders the two-destination landing page', async () => {
+test('admin entry renders the general home only after commercial authentication', async () => {
+  const SectorHome = () => null;
+  let allowed = true;
   const page = load('app/admin/page.tsx', {
-    '@/lib/admin-auth': { isAdminAuthenticated: async () => true },
+    '@/components/admin/SectorHome': { SectorHome },
+    '@/lib/admin-auth': { isAdminAuthenticated: async permission => {
+      assert.equal(permission, 'commercial');
+      return allowed;
+    } },
     'next/navigation': { redirect: path => { throw new Error(`redirect:${path}`); } },
   });
-  await assert.rejects(page.default(), /redirect:\/admin\/minoristas$/);
+  assert.equal((await page.default()).type, SectorHome);
+  allowed = false;
+  await assert.rejects(page.default(), /redirect:\/admin\/login$/);
 });
 
 test('financial screens render distinct sector amounts, one consolidated balance and closed advanced tools', () => {
@@ -84,12 +92,12 @@ test('financial screens render distinct sector amounts, one consolidated balance
   assert.equal((wholesale.match(/<dt /g) || []).length, 3);
 });
 
-test('navigation hides analytics and retains other modules without repeated destinations or general finances in sectors', () => {
+test('navigation includes analytics under reports and retains other modules without repeated destinations or general finances in sectors', () => {
   const sidebar = fs.readFileSync('components/admin/AdminSidebar.tsx', 'utf8');
-  const groups = sidebar.slice(sidebar.indexOf('const groups = ['), sidebar.indexOf('const frequent ='));
+  const groups = sidebar.slice(sidebar.indexOf('const groups = ['), sidebar.indexOf('const account ='));
   const hrefs = [...groups.matchAll(/href: "([^"]+)"/g)].map(match => match[1]);
   assert.equal(hrefs.length, new Set(hrefs).size);
-  assert.doesNotMatch(sidebar, /\/admin\/analitica/);
+  assert.match(groups, /Finanzas y reportes[\s\S]*?href: "\/admin\/analitica"/);
   for (const path of ['/admin/ventas', '/admin/instalaciones', '/admin/garantias', '/admin/productos', '/admin/inventario', '/admin/inventario-mayorista', '/admin/compatibilidades', '/admin/home', '/admin/promociones', '/admin/galeria', '/admin/music', '/admin/vehiculos', '/admin/usuarios', '/admin/configuracion', '/admin/finanzas']) assert.ok(hrefs.includes(path), path);
   for (const sector of ['minoristas', 'mayoristas']) {
     assert.ok(hrefs.includes(`/admin/${sector}/finanzas`));

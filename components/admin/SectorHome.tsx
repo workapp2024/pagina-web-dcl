@@ -6,9 +6,11 @@ import { useAdminIdentity } from "@/components/admin/AdminIdentityProvider";
 import { retailNeedsAttention, retailNextAction, wholesaleNeedsAttention, wholesaleNextAction, wholesaleAdminLabel } from "@/lib/admin-order-attention";
 import { technicalOrderLabels, operationalLabels, type OperationalOrder } from "@/lib/store/order-operations";
 
-type Entry = { id: string; number: string; customer: string; createdAt: string; action: string; label: string; attention: boolean; href: string };
-type Retail = OperationalOrder & { id: string; order_number: string; customer?: { full_name: string }; created_at: string };
-type Wholesale = { id: string; orderNumber: string; customerName: string; createdAt: string; status: string; revisionStatus?: string };
+type Sector = "minoristas" | "mayoristas";
+type Result = { entries: Entry[] } | { error: string };
+type Entry = { id: string; number: string; customer: string; action: string; label: string; href: string };
+type Retail = OperationalOrder & { id: string; order_number: string; customer?: { full_name: string } };
+type Wholesale = { id: string; orderNumber: string; customerName: string; status: string; transferNoticePending?: boolean; deliveryPending?: boolean; revisionStatus?: string };
 
 async function read(url: string, signal: AbortSignal) {
   const response = await fetch(url, { cache: "no-store", signal });
@@ -17,8 +19,8 @@ async function read(url: string, signal: AbortSignal) {
   return body;
 }
 
-async function collect(base: string, signal: AbortSignal) {
-  const rows = [];
+async function collect<T>(base: string, signal: AbortSignal) {
+  const rows: T[] = [];
   for (let page = 1; ; page++) {
     const body = await read(`${base}&page=${page}`, signal);
     rows.push(...body.data);
@@ -27,62 +29,110 @@ async function collect(base: string, signal: AbortSignal) {
   }
 }
 
-export function SectorHome({ sector }: { sector?: "minoristas" | "mayoristas" }) {
+async function loadRetail(signal: AbortSignal, owner: boolean): Promise<Entry[]> {
+  const orders = await collect<Retail>("/api/admin/orders?status=all&period=all&view=active&limit=100", signal);
+  return orders.filter(retailNeedsAttention).map(order => ({
+    id: order.id,
+    number: order.order_number,
+    customer: order.customer?.full_name || "Cliente",
+    label: `${technicalOrderLabels[order.status] || "Pedido registrado"} · ${operationalLabels[order.operational_status] || "Estado por revisar"}`,
+    action: !owner && ["refund_required", "stock_unavailable", "pending_manual_verification"].includes(order.status)
+      ? "Consultar la incidencia; requiere revisión de Administración"
+      : retailNextAction(order),
+    href: `/admin/minoristas/pedidos?order=${encodeURIComponent(order.order_number)}`,
+  }));
+}
+
+async function loadWholesale(signal: AbortSignal): Promise<Entry[]> {
+  const orders = await collect<Wholesale>("/api/admin/wholesale-orders?status=all&archived=false&includeDeliveryPending=true", signal);
+  const pending: Entry[] = [];
+  for (const order of orders) {
+    if (order.status === "confirmed" && !order.transferNoticePending && typeof order.deliveryPending !== "boolean") {
+      throw new Error("No se pudo consultar el estado de las entregas.");
+    }
+    const deliveryPending = order.deliveryPending;
+    if (!order.transferNoticePending && !wholesaleNeedsAttention(order.status, deliveryPending)) continue;
+    pending.push({
+      id: order.id,
+      number: order.orderNumber,
+      customer: order.customerName,
+      label: wholesaleAdminLabel(order.status, order.revisionStatus),
+      action: order.transferNoticePending ? "Revisar el aviso de transferencia" : wholesaleNextAction(order.status, order.revisionStatus, deliveryPending),
+      href: `/admin/mayoristas/pedidos?order=${encodeURIComponent(order.orderNumber)}`,
+    });
+  }
+  return pending;
+}
+
+const linkClass = "inline-flex min-h-11 items-center rounded-xl border border-white/15 px-4 text-sm font-semibold hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-red-400";
+const channels = { minoristas: "Minoristas", mayoristas: "Mayoristas" } satisfies Record<Sector, string>;
+
+export function SectorHome({ sector }: { sector?: Sector }) {
   const identity = useAdminIdentity();
   const owner = identity?.role === "ADMIN";
-  const [data, setData] = useState<{ minoristas: Entry[]; mayoristas: Entry[] } | null>(null);
-  const [error, setError] = useState("");
+  const authenticated = Boolean(identity);
+  const [results, setResults] = useState<Partial<Record<Sector, Result>>>({});
   const [refresh, setRefresh] = useState(0);
+
   useEffect(() => {
+    if (!authenticated) return;
     const controller = new AbortController();
-    async function load() {
-      setData(null); setError("");
+    async function load(key: Sector, request: () => Promise<Entry[]>) {
+      let result: Result;
       try {
-        const [retail, wholesale] = await Promise.all([
-          sector !== "mayoristas" ? collect("/api/admin/orders?status=all&period=all&view=active&limit=100", controller.signal) : Promise.resolve([]),
-          owner && sector !== "minoristas" ? collect("/api/admin/wholesale-orders?status=all&archived=false", controller.signal) : Promise.resolve([]),
-        ]);
-        const mayoristas: Entry[] = [];
-        // Sequential reads avoid a burst of requests; incomplete reads never become a zero count.
-        const orderedWholesale = (wholesale as Wholesale[]).sort((a, b) => Number(b.status === "in_review" && b.revisionStatus === "approved") - Number(a.status === "in_review" && a.revisionStatus === "approved"));
-        for (const order of orderedWholesale) {
-          let deliveryPending = true;
-          if (order.status === "confirmed") {
-            const detail = (await read(`/api/admin/wholesale-orders/${order.id}`, controller.signal)).data;
-            deliveryPending = !detail.deliveryProgress.length || detail.deliveryProgress.some((item: { delivered: number; ordered: number }) => item.delivered < item.ordered);
-          }
-          mayoristas.push({ id: order.id, number: order.orderNumber, customer: order.customerName, createdAt: order.createdAt,
-            label: wholesaleAdminLabel(order.status, order.revisionStatus), action: wholesaleNextAction(order.status, order.revisionStatus, deliveryPending),
-            attention: wholesaleNeedsAttention(order.status, deliveryPending), href: `/admin/mayoristas/pedidos?order=${order.orderNumber}` });
-        }
-        const minoristas = (retail as Retail[]).map(order => ({ id: order.id, number: order.order_number, customer: order.customer?.full_name || "Cliente", createdAt: order.created_at,
-          label: `${technicalOrderLabels[order.status] || "Pedido registrado"} · ${operationalLabels[order.operational_status] || "Estado por revisar"}`, action: retailNextAction(order), attention: retailNeedsAttention(order), href: `/admin/minoristas/pedidos?order=${order.order_number}` }));
-        if (!controller.signal.aborted) setData({ minoristas, mayoristas });
-      } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "No se pudieron consultar los pendientes."); }
+        result = { entries: await request() };
+      } catch (cause) {
+        result = { error: cause instanceof Error ? cause.message : "No se pudieron consultar los pendientes." };
+      }
+      if (!controller.signal.aborted) setResults(current => ({ ...current, [key]: result }));
     }
-    const timer = setTimeout(() => void load(), 0);
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [owner, refresh, sector]);
-  const current = data && sector ? data[sector] : [];
-  const pending = current.filter(entry => entry.attention);
+    if (sector !== "mayoristas") void load("minoristas", () => loadRetail(controller.signal, owner));
+    if (owner && sector !== "minoristas") void load("mayoristas", () => loadWholesale(controller.signal));
+    return () => controller.abort();
+  }, [authenticated, owner, refresh, sector]);
+
+  const visible: Sector[] = sector ? [sector] : owner ? ["minoristas", "mayoristas"] : ["minoristas"];
   return <div className="space-y-6">
-    <header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-widest text-red-300">DCL Cree LED · Administración</p><h1 className="mt-2 text-3xl font-black">{sector === "minoristas" ? "Minoristas" : sector === "mayoristas" ? "Mayoristas" : "Inicio"}</h1></div><button onClick={() => setRefresh(value => value + 1)} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm">Actualizar pendientes</button></header>
-    {error && <p role="alert" className="rounded-xl border border-red-400/30 p-4 text-red-200">{error}</p>}
-    {!data && !error && <p role="status">Consultando operaciones…</p>}
-    {!sector ? <section aria-label="Sectores comerciales" className="overflow-hidden rounded-2xl border border-white/15 bg-zinc-950/70"><div className="border-b border-white/10 px-5 py-4 sm:px-6"><h2 className="font-semibold">Operaciones de DCL</h2><p className="mt-1 text-sm text-zinc-400">Elegí un sector para atender pedidos y consultar clientes.</p></div><div className="grid md:grid-cols-2">{(["minoristas", "mayoristas"] as const).filter(key => key !== "mayoristas" || owner).map(key => {
-      const count = data?.[key].filter(entry => entry.attention).length;
-      const next = data?.[key].find(entry => entry.attention);
-      return <Link key={key} href={`/admin/${key}`} className="group min-w-0 p-5 transition hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-red-400 sm:p-6 md:[&+a]:border-l md:[&+a]:border-white/10"><div className="flex items-center justify-between gap-3"><h3 className="text-2xl font-black capitalize">{key}</h3><span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 text-red-300 group-hover:border-red-400">→</span></div><p className="mt-2 text-sm text-zinc-400">{key === "minoristas" ? "Pedidos de la tienda y atención al público" : "Solicitudes y entregas a clientes mayoristas"}</p><p className={`mt-5 text-sm font-semibold ${count ? "text-amber-200" : "text-zinc-300"}`}>{count === undefined ? "Pendientes por consultar" : count ? `${count} pedidos requieren atención` : "Sin acciones pendientes"}</p><p className="mt-2 min-h-10 break-words text-sm text-zinc-400">{next ? `${next.number} · ${next.action}` : "Pedidos, clientes y finanzas del sector"}</p><span className="mt-4 block text-sm font-semibold text-red-300">Abrir {key} →</span></Link>;
-    })}</div></section> : data && <section>
-      <h2 className="text-xl font-bold">{pending.length ? `Requieren atención · ${pending.length}` : "Todo al día. No tenés pedidos pendientes"}</h2>
-      {pending.length > 0 && <ul className="mt-3 grid gap-3">{pending.map(entry => <li key={entry.id} className="min-w-0 rounded-xl border border-white/10">
-        <Link href={entry.href} className="block min-h-11 break-words p-4 hover:bg-white/5 hover:text-red-200">
-          <b>{entry.number} · {entry.customer}</b>
-          <p className="mt-2 text-sm text-zinc-300">{entry.label}</p>
-          <p className="mt-1 text-sm text-amber-200">Próxima acción: {entry.action}</p>
-        </Link>
-      </li>)}</ul>}
-      <Link href={`/admin/${sector}/pedidos`} className="mt-4 inline-flex min-h-11 items-center text-sm text-zinc-400 hover:text-white">Ver todos los pedidos</Link>
+    <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-widest text-red-300">Operaciones · DCL Cree LED</p>
+        <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{sector ? channels[sector] : "Pendientes de trabajo"}</h1>
+        <p className="mt-2 text-sm text-zinc-300">Revisá la próxima acción y abrí el pedido correspondiente.</p>
+      </div>
+      <button type="button" onClick={() => { setResults({}); setRefresh(value => value + 1); }} className={linkClass}>Actualizar pendientes</button>
+    </header>
+    {visible.map(key => {
+      const result = results[key];
+      const entries = result && "entries" in result ? result.entries : undefined;
+      return <section key={key} aria-labelledby={`pendientes-${key}`} className="min-w-0 rounded-2xl border border-white/10 bg-zinc-900/60 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            {!sector && <p className="text-sm font-semibold text-red-300">{channels[key]}</p>}
+            <h2 id={`pendientes-${key}`} className="text-xl font-bold">{entries?.length ? `Requieren atención · ${entries.length}` : "Pedidos pendientes"}</h2>
+          </div>
+          <Link href={`/admin/${key}/pedidos`} className={linkClass}>Ver todos los pedidos</Link>
+        </div>
+        {!result && <p role="status" className="mt-4 text-sm text-zinc-300">Consultando operaciones…</p>}
+        {result && "error" in result && <p role="alert" className="mt-4 rounded-xl border border-red-400/30 p-3 text-sm text-red-200">No pudimos consultar {channels[key]}. {result.error}</p>}
+        {entries?.length === 0 && <p role="status" className="mt-4 text-sm text-zinc-300">Todo al día. No tenés pedidos pendientes en {channels[key]}.</p>}
+        {entries && entries.length > 0 && <ul className="mt-3 divide-y divide-white/10">
+          {entries.map(entry => <li key={entry.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3">
+            <div className="min-w-0 break-words">
+              <p className="font-semibold">{entry.number} · {entry.customer}</p>
+              <p className="mt-1 text-sm text-zinc-300">{entry.label}</p>
+              <p className="mt-1 text-sm font-medium text-amber-200">Próxima acción: {entry.action}</p>
+            </div>
+            <Link href={entry.href} prefetch={false} aria-label={`Abrir pedido ${entry.number}`} className={linkClass}>Abrir pedido <span aria-hidden="true">→</span></Link>
+          </li>)}
+        </ul>}
+      </section>;
+    })}
+    {!sector && authenticated && <section className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4 sm:p-5">
+      <h2 className="text-xl font-bold">Acciones rápidas</h2>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link href="/admin/productos" className={linkClass}>Gestionar productos</Link>
+        {owner && <Link href="/admin/home" className={linkClass}>Editar página de inicio</Link>}
+      </div>
     </section>}
   </div>;
 }

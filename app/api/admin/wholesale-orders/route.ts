@@ -23,6 +23,55 @@ async function guard() {
   return null;
 }
 
+type DeliveryOrder = { id: string; current_revision_id: string };
+type OrderedItem = { revision_id: string; product_id: string; quantity: number };
+type DeliveredItem = { product_id: string; quantity: number; wholesale_deliveries: { order_id: string } };
+
+async function readPages<T>(read: (start: number, end: number) => PromiseLike<{ data: T[] | null; error: unknown }>) {
+  const size = 500;
+  const rows: T[] = [];
+  for (let start = 0; ; start += size) {
+    const { data, error } = await read(start, start + size - 1);
+    if (error || !data) throw new Error("No se pudo consultar el estado de las entregas.");
+    rows.push(...data);
+    if (data.length < size) return rows;
+  }
+}
+
+async function readDeliveryPending(db: ReturnType<typeof createAdminServerClient>, orders: DeliveryOrder[]) {
+  const pending = new Map<string, boolean>();
+  if (!orders.length) return pending;
+  // These tables are not yet in the generated Database type.
+  const client = db as any;
+  const orderIds = orders.map(order => order.id);
+  const revisionIds = orders.map(order => order.current_revision_id);
+  const [ordered, delivered] = await Promise.all([
+    readPages<OrderedItem>((start, end) => client.from("wholesale_order_revision_items")
+      .select("revision_id,product_id,quantity").in("revision_id", revisionIds).order("id").range(start, end)),
+    readPages<DeliveredItem>((start, end) => client.from("wholesale_delivery_items")
+      .select("product_id,quantity,wholesale_deliveries!inner(order_id)")
+      .in("wholesale_deliveries.order_id", orderIds).order("id").range(start, end)),
+  ]);
+  const orderByRevision = new Map(orders.map(order => [order.current_revision_id, order.id]));
+  const deliveredByOrder = new Map<string, Map<string, number>>();
+  for (const item of delivered) {
+    const orderId = item.wholesale_deliveries.order_id;
+    const products = deliveredByOrder.get(orderId) ?? new Map<string, number>();
+    products.set(item.product_id, (products.get(item.product_id) ?? 0) + item.quantity);
+    deliveredByOrder.set(orderId, products);
+  }
+  // Same rule as the order detail: compare each current revision line with
+  // quantities delivered for that product across the order's deliveries.
+  for (const item of ordered) {
+    const orderId = orderByRevision.get(item.revision_id);
+    if (!orderId) continue;
+    const quantity = deliveredByOrder.get(orderId)?.get(item.product_id) ?? 0;
+    pending.set(orderId, pending.get(orderId) === true || quantity < item.quantity);
+  }
+  for (const order of orders) if (!pending.has(order.id)) pending.set(order.id, true);
+  return pending;
+}
+
 export async function GET(request: Request) {
   const blocked = await guard();
   if (blocked) return blocked;
@@ -33,6 +82,7 @@ export async function GET(request: Request) {
   const to = params.get("to") ?? "";
   const customer = (params.get("customer") ?? "").trim().slice(0, 120);
   const archived = params.get("archived");
+  const includeDeliveryPending = params.get("includeDeliveryPending") === "true";
   if (archived !== null && !["true","false"].includes(archived)) return apiError("BAD_REQUEST","Filtro de archivo inválido.",400);
   if (!Number.isInteger(page) || page < 1 || page > 100000 || (!["all", "attention"].includes(status) && !STATUSES.includes(status as typeof STATUSES[number])) ||
       (from && !isValidDateOnly(from)) || (to && !isValidDateOnly(to)) ||
@@ -91,7 +141,13 @@ export async function GET(request: Request) {
     if (customers.error || revisions.error) throw new Error(customers.error?.message ?? revisions.error?.message ?? "No se pudieron completar los pedidos.");
     const customerNames = new Map((customers.data ?? []).map(row => [row.id, row.full_name]));
     const totals = new Map((revisions.data ?? []).map(row => [row.id, { total: Number(row.total_amount), currency: row.currency, revisionStatus: row.status }]));
+    const ordersToCheck = includeDeliveryPending
+      ? rows.filter(row => row.status === "confirmed" && !transferNotices.some(notice => notice.order_id === row.id && notice.status === "pending"))
+      : [];
+    if (ordersToCheck.some(row => !totals.has(row.current_revision_id))) throw new Error("La revisión vigente no está disponible.");
+    const deliveryPending = await readDeliveryPending(db, ordersToCheck);
     const data = rows.map(row => ({
+      ...(deliveryPending.has(row.id) ? { deliveryPending: deliveryPending.get(row.id) } : {}),
       id: row.id, orderNumber: row.order_number, customerId: row.customer_id,
       transferNoticePending:transferNotices.some(n=>n.order_id===row.id&&n.status==='pending'),
       customerName: customerNames.get(row.customer_id) ?? "Cliente", status: row.status,

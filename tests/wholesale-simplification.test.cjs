@@ -8,7 +8,9 @@ const {commercialStateClass,commercialHistory,wholesaleMoneySummary}=load('lib/w
 test('current outcome controls colour even if an earlier revision was approved or delivered',()=>{
   for(const status of ['cancelled','rejected']) assert.match(commercialStateClass(status,true),/text-red/);
   assert.match(commercialStateClass('confirmed',true),/text-emerald/);
-  for(const status of ['received','in_review','awaiting_customer','confirmed']) assert.match(commercialStateClass(status),/text-amber/);
+  for(const status of ['in_review','awaiting_customer']) assert.match(commercialStateClass(status),/text-amber/);
+  assert.match(commercialStateClass('received'),/text-zinc/);
+  assert.match(commercialStateClass('confirmed'),/text-emerald/);
   assert.match(commercialStateClass('unknown'),/text-zinc/);
 });
 
