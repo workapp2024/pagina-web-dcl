@@ -88,9 +88,9 @@ test('navigation retains desktop groups and mobile sector shortcuts with existin
     const html = renderToStaticMarkup(React.createElement(AdminSidebar));
     assert.match(html, /hidden w-72[^\"]*lg:block/);
     assert.match(html, /aria-label="Accesos rápidos administrativos"[^>]*lg:hidden/);
-    for (const route of ['/admin/minoristas', '/admin/minoristas/pedidos', '/admin/minoristas/clientes']) assert.ok(html.includes(`href="${route}"`));
+    for (const route of ['/admin/gestion/pedidos', '/admin/gestion/clientes', '/admin/gestion/catalogo']) assert.ok(html.includes(`href="${route}"`));
     assert.match(html, /aria-haspopup="dialog" aria-expanded="false"/);
-    assert.match(html, /href="\/admin\/minoristas\/pedidos"[^>]*aria-current="page"/);
+    assert.match(html, /href="\/admin\/gestion\/pedidos"[^>]*aria-current="page"/);
     if (role === 'VENDEDOR') assert.doesNotMatch(html, />Mayoristas</);
   }
 });

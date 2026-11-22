@@ -1,3 +1,4 @@
+import { adminMessage } from "@/lib/admin-messages";
 import { funnelPercent, type FunnelResult } from "@/lib/analytics-funnel";
 
 export function AnalyticsFunnel({ result }: { result: FunnelResult }) {
@@ -18,13 +19,13 @@ export function AnalyticsFunnel({ result }: { result: FunnelResult }) {
 }
 
 export function AnalyticsFunnelMeasurement({ result }: { result: FunnelResult }) {
-  const message = result.status === "start_not_configured" ? "Fecha de inicio de analítica comercial no configurada (COMMERCIAL_ANALYTICS_START_AT)."
-    : result.status === "not_configured" ? "PostHog no configurado para el embudo."
+  const message = result.status === "start_not_configured" ? "Falta definir la fecha de inicio de la medición comercial. Contactá al administrador."
+    : result.status === "not_configured" ? "La medición de recorridos no está disponible. Contactá al administrador."
     : result.status === "before_start" ? "El período es anterior al inicio de medición comercial."
     : result.status === "pending" ? "La consulta del embudo todavía no tiene resultados completos."
     : result.status === "error" ? result.message : null;
   return <div className="space-y-2">
-    {message && <p>{message}</p>}
+    {message && <p>{adminMessage(message)}</p>}
     {result.startAt && <p>Inicio comercial: {new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short", timeStyle: "short", hourCycle: "h23" }).format(new Date(result.startAt))} (Argentina).</p>}
     <p>El embudo comienza en Producto: la consulta existente no atribuye una visita previa. No se agrega una etapa de visitas con un conteo independiente.</p>
     <p>Ventana de conversión: 7 días. Misma identidad y sesión desde Producto → Carrito → Checkout → Pedido; pago y compra se vinculan después por pedido e identidad. Todos los eventos deben estar dentro del período y posteriores al inicio comercial.</p>

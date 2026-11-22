@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { useState } from "react";
 import type { Product } from "@/lib/site-data";
 import { isProductCategory, productCategories, productFunctions, productVehicleTypes } from "@/lib/product-taxonomy";
@@ -37,7 +38,7 @@ export function ProductClassificationEditor({ product, onSaved, onDraftChange, o
         {productCategories.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
       </select>
     </label>
-    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+    <details className="mt-4"><summary className="min-h-11 cursor-pointer py-3 text-sm font-bold">Aplicaciones y compatibilidad con vehículos</summary><div className="grid gap-4 sm:grid-cols-2">
       <fieldset><legend className="text-sm font-bold">Características de la lámpara</legend>
         <p className="mt-2 text-xs text-zinc-400">{accessory ? "No aplica habitualmente a accesorios. Dejá sin marcar salvo un caso excepcional; el conector también es opcional." : "Alta y Baja se resuelven por compatibilidad del vehículo. Marcá la característica integrada solo si la lámpara realiza ambas."}</p>
         {productFunctions.map(option => <label key={option.id} className="flex min-h-11 items-center gap-3 text-sm">
@@ -54,8 +55,9 @@ export function ProductClassificationEditor({ product, onSaved, onDraftChange, o
         <input type="checkbox" checked={value.vehicleTypes?.includes(option.id) ?? false} onChange={event => change({ vehicleTypes: event.target.checked ? [...(value.vehicleTypes ?? []), option.id] : (value.vehicleTypes ?? []).filter(item => item !== option.id) })}/>{option.label}
       </label>)}</fieldset>
     </div>
+    </details>
     {pending && <p className="mt-2 text-xs text-amber-200">Sin clasificar o pendiente de revisión. Continúa disponible en el catálogo general si está activo y visible.</p>}
     {!onDraftChange && <button type="button" disabled={busy || !Object.keys(changes).length} onClick={() => void save()} className="mt-4 min-h-11 rounded-full bg-red-600 px-5 text-xs font-bold uppercase disabled:opacity-40">{busy ? "Guardando…" : "Guardar clasificación"}</button>}
-    {message && <p role="status" className="mt-3 text-sm text-zinc-300">{message}</p>}
+    {message && <p role="status" className="mt-3 text-sm text-zinc-300">{adminMessage(message)}</p>}
   </fieldset>;
 }

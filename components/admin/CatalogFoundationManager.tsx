@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProductEditorDialog } from "@/components/admin/ProductEditorDialog";
 import type { CatalogCategory, CatalogVehicleType } from "@/lib/catalog-foundation";
@@ -62,7 +63,7 @@ export function CatalogFoundationManager() {
     {tab === "vehicle" && <p className="rounded-xl border border-white/10 p-4 text-sm leading-6 text-zinc-300">Universal es un destino comercial excluyente, no confirma compatibilidad por marca, modelo o año.</p>}
     <div className="flex flex-col gap-3 sm:flex-row"><label className="min-w-0 flex-1 text-xs text-zinc-400">Buscar<input type="search" className={field} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Nombre o identificador"/></label><button disabled={busy || loading || Boolean(error)} onClick={()=>open()} className={button+" self-start bg-red-600 sm:self-end"}>+ {tab==='category'?"Crear categoría":"Crear tipo"}</button></div>
     {notice && <p role="status" className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-sm text-emerald-200">{notice}</p>}
-    {error && <div role="alert" className="rounded-xl border border-red-400/25 p-4 text-sm text-red-200"><p>{error}</p><button disabled={busy} onClick={()=>void refresh()} className={button+" mt-3"}>Volver a cargar</button></div>}
+    {error && <div role="alert" className="rounded-xl border border-red-400/25 p-4 text-sm text-red-200"><p>{adminMessage(error)}</p><button disabled={busy} onClick={()=>void refresh()} className={button+" mt-3"}>Volver a cargar</button></div>}
     {loading ? <p role="status" className="py-6 text-sm text-zinc-400">Cargando configuración…</p> : !error && <div className="space-y-3">{!shown.length && <p className="py-6 text-sm text-zinc-400">No hay resultados.</p>}{shown.map(row=>{
       const category = isCategory(row) ? row : null;
       const used = row.usage.products + (category ? category.usage.children + category.usage.aliases : 0);

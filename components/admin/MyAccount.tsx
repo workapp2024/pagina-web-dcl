@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { AdminRole } from "@/lib/admin-permissions";
@@ -43,6 +44,6 @@ export function MyAccount() {
         <label className="block">Confirmar nueva contraseña<input name="confirmation" type="password" autoComplete="new-password" required minLength={12} maxLength={128} className={input} /></label>
         <button disabled={busy} className="rounded-full bg-red-600 px-5 py-3 disabled:opacity-50">Cambiar contraseña</button>
       </form></>}
-    {message && <p role="status">{message}</p>}
+    {message && <p role="status">{adminMessage(message)}</p>}
   </div>;
 }

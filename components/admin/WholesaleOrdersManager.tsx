@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { wholesaleAdminLabel, wholesaleNextAction } from "@/lib/admin-order-attention";
@@ -134,7 +135,7 @@ function RevisionHistory({ orderId, currentId, originalId }: {orderId:string;cur
     }).catch(()=>{if(!controller.signal.aborted) setError("No se pudieron cargar las revisiones anteriores.");}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return ()=>controller.abort();
   },[orderId]);
-  return <div className="mt-3 space-y-3">{loading && <p role="status" className="text-sm text-zinc-400">Cargando revisiones anteriores…</p>}{error && <p role="alert" className="text-sm text-amber-200">{error}</p>}{revisions.filter(revision=>revision.id!==currentId && revision.id!==originalId).map(revision=><details key={revision.id}><summary className="min-h-11 cursor-pointer py-3 text-sm">Antecedente · revisión v{revision.version_number}</summary><RevisionCard title={`Propuesta anterior · v${revision.version_number}`} revision={revision} /></details>)}</div>;
+  return <div className="mt-3 space-y-3">{loading && <p role="status" className="text-sm text-zinc-400">Cargando revisiones anteriores…</p>}{error && <p role="alert" className="text-sm text-amber-200">{adminMessage(error)}</p>}{revisions.filter(revision=>revision.id!==currentId && revision.id!==originalId).map(revision=><details key={revision.id}><summary className="min-h-11 cursor-pointer py-3 text-sm">Antecedente · revisión v{revision.version_number}</summary><RevisionCard title={`Propuesta anterior · v${revision.version_number}`} revision={revision} /></details>)}</div>;
 }
 
 export function WholesaleOrdersManager({ products, catalogError = "" }: { products: WholesaleProduct[]; catalogError?: string }) {
@@ -362,7 +363,7 @@ export function WholesaleOrdersManager({ products, catalogError = "" }: { produc
       <label className="text-xs font-semibold text-zinc-400">Hasta<input type="date" className={inputClass} value={filters.to} onChange={event => setFilter("to", event.target.value)} /></label>
     </section>
 
-    {error && <p role="alert" className="rounded-xl border border-red-400/20 bg-red-950/60 p-4 text-red-200">{error}</p>}
+    {error && <p role="alert" className="rounded-xl border border-red-400/20 bg-red-950/60 p-4 text-red-200">{adminMessage(error)}</p>}
     {(listOpen || filters.customer || selectedId) && (loading ? <p role="status" className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">Cargando solicitudes…</p> : rows.length === 0 ? <p className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">No hay solicitudes para estos filtros.</p> : <div className="grid min-w-0 items-start gap-5 ">
       <aside aria-label="Solicitudes" className={`min-w-0 ${selectedId ? "hidden" : "space-y-2"}`}>
         <div className="mb-3 flex items-center justify-between"><h2 className="font-bold">Solicitudes</h2><span className="text-xs text-zinc-500">{total} total</span></div>

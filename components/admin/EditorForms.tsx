@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { HeroImage } from "@/components/sections/HeroImage";
 import { heroFocal } from "@/lib/hero-presentation";
 import { SearchableList } from "@/components/admin/SearchableList";
@@ -78,7 +79,7 @@ function ImagePicker({
 
     setIsSaving(true);
     onBusyChange?.(true);
-    setUploadStatus("Subiendo a Supabase Storage...");
+    setUploadStatus("Subiendo fotografía...");
 
     const category: StorageCategory = storageKey.startsWith("product")
       ? "products"
@@ -100,13 +101,13 @@ function ImagePicker({
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok || !data.ok || !data.publicUrl) {
-        throw new Error(data.error || data.message || "No se pudo subir la imagen a Supabase Storage.");
+        throw new Error(data.error || data.message || "No se pudo subir la fotografía. Intentá nuevamente.");
       }
 
       onChange(data.publicUrl);
-      setUploadStatus("✓ Subida a Supabase Storage exitosa");
+      setUploadStatus("✓ Fotografía cargada");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error al subir la imagen.";
+      const message = adminMessage(err instanceof Error ? err.message : "Error al subir la imagen.");
       setUploadStatus(message);
       window.alert(message);
     } finally {
@@ -125,15 +126,15 @@ function ImagePicker({
           className={fit === "contain" ? "max-h-full max-w-full object-contain" : "h-full w-full object-cover object-center"}
         />
       </div>
-      <label className="mt-3 inline-flex cursor-pointer rounded-full border border-red-500/50 bg-red-600/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-red-300 transition hover:bg-red-600/20">
+      <label className="mt-3 inline-flex min-h-11 items-center cursor-pointer rounded-full border border-red-500/50 bg-red-600/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-red-300 transition hover:bg-red-600/20">
         {isSaving ? (uploadStatus || "Guardando...") : label}
         <input type="file" accept="image/*" onChange={handleFileChange} disabled={isSaving} className="sr-only" />
       </label>
       {uploadStatus ? (
-        <p className="mt-2 text-xs font-semibold text-red-300">{uploadStatus}</p>
+        <p className="mt-2 text-xs font-semibold text-red-300">{adminMessage(uploadStatus)}</p>
       ) : (
         <p className="mt-2 text-xs text-zinc-500">
-          Las imágenes se suben directamente al bucket de Supabase Storage.
+          JPG, PNG o WebP, hasta 10 MB. La fotografía actual se conserva si falla la carga.
         </p>
       )}
     </div>
@@ -150,6 +151,7 @@ export function AdminProductsManager() {
   const [classificationSaving, setClassificationSaving] = useState(false);
   const saving = useRef(false);
   const [dirty, setDirty] = useState(false);
+  const [savedName, setSavedName] = useState("");
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [pricingInvalid, setPricingInvalid] = useState(false);
@@ -180,16 +182,16 @@ export function AdminProductsManager() {
     saving.current = true;
     setProductStatuses((prev) => ({
       ...prev,
-      [productToSave.id]: { status: "saving", message: "Guardando en Supabase..." },
+      [productToSave.id]: { status: "saving", message: "Guardando..." },
     }));
 
+    try {
     const result = await upsertSupabaseProduct(productToSave);
-    saving.current = false;
 
     if (result.success) {
       setProductStatuses((prev) => ({
         ...prev,
-        [productToSave.id]: { status: "success", message: "✓ Guardado en Supabase" },
+        [productToSave.id]: { status: "success", message: "✓ Cambios guardados" },
       }));
       setTimeout(() => {
         setProductStatuses((prev) => {
@@ -202,10 +204,12 @@ export function AdminProductsManager() {
     } else {
       setProductStatuses((prev) => ({
         ...prev,
-        [productToSave.id]: { status: "error", message: result.error || "Error al guardar en Supabase" },
+        [productToSave.id]: { status: "error", message: result.error || "No se pudieron guardar los cambios." },
       }));
       return false;
     }
+    } catch { setProductStatuses(previous => ({ ...previous, [productToSave.id]: { status: "error", message: "No se pudo confirmar el guardado. Conservamos los datos; verificá la lista antes de reintentar." } })); return false; }
+    finally { saving.current = false; }
   };
 
   const updateProduct = (productId: string, changes: Partial<Product>) => {
@@ -215,6 +219,7 @@ export function AdminProductsManager() {
   };
 
   const addProduct = () => {
+    setSavedName("");
     const timestamp = Date.now();
     const productName = "Nuevo producto";
     const slug = `${slugifyProductName(productName) || "producto"}-${timestamp}`;
@@ -265,7 +270,8 @@ export function AdminProductsManager() {
     }
     if (!(await saveProductToSupabase(product))) return;
     setProducts(previous => previous.some(item => item.id === product.id) ? previous.map(item => item.id === product.id ? product : item) : [product, ...previous]);
-    if (newProduct) setSearch("");
+    setSearch(product.name);
+    setSavedName(product.name);
     setEditingProduct(null); setNewProduct(null); setDirty(false);
   };
   const selectedProduct = newProduct ?? editingProduct;
@@ -288,8 +294,9 @@ export function AdminProductsManager() {
         </button>
       </div>
 
+      {savedName && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-4"><p className="min-w-0 break-words text-sm text-green-200">Producto guardado: {savedName}</p><button type="button" onClick={addProduct} className="min-h-11 rounded-full border border-green-500/40 px-4 text-sm font-bold">Cargar otro producto</button></div>}
       {loadError ? (
-        <p className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{loadError}</p>
+        <p className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{adminMessage(loadError)}</p>
       ) : null}
 
       {isLoadingProducts ? <p className="text-sm text-zinc-400">Cargando productos administrativos...</p> : null}
@@ -306,10 +313,9 @@ export function AdminProductsManager() {
         const statusInfo = productStatuses[product.id];
 
         return (
-          <ProductEditorDialog key={product.id} title={newProduct ? "Nuevo producto" : `Editar ${product.name}`} onClose={closeEditor} busy={uploading || classificationSaving || statusInfo?.status === "saving"}>
+          <ProductEditorDialog key={product.id} title={newProduct ? "Nuevo producto" : `Editar ${product.name}`} onClose={closeEditor} dirty={dirty || classificationPending} busy={uploading || classificationSaving || statusInfo?.status === "saving"}>
             <fieldset disabled={uploading || classificationSaving || statusInfo?.status === "saving"} className="min-w-0 space-y-4">
-<details open className="rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer py-2 text-lg font-bold">Información general</summary><div className="mt-4 space-y-4"><div className="grid gap-4 sm:grid-cols-3"><div><p className="mb-2 text-sm font-bold">Imagen principal</p><ImagePicker source={product.image} label="Subir / reemplazar principal" storageKey={`product-${product.id}`} onBusyChange={setUploading} onChange={image => updateProduct(product.id, { image, ...(product.images ? { images: product.images.filter(source => source !== image) } : {}) })} /></div>
-{[0, 1].map(index => <div key={index}><p className="mb-2 text-sm font-bold">Imagen adicional {index + 1}</p><ImagePicker source={product.images?.[index] ?? ""} label="Subir / reemplazar adicional" storageKey={`product-${product.id}-additional-${index}`} onBusyChange={setUploading} onChange={source => { const images = [...(product.images ?? [])]; images[index] = source; updateProduct(product.id, { images: images.filter(Boolean) }); }} />{product.images?.[index] && <button type="button" onClick={() => updateProduct(product.id, { images: product.images!.filter((_, position) => position !== index) })} className="mt-3 min-h-11 text-sm text-red-300">Eliminar adicional {index + 1}</button>}</div>)}</div>                <div className="grid gap-4 md:grid-cols-2">
+<section aria-label="Información principal" className="space-y-5 rounded-2xl border border-white/10 p-4">                <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm text-zinc-300">
                     <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Nombre</span>
                     <input
@@ -319,10 +325,7 @@ export function AdminProductsManager() {
                     />
                   </label>
 
-                  <label className="block text-sm text-zinc-300">
-                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Texto del botón</span>
-                    <input value={product.ctaText} onChange={(event) => updateProduct(product.id, { ctaText: event.target.value })} className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white" />
-                  </label>
+
                 </div>
 
 
@@ -354,9 +357,15 @@ export function AdminProductsManager() {
                   </label>
                 </div>
 
-</div></details>
-<details className="rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer py-2 text-lg font-bold">Clasificación</summary><div className="mt-4 space-y-4"><ProductClassificationEditor product={product} onPendingChange={setClassificationPending} onBusyChange={setClassificationSaving} onSaved={classification => { updateProduct(product.id, classification); setProducts(previous => previous.map(item => item.id === product.id ? { ...item, ...classification } : item)); }} onDraftChange={newProduct ? classification => updateProduct(product.id, classification) : undefined} /></div></details>
-<details className="rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer py-2 text-lg font-bold">Especificaciones técnicas</summary><div className="mt-4 space-y-4">                <label className="block max-w-xs text-sm text-zinc-300">
+<section aria-label="Categoría y aplicaciones" className="rounded-2xl border border-white/10 p-4"><h3 className="mb-4 text-lg font-bold">Categoría y aplicaciones</h3><ProductClassificationEditor product={product} onPendingChange={setClassificationPending} onBusyChange={setClassificationSaving} onSaved={classification => { updateProduct(product.id, classification); setProducts(previous => previous.map(item => item.id === product.id ? { ...item, ...classification } : item)); }} onDraftChange={newProduct ? classification => updateProduct(product.id, classification) : undefined} /></section><div className="grid gap-4 sm:grid-cols-3"><div><p className="mb-2 text-sm font-bold">Imagen principal</p><ImagePicker source={product.image} label="Subir / reemplazar principal" storageKey={`product-${product.id}`} onBusyChange={setUploading} onChange={image => updateProduct(product.id, { image, ...(product.images ? { images: product.images.filter(source => source !== image) } : {}) })} /></div>
+{[0, 1].map(index => <div key={index}><p className="mb-2 text-sm font-bold">Imagen adicional {index + 1}</p><ImagePicker source={product.images?.[index] ?? ""} label="Subir / reemplazar adicional" storageKey={`product-${product.id}-additional-${index}`} onBusyChange={setUploading} onChange={source => { const images = [...(product.images ?? [])]; images[index] = source; updateProduct(product.id, { images: images.filter(Boolean) }); }} />{product.images?.[index] && <div className="mt-2 flex flex-wrap gap-2"><button type="button" className="min-h-11 rounded-xl border border-white/15 px-3 text-sm" onClick={() => { const images = [...(product.images ?? [])]; const image = images[index]; if (product.image) images[index] = product.image; else images.splice(index, 1); updateProduct(product.id, { image, images }); }}>Usar como principal</button>{index > 0 && <button type="button" className="min-h-11 rounded-xl border border-white/15 px-3 text-sm" onClick={() => { const images = [...(product.images ?? [])]; [images[index - 1], images[index]] = [images[index], images[index - 1]]; updateProduct(product.id, { images }); }}>Mover antes</button>}</div>}{product.images?.[index] && <button type="button" onClick={() => updateProduct(product.id, { images: product.images!.filter((_, position) => position !== index) })} className="mt-3 min-h-11 text-sm text-red-300">Eliminar adicional {index + 1}</button>}</div>)}</div>
+</section>
+
+<details className="rounded-2xl border border-white/10 p-4"><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Configuración avanzada</summary>                  <label className="block text-sm text-zinc-300">
+                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Texto del botón</span>
+                    <input value={product.ctaText} onChange={(event) => updateProduct(product.id, { ctaText: event.target.value })} className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white" />
+                  </label></details>
+<details className="rounded-2xl border border-white/10 p-4"><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Características técnicas y conectores</summary><div className="mt-4 space-y-4">                <label className="block max-w-xs text-sm text-zinc-300">
                   <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Garantía predeterminada (días)</span>
                   <input type="number" min={1} max={3650} value={product.warrantyDays ?? ""} onChange={(event) => updateProduct(product.id, { warrantyDays: event.target.value ? Number(event.target.value) : undefined })} className="w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-white" />
                   <span className="mt-1 block text-[11px] text-zinc-500">Se propone automáticamente al registrar una venta; puede cambiarse o desactivarse allí.</span>
@@ -450,7 +459,7 @@ export function AdminProductsManager() {
                 </div>
 
 </div></details>
-<details className="rounded-2xl border border-white/10 p-4"><summary className="cursor-pointer py-2 text-lg font-bold">Gestión interna</summary><div className="mt-4 space-y-4">                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+<section aria-label="Disponibilidad y stock">                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">
                     Gestión privada
                   </p>
@@ -483,14 +492,14 @@ export function AdminProductsManager() {
                   </div>
                 </div>
 
-</div></details>
-                <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-                  <div className="flex items-center gap-3">
+</section>
+                <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-zinc-950 py-4">
+                  <div className="flex min-w-0 flex-wrap items-center gap-3">
                     <button
                       type="button"
                       onClick={() => void finishSave(product)}
                       disabled={pricingInvalid || statusInfo?.status === "saving"}
-                      className="rounded-full bg-red-600 px-5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500 disabled:opacity-50"
+                      className="min-h-11 rounded-full bg-red-600 px-5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500 disabled:opacity-50"
                     >
                       {statusInfo?.status === "saving" ? "Guardando..." : "Guardar producto"}
                     </button>
@@ -501,7 +510,7 @@ export function AdminProductsManager() {
                           statusInfo.status === "error" ? "text-red-400" : "text-green-400",
                         ].join(" ")}
                       >
-                        {statusInfo.message}
+                        {adminMessage(statusInfo.message)}
                       </span>
                     ) : null}
                   </div>
@@ -511,7 +520,7 @@ export function AdminProductsManager() {
                     onClick={async () => { if (newProduct) { closeEditor(); return; } await removeProduct(product); }}
                     className="rounded-full border border-red-500/40 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-red-300 hover:bg-red-600/10"
                   >
-                    {newProduct ? "Cancelar" : "Eliminar producto"}
+                    {newProduct ? "Cancelar" : "Desactivar producto"}
                   </button>
                 </div>
             </fieldset>
@@ -531,7 +540,7 @@ export function AdminPromotionsManager() {
   const savePromotionToSupabase = async (promotionToSave: Promotion) => {
     setPromotionStatuses((prev) => ({
       ...prev,
-      [promotionToSave.id]: { status: "saving", message: "Guardando en Supabase..." },
+      [promotionToSave.id]: { status: "saving", message: "Guardando..." },
     }));
 
     const result = await upsertSupabasePromotion(promotionToSave);
@@ -539,7 +548,7 @@ export function AdminPromotionsManager() {
     if (result.success) {
       setPromotionStatuses((prev) => ({
         ...prev,
-        [promotionToSave.id]: { status: "success", message: "✓ Guardado en Supabase" },
+        [promotionToSave.id]: { status: "success", message: "✓ Cambios guardados" },
       }));
       setTimeout(() => {
         setPromotionStatuses((prev) => {
@@ -551,7 +560,7 @@ export function AdminPromotionsManager() {
     } else {
       setPromotionStatuses((prev) => ({
         ...prev,
-        [promotionToSave.id]: { status: "error", message: result.error || "Error al guardar en Supabase" },
+        [promotionToSave.id]: { status: "error", message: result.error || "No se pudieron guardar los cambios." },
       }));
     }
   };
@@ -721,7 +730,7 @@ export function AdminPromotionsManager() {
                       disabled={statusInfo?.status === "saving"}
                       className="rounded-full bg-red-600 px-5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500 disabled:opacity-50"
                     >
-                      {statusInfo?.status === "saving" ? "Guardando..." : "Guardar en Supabase"}
+                      {statusInfo?.status === "saving" ? "Guardando..." : "Guardar cambios"}
                     </button>
                     {statusInfo?.message ? (
                       <span
@@ -730,7 +739,7 @@ export function AdminPromotionsManager() {
                           statusInfo.status === "error" ? "text-red-400" : "text-green-400",
                         ].join(" ")}
                       >
-                        {statusInfo.message}
+                        {adminMessage(statusInfo.message)}
                       </span>
                     ) : null}
                   </div>
@@ -761,7 +770,7 @@ export function AdminVehicleManager() {
   const saveVehicleToSupabase = async (vehicleToSave: VehicleCategory) => {
     setVehicleStatuses((prev) => ({
       ...prev,
-      [vehicleToSave.id]: { status: "saving", message: "Guardando en Supabase..." },
+      [vehicleToSave.id]: { status: "saving", message: "Guardando..." },
     }));
 
     const result = await upsertSupabaseVehicleCategory(vehicleToSave);
@@ -769,7 +778,7 @@ export function AdminVehicleManager() {
     if (result.success) {
       setVehicleStatuses((prev) => ({
         ...prev,
-        [vehicleToSave.id]: { status: "success", message: "✓ Guardado en Supabase" },
+        [vehicleToSave.id]: { status: "success", message: "✓ Cambios guardados" },
       }));
       setTimeout(() => {
         setVehicleStatuses((prev) => {
@@ -781,7 +790,7 @@ export function AdminVehicleManager() {
     } else {
       setVehicleStatuses((prev) => ({
         ...prev,
-        [vehicleToSave.id]: { status: "error", message: result.error || "Error al guardar en Supabase" },
+        [vehicleToSave.id]: { status: "error", message: result.error || "No se pudieron guardar los cambios." },
       }));
     }
   };
@@ -849,7 +858,7 @@ export function AdminVehicleManager() {
                     disabled={statusInfo?.status === "saving"}
                     className="rounded-full bg-red-600 px-5 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-red-500 disabled:opacity-50"
                   >
-                    {statusInfo?.status === "saving" ? "Guardando..." : "Guardar en Supabase"}
+                    {statusInfo?.status === "saving" ? "Guardando..." : "Guardar cambios"}
                   </button>
                   {statusInfo?.message ? (
                     <span
@@ -858,7 +867,7 @@ export function AdminVehicleManager() {
                         statusInfo.status === "error" ? "text-red-400" : "text-green-400",
                       ].join(" ")}
                     >
-                      {statusInfo.message}
+                      {adminMessage(statusInfo.message)}
                     </span>
                   ) : null}
                 </div>
@@ -879,7 +888,7 @@ export function AdminHomeEditor() {
 
   const saveHomeToSupabase = async (customSettings?: SiteSettings, patch = siteChanges) => {
     const settingsToSave = customSettings || content.siteSettings;
-    setSaveStatus({ status: "saving", message: "Guardando en Supabase..." });
+    setSaveStatus({ status: "saving", message: "Guardando..." });
 
     const [homeRes, siteRes] = await Promise.all([
       upsertSupabaseHomeSettings(settingsToSave),
@@ -891,10 +900,10 @@ export function AdminHomeEditor() {
     )));
 
     if (homeRes.success && siteRes.success) {
-      setSaveStatus({ status: "success", message: "✓ Guardado en Supabase" });
+      setSaveStatus({ status: "success", message: "✓ Cambios guardados" });
       setTimeout(() => setSaveStatus(null), 4000);
     } else {
-      const err = homeRes.error || siteRes.error || "Error al guardar en Supabase";
+      const err = homeRes.error || siteRes.error || "No se pudieron guardar los cambios.";
       setSaveStatus({ status: "error", message: err });
     }
   };
@@ -921,7 +930,7 @@ export function AdminHomeEditor() {
             disabled={heroUploading || saveStatus?.status === "saving"}
             className="rounded-full bg-red-600 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-red-500 disabled:opacity-50"
           >
-            {saveStatus?.status === "saving" ? "Guardando..." : "Guardar en Supabase"}
+            {saveStatus?.status === "saving" ? "Guardando..." : "Guardar cambios"}
           </button>
           {saveStatus?.message ? (
             <span
@@ -930,7 +939,7 @@ export function AdminHomeEditor() {
                 saveStatus.status === "error" ? "text-red-400" : "text-green-400",
               ].join(" ")}
             >
-              {saveStatus.message}
+              {adminMessage(saveStatus.message)}
             </span>
           ) : null}
         </div>
@@ -973,7 +982,7 @@ export function AdminHomeEditor() {
             </div>;
           })}
         </div>
-        <p className="mt-4 text-sm text-zinc-300">La carga de imágenes conserva el guardado actual. Ajustá el encuadre y pulsá Guardar en Supabase. La vista previa muestra el recorte; los textos y botones se conservan en la tienda.</p>
+        <p className="mt-4 text-sm text-zinc-300">La carga de imágenes conserva el guardado actual. Ajustá el encuadre y pulsá Guardar cambios. La vista previa muestra el recorte; los textos y botones se conservan en la tienda.</p>
       </SectionCard>
 
       <SectionCard title="Logo de la marca" description="Logo de DCL Cree LED utilizado en el Header y en el panel del Hero. Al reemplazarlo se actualiza en todas sus apariciones.">
@@ -1083,7 +1092,7 @@ export function AdminHomeEditor() {
           disabled={saveStatus?.status === "saving"}
           className="rounded-full bg-red-600 px-6 py-3 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-red-500 disabled:opacity-50"
         >
-          {saveStatus?.status === "saving" ? "Guardando..." : "Guardar todos los cambios en Supabase"}
+          {saveStatus?.status === "saving" ? "Guardando..." : "Guardar todos los cambios"}
         </button>
       </div>
     </div>
@@ -1101,7 +1110,7 @@ export function AdminSiteSettingsForm() {
       setSaveStatus({ status: "success", message: "No hay cambios para guardar." });
       return;
     }
-    setSaveStatus({ status: "saving", message: "Guardando en Supabase..." });
+    setSaveStatus({ status: "saving", message: "Guardando..." });
 
     const result = await upsertSupabaseSiteSettings(settingsToSave, "configuration");
 
@@ -1109,10 +1118,10 @@ export function AdminSiteSettingsForm() {
       setChanges(current => Object.fromEntries(Object.entries(current).filter(([key, value]) =>
         value !== settingsToSave[key as keyof SiteSettings]
       )));
-      setSaveStatus({ status: "success", message: "✓ Guardado en Supabase" });
+      setSaveStatus({ status: "success", message: "✓ Cambios guardados" });
       setTimeout(() => setSaveStatus(null), 4000);
     } else {
-      setSaveStatus({ status: "error", message: result.error || "Error al guardar en Supabase" });
+      setSaveStatus({ status: "error", message: result.error || "No se pudieron guardar los cambios." });
     }
   };
 
@@ -1138,7 +1147,7 @@ export function AdminSiteSettingsForm() {
             disabled={saveStatus?.status === "saving"}
             className="rounded-full bg-red-600 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-red-500 disabled:opacity-50"
           >
-            {saveStatus?.status === "saving" ? "Guardando..." : "Guardar en Supabase"}
+            {saveStatus?.status === "saving" ? "Guardando..." : "Guardar cambios"}
           </button>
           {saveStatus?.message ? (
             <span
@@ -1147,7 +1156,7 @@ export function AdminSiteSettingsForm() {
                 saveStatus.status === "error" ? "text-red-400" : "text-green-400",
               ].join(" ")}
             >
-              {saveStatus.message}
+              {adminMessage(saveStatus.message)}
             </span>
           ) : null}
         </div>
@@ -1192,7 +1201,7 @@ export function AdminSiteSettingsForm() {
           disabled={saveStatus?.status === "saving"}
           className="rounded-full bg-red-600 px-6 py-3 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-red-500 disabled:opacity-50"
         >
-          {saveStatus?.status === "saving" ? "Guardando..." : "Guardar en Supabase"}
+          {saveStatus?.status === "saving" ? "Guardando..." : "Guardar cambios"}
         </button>
       </div>
     </div>

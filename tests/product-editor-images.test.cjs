@@ -67,22 +67,23 @@ test('public and admin reads carry additions, tolerate pending migration, and pu
 });
 
 test('compact manager searches loaded products, opens one editor, cancels drafts and saves a new product only once', async () => {
-  const h = hooks(), writes = []; let succeed = true;
+  const h = hooks(), writes = []; let succeed = true, rejectSave = false, allowClose = true;
   const listHooks = hooks();
   const List = () => null;
   const { SearchableList } = load('components/admin/SearchableList.tsx', { react: { ...listHooks.react, useId: () => 'products-list' } });
-  const originals = [{ id: 'a', name: 'Alpha', price: 150, stock: 4, active: true, image: '/main.webp', images: ['/second.webp'], category: 'General' }, { id: 'b', name: 'Beta', price: 90, stock: 2, active: false }];
+  const originals = [{ id: 'a', name: 'Alpha', price: 150, stock: 4, active: true, image: '/main.webp', images: ['/second.webp', '/third.webp'], category: 'General' }, { id: 'b', name: 'Beta', price: 90, stock: 2, active: false }];
   const Dialog = () => null, Classification = () => null;
   const { AdminProductsManager } = load('components/admin/EditorForms.tsx', {
     '@/components/admin/SearchableList': { SearchableList: List },
     '@/components/admin/ProductPricingFields': { ProductPricingFields: () => null },
+    '@/components/sections/HeroImage': { HeroImage: () => null },
     '@/components/admin/WhyUsCardsEditor': { WhyUsCardsEditor: () => null },
     react: h.react, '@/components/admin/ProductEditorDialog': { ProductEditorDialog: Dialog }, '@/components/admin/ProductClassificationEditor': { ProductClassificationEditor: Classification },
     '@/components/providers/SiteContentProvider': {}, '@/components/ui/ManagedImage': { ManagedImage: () => null },
     '@/lib/supabase/storage': { validateImageFile: () => ({ valid: true }) },
-    '@/lib/supabase/products': { getAdminSupabaseProducts: async () => ({ success: true, products: originals }), upsertSupabaseProduct: async p => { writes.push(plain(p)); await settle(); return { success: succeed, error: 'Save failed' }; } },
+    '@/lib/supabase/products': { getAdminSupabaseProducts: async () => ({ success: true, products: originals }), upsertSupabaseProduct: async p => { writes.push(plain(p)); await settle(); if (rejectSave) throw Error('Unexpected rejection'); return { success: succeed, error: 'Save failed' }; } },
     '@/lib/supabase/promotions': {}, '@/lib/supabase/vehicle-categories': {}, '@/lib/supabase/site-settings': {}, '@/lib/site-settings-patch': {}, '@/lib/supabase/home-settings': {},
-  }, { window: { confirm: () => true }, setTimeout: () => 0 });
+  }, { window: { confirm: () => allowClose }, setTimeout: () => 0 });
   const expandList = node => {
     if (!node || typeof node !== 'object') return node;
     if (Array.isArray(node)) return node.map(expandList);
@@ -96,10 +97,20 @@ test('compact manager searches loaded products, opens one editor, cancels drafts
   assert.equal(nodes(render()).filter(n => n.type === 'article').length, 0);
   button('Ver todos los productos').props.onClick();
   assert.ok(text(render()).includes('Stock: 4')); assert.ok(text(render()).includes('Inactivo'));
+  button('Editar').props.onClick();
+  nodes(render()).find(n => n.type === 'button' && text(n) === 'Usar como principal').props.onClick();
+  const pickers = () => nodes(render()).filter(n => n.type?.name === 'ImagePicker');
+  assert.deepEqual(pickers().map(n => n.props.source), ['/second.webp', '/main.webp', '/third.webp']);
+  button('Mover antes').props.onClick();
+  assert.deepEqual(pickers().map(n => n.props.source), ['/second.webp', '/third.webp', '/main.webp']);
+  assert.deepEqual(originals[0].images, ['/second.webp', '/third.webp']);
+  allowClose = false; nodes(render()).find(n => n.type === Dialog).props.onClose();
+  assert.ok(nodes(render()).some(n => n.type === Dialog && n.props.dirty));
+  allowClose = true; nodes(render()).find(n => n.type === Dialog).props.onClose();
   nodes(render()).find(n => n.type === 'input' && n.props.type === 'search').props.onChange({ target: { value: 'BETA' } });
   assert.equal(nodes(render()).filter(n => n.type === 'article').length, 1);
   button('Editar').props.onClick(); assert.equal(nodes(render()).filter(n => n.type === Dialog).length, 1);
-  assert.deepEqual(nodes(render()).filter(n => n.type === 'summary').map(text), ['Información general', 'Clasificación', 'Especificaciones técnicas', 'Gestión interna']);
+  assert.deepEqual(nodes(render()).filter(n => n.type === 'summary').map(text), ['Configuración avanzada', 'Características técnicas y conectores']);
   nodes(render()).find(n => n.type === Classification).props.onPendingChange(true);
   button('Guardar producto').props.onClick(); await settle();
   assert.equal(writes.length, 0);
@@ -118,11 +129,22 @@ test('compact manager searches loaded products, opens one editor, cancels drafts
   succeed = true; const save = button('Guardar producto'); save.props.onClick(); save.props.onClick(); await settle(); await settle();
   assert.equal(writes.length, 2); assert.equal(writes[1].name, 'New lamp'); assert.deepEqual(writes[1].vehicleTypes, ['auto', 'camioneta']);
   assert.equal(nodes(render()).filter(n => n.type === Dialog).length, 0);
-  assert.equal(nodes(render()).find(n => n.type === 'input' && n.props.type === 'search').props.value, '');
+  assert.match(text(render()), /Producto guardado: New lamp/);
+  assert.ok(button('Cargar otro producto'));
+  assert.equal(nodes(render()).filter(n => n.type === 'article').length, 1);
+  assert.equal(nodes(render()).find(n => n.type === 'input' && n.props.type === 'search').props.value, 'New lamp');
   nodes(render()).find(n => n.type === 'input' && n.props.type === 'search').props.onChange({ target: { value: '' } });
   assert.equal(nodes(render()).filter(n => n.type === 'article').length, 3);
   button('+ Agregar producto').props.onClick(); nodes(render()).find(n => n.type === Dialog).props.onClose();
   assert.equal(writes.length, 2);
+  button('Cargar otro producto')?.props.onClick();
+  if (!nodes(render()).some(n => n.type === Dialog)) button('+ Agregar producto').props.onClick();
+  rejectSave = true; button('Guardar producto').props.onClick(); await settle(); await settle();
+  assert.match(text(render()), /No se pudo confirmar el guardado/);
+  assert.ok(nodes(render()).some(n => n.type === Dialog));
+  rejectSave = false; button('Guardar producto').props.onClick(); await settle(); await settle();
+  assert.equal(writes.length, 4);
+  assert.equal(nodes(render()).filter(n => n.type === Dialog).length, 0);
 });
 
 test('public gallery supports thumbnails, arrows, zoom and horizontal touch without treating vertical scrolling as navigation', () => {

@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { retailNextAction } from "@/lib/admin-order-attention";
 import { useIsOwner } from "@/components/admin/AdminIdentityProvider";
 
@@ -166,7 +167,7 @@ export function OrdersManager() {
     </div>
     <button disabled={busy || loading} onClick={() => void load()} className={buttonClass}>{loading ? "Actualizando…" : "Actualizar pedidos"}</button>
     {status === "completed" && <p className="text-sm text-amber-200">Venta registrada indica confirmación comercial del flujo actual; no acredita entrega.</p>}
-    {error && !selected && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
+    {error && !selected && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{adminMessage(error)}</p>}
     {!listVisible && !selected && <p className="text-sm text-zinc-500">Buscá un pedido o desplegá el listado.</p>}
     {listVisible && !selected && <><div className="space-y-2">{rows.map(row => <button key={row.id} onClick={() => { setSelected(row); setDetailSection("Resumen"); setResolution(null); setResolutionKey(""); setNote(""); setOperationNote(""); }} className="w-full min-w-0 break-words border-b border-white/10 px-2 py-4 text-left hover:bg-white/5 [overflow-wrap:anywhere]">
       <div className="flex flex-wrap justify-between gap-3"><div><b>{row.order_number} · {row.customer?.full_name || "Cliente"}</b><small className="mt-1 block text-zinc-400">{row.customer?.phone || "Sin teléfono"} · {date(row.created_at)}</small></div><b>{money(row.total)}</b></div>
@@ -182,7 +183,7 @@ export function OrdersManager() {
     {selected && actions && <div><section aria-label="Detalle de pedido y cronología" aria-labelledby="order-title" className="min-w-0 max-w-full rounded-3xl border border-white/10 bg-zinc-900/35 p-4 sm:p-6 xl:p-7">
       <button disabled={busy} onClick={() => { setSelected(null); setResolution(null); }} className={buttonClass}>← Volver a pedidos</button>
       <p className="text-xs font-bold uppercase tracking-widest text-red-300">Pedido</p><h2 id="order-title" className="text-2xl font-black">{selected.order_number}</h2><p className="mt-1 text-sm text-zinc-400">{date(selected.created_at)}</p>
-      {error && <p role="alert" className="mt-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
+      {error && <p role="alert" className="mt-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{adminMessage(error)}</p>}
       <nav aria-label="Secciones del pedido" className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{["Resumen", "Seguimiento", "Cobros y entregas", "Historial"].map(section => <button key={section} type="button" aria-pressed={detailSection === section} onClick={() => setDetailSection(section)} className={buttonClass}>{section}</button>)}</nav>
       <div hidden={detailSection !== "Resumen"}>      <div className="mt-5 rounded-2xl bg-white/5 p-4"><b>{selected.customer?.full_name}</b><p className="text-sm text-zinc-300">{selected.customer?.phone || "Sin teléfono"}</p><p className="text-sm text-zinc-400">{selected.customer?.email || "Sin email"}</p></div>
       <div className="mt-5 space-y-2">{selected.items.map((item, index) => <p key={index} className="flex justify-between gap-3"><span>{item.product_name} × {item.quantity}</span><b>{money(item.line_total)}</b></p>)}</div>
@@ -230,7 +231,7 @@ export function OrdersManager() {
     {selected && resolution && <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/90 p-4"><section role="dialog" aria-modal="true" aria-labelledby="resolution-title" className="w-full max-w-lg rounded-lg border border-white/15 bg-zinc-950 p-5">
       <h2 id="resolution-title" className="text-lg font-bold">{resolutionLabels[resolution]}</h2>
       <p className="mt-2 text-sm text-zinc-300">{refundResolutions.includes(resolution) ? "Esta acción no devuelve dinero automáticamente. Usala únicamente después de realizar y verificar el reembolso total por el medio de pago correspondiente." : resolution === "TRANSFER_APPROVAL_ERROR" ? "Sólo cuando la transferencia fue aprobada por error y no hubo un pago que devolver." : resolution === "COMPLETE_STOCK_UNAVAILABLE" ? "El cliente ya pagó. Se volverá a verificar el stock actual y, si alcanza, se completará la venta sin volver a cobrar." : "Se cancelará el pedido no cobrado y se liberará su reserva."}</p>
-      {error && <p role="alert" className="mt-3 text-sm text-red-200">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-red-200">{adminMessage(error)}</p>}
       {refundResolutions.includes(resolution) && <label className="mt-4 block text-sm">Referencia externa del reembolso<input disabled={busy || resolutionAttempted} value={externalReference} onChange={e => setExternalReference(e.target.value)} maxLength={160} className="mt-1 w-full rounded-lg bg-zinc-900 p-3" /></label>}
       <label className="mt-4 block text-sm">Motivo o nota administrativa<textarea disabled={busy || resolutionAttempted} value={resolutionNote} onChange={e => setResolutionNote(e.target.value)} maxLength={1000} className="mt-1 min-h-24 w-full rounded-lg bg-zinc-900 p-3" /></label>
       <div className="mt-5 flex justify-end gap-2"><button disabled={busy} onClick={() => { setResolution(null); setResolutionKey(""); setResolutionAttempted(false); setError(""); }} className={buttonClass}>Volver</button><button disabled={busy || !resolutionNote.trim() || (refundResolutions.includes(resolution) && !externalReference.trim())} onClick={() => void submitResolution()} className={`${buttonClass} bg-red-600`}>{busy ? "Registrando…" : resolutionAttempted ? "Reintentar el mismo intento" : "Confirmar acción"}</button></div>

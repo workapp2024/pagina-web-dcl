@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 
 import { useRef, useState } from "react";
 import { createFinanceIdempotencyKey } from "@/components/admin/FinancesManager";
@@ -61,7 +62,7 @@ export function FinanceMoneyActions({ accounts, sectorBalances, onSaved, sectorE
         {mode === "transfer" ? <label className="text-sm text-zinc-400">Cuenta de destino<select required value={form.toAccountId} onChange={e => setForm({...form,toAccountId:e.target.value})} className={input}><option value="">Elegí una cuenta diferente</option>{accounts.filter(account=>account.id!==form.accountId).map(account=><option key={account.id} value={account.id}>{account.name}</option>)}</select></label> : null}
         <label className="text-sm text-zinc-400">Motivo<input required maxLength={300} value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} className={input} /></label>
       </fieldset>
-      {error && <p role="alert" className="text-sm text-amber-200">{error}</p>}
+      {error && <p role="alert" className="text-sm text-amber-200">{adminMessage(error)}</p>}
       <div className="flex flex-wrap gap-3"><button disabled={busy || (mode !== "transfer" && !sectorEnabled)} className="min-h-12 rounded-xl bg-red-600 px-5 py-3 font-bold disabled:opacity-40">{busy ? "Registrando…" : attempted ? "Reintentar la misma operación" : "Confirmar movimiento"}</button><button type="button" disabled={busy} onClick={() => { if (!attempted || window.confirm("El resultado puede estar pendiente de confirmar. Revisá el historial antes de registrar otra operación. ¿Cerrar este formulario?")) setMode(null); }} className="min-h-12 rounded-xl border border-white/15 px-5 py-3">Cerrar</button></div>
     </form>}
   </section>;
