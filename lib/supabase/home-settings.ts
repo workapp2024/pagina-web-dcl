@@ -1,3 +1,4 @@
+import { heroFocal, heroImageUrl } from "@/lib/hero-presentation";
 import { createBrowserClient } from "./client";
 import { createServerClient } from "./server";
 import { isSupabaseConfigured } from "./test-connection";
@@ -44,6 +45,11 @@ export async function getSupabaseHomeSettings(): Promise<Partial<SiteSettings> |
       if (sanitizedHeroImage) settings.heroImage = sanitizedHeroImage;
     }
 
+    settings.heroMobileImage = heroImageUrl(row.hero_mobile_image_url);
+    settings.heroFocalX = heroFocal(row.hero_focal_x);
+    settings.heroFocalY = heroFocal(row.hero_focal_y);
+    settings.heroMobileFocalX = heroFocal(row.hero_mobile_focal_x);
+    settings.heroMobileFocalY = heroFocal(row.hero_mobile_focal_y);
     return settings;
   } catch (err) {
     console.warn("Excepción al consultar home_settings en Supabase:", err);

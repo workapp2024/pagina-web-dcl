@@ -84,6 +84,11 @@ export type SiteSettings = import("@/lib/home-presentation").HomePresentation & 
   heroPrimaryCta: string;
   heroSecondaryCta: string;
   heroImage: string;
+  heroMobileImage?: string;
+  heroFocalX?: number;
+  heroFocalY?: number;
+  heroMobileFocalX?: number;
+  heroMobileFocalY?: number;
   vehicleSectionTitle: string;
   needsSectionTitle: string;
   whyUsEnabled: boolean;

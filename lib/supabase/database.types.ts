@@ -503,6 +503,11 @@ export interface Database {
           hero_primary_cta: string;
           hero_secondary_cta: string;
           hero_image_url: string;
+          hero_mobile_image_url: string;
+          hero_focal_x: number;
+          hero_focal_y: number;
+          hero_mobile_focal_x: number;
+          hero_mobile_focal_y: number;
           updated_at: string;
         };
         Insert: {
@@ -512,6 +517,11 @@ export interface Database {
           hero_primary_cta?: string;
           hero_secondary_cta?: string;
           hero_image_url?: string;
+          hero_mobile_image_url?: string;
+          hero_focal_x?: number;
+          hero_focal_y?: number;
+          hero_mobile_focal_x?: number;
+          hero_mobile_focal_y?: number;
           updated_at?: string;
         };
         Update: {
@@ -521,6 +531,11 @@ export interface Database {
           hero_primary_cta?: string;
           hero_secondary_cta?: string;
           hero_image_url?: string;
+          hero_mobile_image_url?: string;
+          hero_focal_x?: number;
+          hero_focal_y?: number;
+          hero_mobile_focal_x?: number;
+          hero_mobile_focal_y?: number;
           updated_at?: string;
         };
       };

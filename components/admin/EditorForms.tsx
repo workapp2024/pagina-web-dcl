@@ -1,4 +1,6 @@
 "use client";
+import { HeroImage } from "@/components/sections/HeroImage";
+import { heroFocal } from "@/lib/hero-presentation";
 import { SearchableList } from "@/components/admin/SearchableList";
 import { WhyUsCardsEditor } from "@/components/admin/WhyUsCardsEditor";
 
@@ -870,6 +872,7 @@ export function AdminVehicleManager() {
 }
 
 export function AdminHomeEditor() {
+  const [heroUploading, setHeroUploading] = useState(false);
   const { content, setContent } = useSiteContent();
   const [siteChanges, setSiteChanges] = useState<Partial<SiteSettings>>({});
   const [saveStatus, setSaveStatus] = useState<{ status: "saving" | "success" | "error"; message?: string } | null>(null);
@@ -915,7 +918,7 @@ export function AdminHomeEditor() {
           <button
             type="button"
             onClick={() => saveHomeToSupabase()}
-            disabled={saveStatus?.status === "saving"}
+            disabled={heroUploading || saveStatus?.status === "saving"}
             className="rounded-full bg-red-600 px-5 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white transition hover:bg-red-500 disabled:opacity-50"
           >
             {saveStatus?.status === "saving" ? "Guardando..." : "Guardar en Supabase"}
@@ -933,17 +936,44 @@ export function AdminHomeEditor() {
         </div>
       </div>
 
-      <SectionCard title="Imagen de fondo principal" description="Seleccioná la imagen de fondo que se muestra en la portada del Hero ('ILUMINÁ MEJOR. CONDUCÍ MEJOR.').">
-        <ImagePicker
-          source={content.siteSettings.heroImage}
-          label="Seleccionar imagen de fondo"
-          storageKey="hero-background"
-          fit="cover"
-          onChange={(heroImage) => {
-            updateSettings({ heroImage });
-            saveHomeToSupabase({ ...content.siteSettings, heroImage }, {});
-          }}
-        />
+      <SectionCard title="Portadas de la tienda" description="Escritorio: 1600 × 700 px. Celular: 900 × 1200 px. Sin imagen móvil se utiliza la portada de escritorio. Elegí imágenes sin textos importantes cerca de los bordes.">
+        <div className="grid gap-6 lg:grid-cols-2">
+          {(["desktop", "mobile"] as const).map(device => {
+            const mobile = device === "mobile";
+            const imageKey = mobile ? "heroMobileImage" : "heroImage";
+            const xKey = mobile ? "heroMobileFocalX" : "heroFocalX";
+            const yKey = mobile ? "heroMobileFocalY" : "heroFocalY";
+            return <div key={device} className="min-w-0">
+              <h3 className="mb-3 font-bold">{mobile ? "Celular" : "Escritorio"}</h3>
+              <ImagePicker source={content.siteSettings[imageKey] || ""} label={mobile ? "Cargar portada móvil" : "Cargar portada de escritorio"}
+                storageKey={mobile ? "hero-mobile-background" : "hero-background"} fit="contain"
+                onBusyChange={setHeroUploading}
+                onChange={source => {
+                  const settings = { ...content.siteSettings, [imageKey]: source };
+                  updateSettings({ [imageKey]: source });
+                  void saveHomeToSupabase(settings, {});
+                }} />
+              {mobile && content.siteSettings.heroMobileImage && <button type="button" disabled={heroUploading}
+                onClick={() => { updateSettings({ heroMobileImage: "" }); }}
+                className="mt-3 min-h-11 rounded-xl border border-white/20 px-4 text-sm">Usar portada de escritorio al guardar</button>}
+              <div className="mt-4 space-y-3">
+                {([["Horizontal", xKey], ["Vertical", yKey]] as const).map(([label, key]) =>
+                  <label key={key} className="block text-sm">{label} · {heroFocal(content.siteSettings[key])} %
+                    <input type="range" min="0" max="100" step="1" value={heroFocal(content.siteSettings[key])}
+                      onChange={event => updateSettings({ [key]: Number(event.target.value) })}
+                      className="mt-2 block min-h-11 w-full" />
+                  </label>)}
+              </div>
+              <div aria-label={mobile ? "Vista previa móvil del encuadre" : "Vista previa de escritorio del encuadre"}
+                className={mobile ? "mx-auto mt-4 aspect-[3/4] max-w-64 overflow-hidden rounded-xl bg-black" : "mt-4 aspect-[16/7] overflow-hidden rounded-xl bg-black"}>
+                <HeroImage settings={mobile
+                  ? { ...content.siteSettings, heroImage: content.siteSettings.heroMobileImage || content.siteSettings.heroImage, heroMobileImage: "", heroFocalX: content.siteSettings.heroMobileFocalX, heroFocalY: content.siteSettings.heroMobileFocalY }
+                  : { ...content.siteSettings, heroMobileImage: content.siteSettings.heroImage, heroMobileFocalX: content.siteSettings.heroFocalX, heroMobileFocalY: content.siteSettings.heroFocalY }} />
+              </div>
+            </div>;
+          })}
+        </div>
+        <p className="mt-4 text-sm text-zinc-300">La carga de imágenes conserva el guardado actual. Ajustá el encuadre y pulsá Guardar en Supabase. La vista previa muestra el recorte; los textos y botones se conservan en la tienda.</p>
       </SectionCard>
 
       <SectionCard title="Logo de la marca" description="Logo de DCL Cree LED utilizado en el Header y en el panel del Hero. Al reemplazarlo se actualiza en todas sus apariciones.">
