@@ -126,13 +126,14 @@ test('page authenticates before reads; sources remain independent; compact mobil
   assert.equal((html.match(/<article /g) || []).length, 4);
   assert.match(html, /grid-cols-2 gap-2 xl:grid-cols-4/); assert.match(html, /min-h-11/);
   assert.match(html, /Detalles de medición/); assert.doesNotMatch(html, /<details[^>]*open|<table|overflow-x|personas reales/);
-  assert.match(html, /COMMERCIAL_ANALYTICS_START_AT/);
+  assert.match(html, /Falta definir la fecha de inicio de la medición comercial/);
+  assert.doesNotMatch(html, /COMMERCIAL_ANALYTICS_START_AT|payment_transactions|sale_items|CheckoutResult/);
   assert.equal((html.match(/id="commercial-funnel-title"/g) || []).length, 1);
   assert.ok(html.indexOf('Indicadores de la tienda') < html.indexOf('id="commercial-funnel-title"'));
   const inverse = pageHarness(true, { status: 'ok', data: { visitors: 17, cartSessions: 6, whatsappClicks: 4, whatsappSources: [], pageViews: 20, pagesWithoutIdentity: 0, cartEvents: 12, cartWithoutSession: 2, legacyEvents: 0 } }, { status: 'unavailable' });
   const inverseHtml = renderToStaticMarkup(await inverse.Page(params));
   assert.match(inverseHtml, /17<\/p>/); assert.match(inverseHtml, /6<\/p>/);
-  assert.match(inverseHtml, /Lectura de ventas no disponible/);
+  assert.match(inverseHtml, /No se pudieron consultar las ventas/);
   const invalid = pageHarness(true); await invalid.Page({ searchParams: Promise.resolve({ period: 'invalid' }) }); assert.equal(invalid.calls.length, 0);
 });
 

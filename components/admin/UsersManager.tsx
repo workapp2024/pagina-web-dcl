@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { useEffect, useState, type FormEvent } from "react";
 import type { StaffProfile } from "@/lib/admin-permissions";
 
@@ -56,7 +57,7 @@ export function UsersManager() {
       <button disabled={busy} className="rounded-full bg-red-600 px-5 py-3 disabled:opacity-50">{state.legacy ? "Crear administrador principal" : "Crear vendedor"}</button>
     </form>}
     {state?.legacy && !state.bootstrapAvailable && <p>El alta inicial ya está cerrada. Cerrá sesión e ingresá con tu cuenta ADMIN individual para administrar usuarios.</p>}
-    {message && <p role="status">{message}</p>}
+    {message && <p role="status">{adminMessage(message)}</p>}
     <div className="space-y-3">{state?.data.map(user => <article key={user.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/10 p-4">
       <div><b>{user.display_name || user.email}</b><p className="break-all text-sm text-zinc-400">{user.email} · {user.role} · {user.active ? "Activo" : "Inactivo"}</p></div>
       {user.role === "VENDEDOR" && <button disabled={busy} onClick={() => void toggle(user)} className="rounded-full border border-white/20 px-4 py-2 disabled:opacity-50">{user.active ? "Desactivar" : "Activar"}</button>}

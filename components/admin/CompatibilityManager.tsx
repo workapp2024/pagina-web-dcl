@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 
 import { SearchableList } from "@/components/admin/SearchableList";
 import { useEffect, useState } from "react";
@@ -88,7 +89,7 @@ export function AdminCompatibilityManager() {
       await loadRows();
       setTimeout(() => setStatus(null), 4000);
     } else {
-      setStatus({ type: "error", message: result.error || "Error al guardar en Supabase" });
+      setStatus({ type: "error", message: result.error || "No se pudieron guardar los cambios." });
     }
   };
 
@@ -124,7 +125,7 @@ export function AdminCompatibilityManager() {
     if (result.success) {
       await loadRows();
     } else {
-      window.alert(result.error || "Error al eliminar en Supabase");
+      window.alert(adminMessage(result.error || "No se pudo quitar el elemento."));
     }
   };
 
@@ -139,9 +140,7 @@ export function AdminCompatibilityManager() {
 
       {tableError ? (
         <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-200">
-          Todavía no existen las tablas de compatibilidad en Supabase. Ejecutá la migración
-          <code className="mx-1 rounded bg-black/30 px-1.5 py-0.5">supabase/migrations/20260830_vehicle_compatibility.sql</code>
-          desde el SQL Editor de Supabase y volvé a cargar esta página.
+          Las compatibilidades no están disponibles en este momento. Contactá al administrador para habilitar esta función.
         </div>
       ) : null}
 
@@ -358,7 +357,7 @@ export function AdminCompatibilityManager() {
           ) : null}
           {status?.message ? (
             <span className={["text-xs font-medium", status.type === "error" ? "text-red-400" : "text-green-400"].join(" ")}>
-              {status.message}
+              {adminMessage(status.message)}
             </span>
           ) : null}
         </div>

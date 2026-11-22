@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ManagedImage } from "@/components/ui/ManagedImage";
@@ -73,7 +74,7 @@ export function PremiumManager() {
   return <section aria-labelledby="premium-admin-title" className="mt-8 rounded-3xl border border-white/10 bg-zinc-950/80 p-5 sm:p-6">
     <h2 id="premium-admin-title" className="text-2xl font-black">Productos Premium</h2>
     <p className="mt-2 text-sm text-zinc-400">Elegí productos del catálogo y ordenalos para la Home. Sus imágenes y precios se mantienen actualizados desde Productos.</p>
-    {error && <p role="alert" className="mt-4 rounded-xl border border-amber-400/30 p-3 text-sm text-amber-200">{error}</p>}
+    {error && <p role="alert" className="mt-4 rounded-xl border border-amber-400/30 p-3 text-sm text-amber-200">{adminMessage(error)}</p>}
     <p role="status" className="mt-3 text-sm text-zinc-400">{busy ? "Cargando o guardando Premium…" : message || (dirty ? "Tenés cambios sin guardar." : "")}</p>
     <div className="mt-4 flex flex-wrap gap-3">
       <button type="button" disabled={busy} className={button} onClick={() => void reload()}>Recargar selección</button>

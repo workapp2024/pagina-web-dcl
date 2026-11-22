@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -39,7 +40,7 @@ export function FinanceOverview({ sector = "general" }: { sector?: "general" | "
   ] : [["Saldo registrado del sector", summary?.available], ["Ingresos del período", summary?.income], ["Egresos del período", summary?.expense]];
   return <main className="mx-auto min-w-0 w-full max-w-5xl space-y-6 pb-10">
     <header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-red-300">DCL · Administración</p><h1 className="mt-2 text-3xl font-black">{sector === "general" ? "Finanzas generales" : `Finanzas ${sector}`}</h1><p className="mt-2 text-sm text-zinc-400">Dinero contabilizado, sin confundir ventas con cobros.</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setRefresh(value => value+1)} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm">Actualizar</button><button onClick={() => setHidden(value => !value)} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm">{hidden ? "Mostrar montos" : "Ocultar montos"}</button></div></header>
-    {error && <p role="alert" className="rounded-xl border border-red-400/30 p-4 text-red-200">{error}</p>}
+    {error && <p role="alert" className="rounded-xl border border-red-400/30 p-4 text-red-200">{adminMessage(error)}</p>}
     {!current && !error && <p role="status">Consultando período…</p>}
     {current?.activated && <>
       <label className="block text-sm text-zinc-400">Período<select value={period || current.selectedPeriod?.id || ""} onChange={e => setPeriod(e.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 text-base text-white">{current.periods.map(item => <option key={item.id} value={item.id}>{item.name}{item.status === "open" ? " · actual" : " · cerrado"}</option>)}</select></label>

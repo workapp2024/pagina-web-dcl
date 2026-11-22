@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { useRef, useState } from "react";
 import type { OrderReceipt } from "@/lib/store/order-receipt";
 import styles from "@/app/admin/pedidos/[orderNumber]/comprobante/comprobante.module.css";
@@ -35,5 +36,5 @@ export function ReceiptShareButton({receipt,source}:{receipt:OrderReceipt;source
       else {prepared.current=null;setMessage('No se pudo preparar el archivo. Volvé a intentarlo o usá Imprimir / Guardar PDF.');}
     }finally{inFlight.current=false;setBusy(false);}
   }
-  return <div><div className={styles.controls}><button type="button" disabled={busy} className={styles.printButton} onClick={()=>void act('share')}>{busy?'Generando PDF…':'Compartir comprobante'}</button><button type="button" disabled={busy} className={styles.printButton} onClick={()=>void act('download')}>Descargar PDF</button></div>{message&&<p role="status" aria-live="polite">{message}</p>}</div>;
+  return <div><div className={styles.controls}><button type="button" disabled={busy} className={styles.printButton} onClick={()=>void act('share')}>{busy?'Generando PDF…':'Compartir comprobante'}</button><button type="button" disabled={busy} className={styles.printButton} onClick={()=>void act('download')}>Descargar PDF</button></div>{message&&<p role="status" aria-live="polite">{adminMessage(message)}</p>}</div>;
 }

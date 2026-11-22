@@ -94,13 +94,14 @@ test('financial screens render distinct sector amounts, one consolidated balance
 
 test('navigation includes analytics under reports and retains other modules without repeated destinations or general finances in sectors', () => {
   const sidebar = fs.readFileSync('components/admin/AdminSidebar.tsx', 'utf8');
-  const groups = sidebar.slice(sidebar.indexOf('const groups = ['), sidebar.indexOf('const account ='));
-  const hrefs = [...groups.matchAll(/href: "([^"]+)"/g)].map(match => match[1]);
+  const groups = sidebar.slice(sidebar.indexOf('const primary = ['), sidebar.indexOf('const account ='));
+  const hrefs = [...groups.matchAll(/"?href"?: "([^"]+)"/g)].map(match => match[1]);
   assert.equal(hrefs.length, new Set(hrefs).size);
-  assert.match(groups, /Finanzas y reportes[\s\S]*?href: "\/admin\/analitica"/);
-  for (const path of ['/admin/ventas', '/admin/instalaciones', '/admin/garantias', '/admin/productos', '/admin/inventario', '/admin/inventario-mayorista', '/admin/compatibilidades', '/admin/home', '/admin/promociones', '/admin/galeria', '/admin/music', '/admin/vehiculos', '/admin/usuarios', '/admin/configuracion', '/admin/finanzas']) assert.ok(hrefs.includes(path), path);
+  assert.match(groups, /Reportes[\s\S]*?href: "\/admin\/analitica"/);
+  for (const path of ['/admin/ventas', '/admin/instalaciones', '/admin/garantias', '/admin/gestion/pedidos', '/admin/gestion/clientes', '/admin/gestion/catalogo', '/admin/home', '/admin/promociones', '/admin/galeria', '/admin/music', '/admin/vehiculos', '/admin/usuarios', '/admin/configuracion', '/admin/gestion/finanzas']) assert.ok(hrefs.includes(path), path);
+  for (const path of ['productos', 'inventario', 'inventario-mayorista', 'compatibilidades', 'finanzas']) assert.ok(fs.existsSync(`app/admin/${path}/page.tsx`));
   for (const sector of ['minoristas', 'mayoristas']) {
-    assert.ok(hrefs.includes(`/admin/${sector}/finanzas`));
+    assert.ok(fs.existsSync(`app/admin/${sector}/finanzas/page.tsx`));
     const page = fs.readFileSync(`app/admin/${sector}/finanzas/page.tsx`, 'utf8');
     assert.match(page, new RegExp(`FinanceOverview sector="${sector}"`));
     assert.doesNotMatch(page, /ExistingPage/);

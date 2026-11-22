@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { useEffect, useRef, useState } from "react";
 import { defaultHomePresentation, validateHomePresentation, type HomePresentation } from "@/lib/home-presentation";
 import { upsertSupabaseSiteSettings } from "@/lib/supabase/site-settings";
@@ -76,7 +77,7 @@ export function HomePresentationEditor() {
       </details>
       <div className="flex flex-wrap gap-3"><button type="button" className={button} onClick={() => setPreview(!preview)}>{preview ? "Cerrar vista previa" : "Vista previa"}</button><button type="button" className={`${button} bg-red-600`} onClick={() => void save()}>{busy ? "Guardando…" : "Guardar cambios"}</button></div>
     </fieldset>
-    {message && <p role="status" className="text-sm text-amber-100">{message}</p>}
+    {message && <p role="status" className="text-sm text-amber-100">{adminMessage(message)}</p>}
     {preview && <div className="rounded-2xl border border-white/15 bg-black text-white"><p className="p-4 text-sm text-zinc-400">Vista previa de lo que se publicará (según visibilidad y preguntas activas).</p><HomePaymentImage settings={shown} /><HomeFaq settings={shown} /></div>}
   </section>;
 }

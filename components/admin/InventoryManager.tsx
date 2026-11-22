@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { InventoryMovementCard } from "@/components/admin/InventoryMovementCard";
 import { InventoryStockCard } from "@/components/admin/InventoryStockCard";
 import { InventoryProductSearch } from "@/components/admin/InventoryProductSearch";
@@ -135,7 +136,7 @@ export function AdminInventoryManager() {
         </button>
       </div>
 
-      {error ? <div className="rounded-2xl border border-red-500/35 bg-red-500/10 p-4 text-sm text-red-100">{error}</div> : null}
+      {error ? <div className="rounded-2xl border border-red-500/35 bg-red-500/10 p-4 text-sm text-red-100">{adminMessage(error)}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-500/35 bg-emerald-500/10 p-4 text-sm text-emerald-100">{notice}</div> : null}
 
       {isOwner && <section className="rounded-[1.75rem] border border-white/10 bg-zinc-950/80 p-5 sm:p-6">

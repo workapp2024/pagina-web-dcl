@@ -1,4 +1,5 @@
 "use client";
+import { adminMessage } from "@/lib/admin-messages";
 import { useIsOwner } from "@/components/admin/AdminIdentityProvider";
 
 import { useEffect, useState } from "react";
@@ -129,7 +130,7 @@ export function CustomersManager({ sector = "all" }: { sector?: "all" | "retail"
     </div>
     <button type="button" aria-expanded={showAll} aria-controls="customer-list" onClick={() => { setShowAll(value => !value); setPage(1); }} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm font-semibold">{showAll ? "Ocultar clientes" : "Ver todos los clientes"}</button>
     {!listVisible && <p className="text-sm text-zinc-500">Buscá un cliente o desplegá el listado.</p>}
-    {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+    {error && <p role="alert" className="text-sm text-red-300">{adminMessage(error)}</p>}
     <div id="customer-list">{listVisible && (loading ? <p className="text-sm text-zinc-400">Cargando clientes...</p> : rows.length === 0 ? <p className="text-sm text-zinc-400">No hay clientes en esta vista.</p> :
       <div className="grid gap-2 md:grid-cols-2">{rows.map(customer => <button key={customer.id} onClick={() => { setSelected(customer); setFormMode(null); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }} className="border border-white/15 p-4 text-left hover:border-red-500/50">
         <strong>{customer.full_name}</strong><p className="mt-1 text-sm text-zinc-400">{customer.phone || customer.email || "Sin contacto"}</p>
@@ -145,7 +146,7 @@ export function CustomersManager({ sector = "all" }: { sector?: "all" | "retail"
     {(selected || formMode) && <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4" role="dialog" aria-modal="true" aria-label={formMode ? "Datos del cliente" : "Ficha del cliente"}>
       <section className="mx-auto max-w-xl border border-white/15 bg-zinc-950 p-5">
         <div className="flex items-start justify-between gap-3"><h2 className="text-xl font-bold">{formMode === "create" ? "Crear cliente" : formMode === "edit" ? "Editar cliente" : selected?.full_name}</h2><button onClick={() => { setSelected(null); setFormMode(null); setError(""); setWholesaleCode(""); setWholesaleMessage(""); }} className="text-sm text-zinc-300">Cerrar</button></div>
-        {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
+        {error && <p role="alert" className="mt-3 text-sm text-red-300">{adminMessage(error)}</p>}
         {formMode ? <form className="mt-5 space-y-3" onSubmit={event => { event.preventDefault(); void mutate(formMode); }}>
           {([ ["fullName", "Nombre completo", 160], ["phone", "Teléfono", 50], ["email", "Email", 255], ["documentNumber", "Documento", 40], ["notes", "Notas", 1000] ] as const).map(([field, label, max]) => <label key={field} className="block text-sm">{label}<input value={form[field]} maxLength={max} required={field === "fullName"} type={field === "email" ? "email" : "text"} onChange={event => setForm(value => ({ ...value, [field]: event.target.value }))} className="mt-1 w-full rounded border border-white/15 bg-zinc-900 p-2.5" /></label>)}
           <div className="flex gap-3"><button disabled={busy} type="submit" className="rounded bg-red-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">Guardar</button><button type="button" onClick={() => { setFormMode(null); if (!selected) setError(""); }} className="text-sm text-zinc-300">Cancelar</button></div>

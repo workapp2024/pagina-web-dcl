@@ -32,7 +32,8 @@ test('server-seeded provider renders saved Hero before effects and never replays
   const effects = [], states = [];
   let visualReads = 0;
   const forbidden = () => { visualReads++; throw Error('Unexpected client visual read'); };
-  const presentation = { siteSettings: { ...defaultSiteContent.siteSettings, heroImage: '/saved.webp', heroTitle: 'Título guardado', themePreset: 'midnight-blue' }, promotions: [], vehicleCategories: [] };
+  // The published responsive Hero accepts absolute HTTP(S) image references.
+  const presentation = { siteSettings: { ...defaultSiteContent.siteSettings, heroImage: 'https://images.example.test/saved.webp', heroTitle: 'Título guardado', themePreset: 'midnight-blue' }, promotions: [], vehicleCategories: [] };
   const { SiteContentProvider } = load('components/providers/SiteContentProvider.tsx', {
     react: { ...React, useState: initial => { const index = states.length; states.push(typeof initial === 'function' ? initial() : initial); return [states[index], update => { states[index] = typeof update === 'function' ? update(states[index]) : update; }]; }, useEffect: fn => effects.push(fn), useMemo: fn => fn() },
     '@/components/providers/WhatsAppProvider': { useWhatsAppConfiguration: () => ({ refresh: forbidden }) },
@@ -44,6 +45,7 @@ test('server-seeded provider renders saved Hero before effects and never replays
   }, { document: { documentElement: { dataset: {} } } });
   SiteContentProvider({ children: null, initialPresentation: presentation, initialProducts: [{ id: 'existing' }] });
   const { Hero } = load('components/sections/Hero.tsx', {
+    './HeroImage.module.css': { default: { image: 'hero-test' } },
     '@/components/providers/SiteContentProvider': { useSiteContent: () => ({ content: states[0] }) },
     '@/components/ui/ManagedImage': { ManagedImage: ({ source, ...props }) => React.createElement('img', { src: source, ...props }) },
     'next/link': props => React.createElement('a', props),
