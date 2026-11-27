@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "dev:lan": "next dev --hostname 0.0.0.0",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test:store": "node --test --test-isolation=none tests/*.test.cjs"
+    "test:store": "node --test --experimental-test-isolation=none tests/*.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
