@@ -4,7 +4,6 @@ const assert = require('node:assert/strict');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const load = require('./load-ts.cjs');
-const { ConnectorField } = load('components/public/ConnectorField.tsx');
 const filters = load('lib/product-filters.ts', {}, { URLSearchParams });
 const nodes = n => !n || typeof n !== 'object' ? [] : Array.isArray(n) ? n.flatMap(nodes) : [n, ...nodes(n.props?.children)];
 const text = n => typeof n === 'string' ? n : !n ? '' : Array.isArray(n) ? n.map(text).join('') : text(n.props?.children);
@@ -24,40 +23,33 @@ function hooks() {
   };
 }
 
-test('Home reveals two paths, shares connector input, preserves vehicle context and offers catalog/back', () => {
-  const h = hooks();
-  const Categories = () => null, Finder = () => null;
+test('Home shares the approved search, preserves vehicle context and offers the catalog', () => {
+  const h = hooks(), Finder = () => null, Shared = () => null;
   const { VehicleSelector } = load('components/sections/VehicleSelector.tsx', {
-    react: h.react,
-    '@/components/sections/VehicleCategories': { VehicleCategories: Categories },
-    '@/components/public/VehicleFinder': { VehicleFinder: Finder },
-    '@/components/public/ConnectorField': { ConnectorField },
+    '@/components/public/SmartProductSearch': { SmartProductSearch: Shared },
     '@/components/providers/SiteContentProvider': { useSiteContent: () => ({ content: { products } }) },
   });
-  const render = () => { h.reset(); return VehicleSelector(); };
+  const tree = VehicleSelector({ initialVehicle: 'moto' });
+  assert.equal(nodes(tree).find(n => n.type === Shared).props.initialVehicle, 'moto');
+  assert.equal(nodes(tree).find(n => n.type === Shared).props.products, products);
+  assert.ok(nodes(tree).some(n => n.props?.href === '/productos'));
+  const { SmartProductSearch } = load('components/public/SmartProductSearch.tsx', {
+    react: { ...h.react, useId: () => 'smart-flow' },
+    '@/components/public/VehicleFinder': { VehicleFinder: Finder },
+    '@/lib/product-filters': filters,
+  });
+  const render = () => { h.reset(); return SmartProductSearch({ products }); };
   const click = label => nodes(render()).find(n => n.type === 'button' && text(n).includes(label)).props.onClick();
-  const catalog = () => assert.ok(nodes(render()).some(n => n.props?.href === '/productos' && text(n) === 'Ver todos los productos'));
-  assert.equal(nodes(render()).filter(n => n.type === 'form').length, 0); catalog();
-  nodes(render()).find(n => n.type === Categories).props.onSelect('auto');
-  assert.ok(text(render()).includes('No sé cuál lleva mi auto'));
-  assert.ok(!nodes(render()).some(n => n.type === Categories));
-  click('Ya sé'); catalog();
-  const form = nodes(render()).find(n => n.type === 'form');
-  assert.equal(form.props.action, '/productos'); assert.equal(form.props.method, 'get');
-  const field = nodes(render()).find(n => n.type === ConnectorField);
-  const html = renderToStaticMarkup(React.createElement(ConnectorField, field.props));
-  assert.match(html, /name="conector"/); assert.match(html, /list="finder-connectors"/);
-  assert.equal((html.match(/<input/g) || []).length, 1);
-  for (const conector of ['H7', 'H4', 'H11', '9005']) assert.deepEqual(Array.from(filters.filterCatalogProducts(products, filters.parseProductFilters({ conector })), p => p.id), [conector]);
-  assert.ok(!nodes(form).some(n => n.type === 'input' && ['vehiculo', 'marca', 'modelo', 'year'].includes(n.props.name)));
-  click('Volver'); click('No sé'); catalog();
+  nodes(render()).find(n => n.type === 'input').props.onChange({ target: { value: 'h7' } });
+  assert.ok(nodes(render()).some(n => n.props?.href === filters.productCatalogHref({ connectorType: 'H7' })));
+  click('Por vehículo');
   assert.equal(nodes(render()).find(n => n.type === Finder).props.initialType, 'Auto');
-  click('Volver'); click('Cambiar vehículo');
-  for (const [id, label] of [['camioneta', 'camioneta'], ['moto', 'moto'], ['camion', 'camión']]) {
-    nodes(render()).find(n => n.type === Categories).props.onSelect(id);
-    assert.ok(text(render()).includes('No sé cuál lleva mi ' + label));
-    click('Cambiar vehículo');
-  }
+  click('Moto');
+  assert.equal(nodes(render()).find(n => n.type === Finder).props.initialType, 'Moto');
+  click('Por conector');
+  const form = nodes(render()).find(n => n.type === 'form');
+  assert.equal(form.props.action, '/productos');
+  assert.equal(nodes(form).find(n => n.type === 'input').props.value, 'h7');
 });
 
 test('progressive fitment fields reuse selected type, clear dependent values and retain fallback context', async () => {

@@ -99,7 +99,7 @@ test('guided results collapse the existing filters, expose context and clear to 
   const { ProductCatalog } = load('components/public/ProductCatalog.tsx', mocks);
   const render = (params, items = products) => renderToStaticMarkup(React.createElement(ProductCatalog, { products: items, filters: parse(params) }));
   const free = render({});
-  assert.ok(!free.includes('<details'));
+  assert.match(free, /Más filtros/);
   assert.ok(free.includes('name="vehiculo"'));
   for (const conector of ['H7', 'H4']) {
     const html = render({ conector });
@@ -107,8 +107,8 @@ test('guided results collapse the existing filters, expose context and clear to 
     assert.match(html, /<details[^>]*>/);
     assert.doesNotMatch(html, /<details[^>]*\bopen/);
     assert.match(html, /<summary[^>]*>Más filtros<\/summary>/);
-    assert.ok(html.indexOf('<details') < html.indexOf('<form'));
-    assert.ok(html.indexOf('</form>') < html.indexOf('</details>'));
+    assert.ok(html.indexOf('Más filtros') < html.indexOf('name="vehiculo"'));
+    assert.ok(html.lastIndexOf('</form>') < html.indexOf('</details>'));
     assert.ok(html.includes(`aria-label="Quitar búsqueda: Conector ${conector}"`));
     assert.ok(html.includes('Ver todos los productos'));
     assert.ok(html.includes(`value="${conector}"`));
@@ -124,7 +124,8 @@ test('guided results collapse the existing filters, expose context and clear to 
   const empty = render({ conector: 'H99' });
   assert.ok(empty.includes('No encontramos productos'));
   assert.ok(empty.includes('Más filtros')); assert.ok(empty.includes('Ver todos los productos'));
-  assert.ok(!render({ vehiculo: 'invalid' }).includes('<details'));
+  assert.match(render({ vehiculo: 'invalid' }), /Revisá los filtros del enlace/);
+  assert.doesNotMatch(render({ vehiculo: 'invalid' }), /<details[^>]*\bopen/);
 });
 
 test('both Home entries link to the same URL contract and share taxonomy options', () => {

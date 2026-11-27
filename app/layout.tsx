@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [remoteSettings, remoteStations] = await Promise.all([getSupabaseSiteSettings(), getPublicRadioStations()]);
   const settings = { ...defaultSiteContent.siteSettings, ...remoteSettings };
   const stations = remoteStations.length ? remoteStations : [{ ...DEFAULT_RADIO_STATION, name: settings.radioName, streamUrl: settings.radioStreamUrl }];

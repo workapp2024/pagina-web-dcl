@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ProductCard } from "@/components/ui/ProductCard";
-import { ConnectorField } from "@/components/public/ConnectorField";
+import { SmartProductSearch } from "@/components/public/SmartProductSearch";
 import { analyticsEvents, capture } from "@/lib/analytics";
 import { EventOnMount } from "@/components/analytics/EventOnMount";
 import { safeConnector } from "@/lib/analytics-connector";
@@ -29,7 +29,7 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
       const next = parseProductFilters(values);
       if (!next.invalid) capture(analyticsEvents.productFilterApplied, productFilterEventProperties(next.classification));
     }}>
-      <label className="block text-sm text-zinc-300">Buscar producto, categoría o conector
+      <label className="block text-sm text-zinc-300">Buscar por nombre o descripción
         <input name="q" type="search" maxLength={120} defaultValue={filters.query} className={control} />
       </label>
       <div className="grid min-w-0 gap-4 sm:grid-cols-3">
@@ -53,7 +53,7 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
           </select>
         </label>
       </div>
-      <ConnectorField products={products} id="catalog-connectors" defaultValue={filters.classification.connectorType} />
+      {filters.classification.connectorType && <input type="hidden" name="conector" value={filters.classification.connectorType} />}
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" className="min-h-12 rounded-full bg-red-600 px-5 text-sm font-bold text-white">Aplicar filtros</button>
         <Link href="/productos" onClick={clear} className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-5 text-sm text-white">Limpiar filtros</Link>
@@ -72,10 +72,11 @@ export function ProductCatalog({ products, filters }: { products: Product[]; fil
         <Link href="/productos" onClick={clear} className="inline-flex min-h-12 items-center text-sm text-red-300 underline">Ver todos los productos</Link>
       </div>
     </div>}
-    {guided ? <details key={JSON.stringify(filters)} className="mb-4 min-w-0">
+    <div className="mb-4"><SmartProductSearch key={JSON.stringify(filters)} products={products} initialConnector={filters.classification.connectorType} /></div>
+    <details key={JSON.stringify(filters)} className="mb-4 min-w-0">
       <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-red-300">Más filtros</summary>
       {filterForm}
-    </details> : filterForm}
+    </details>
     <div className="mb-5" aria-live="polite">
       {!guided && <h2 className="break-words text-xl font-bold text-white">{filters.invalid ? "Revisá los filtros del enlace" : "Catálogo completo"}</h2>}
       <p className="mt-2 text-sm text-zinc-400">{visible.length} producto(s){filters.query ? " para tu búsqueda" : ""}</p>
