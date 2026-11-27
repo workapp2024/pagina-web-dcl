@@ -25,8 +25,8 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
         <Header />
 
         <main>
-          <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-            <div className={guided ? "mb-4 max-w-2xl" : "mb-10 max-w-2xl"}>
+          <section className="mx-auto max-w-7xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
+            <div className={guided ? "mb-4 max-w-2xl" : "mb-4 max-w-2xl"}>
               {!guided && <>
               <span className="mb-3 inline-block rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-red-400">
                 Catálogo completo
@@ -36,8 +36,7 @@ export default async function ProductosPage({ searchParams }: { searchParams: Pr
                 Productos
               </h1>
               {!guided && <p className="mt-3 text-sm leading-6 text-zinc-400">
-                Iluminación CREE LED para autos, camionetas, motos y vehículos de trabajo. ¿No sabés cuál elegir?
-                Buscá por tu vehículo o por conector en la sección Vehículos.
+                Buscá por conector o encontrá la iluminación compatible con tu vehículo.
               </p>}
             </div>
 
